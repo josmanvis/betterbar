@@ -220,9 +220,6 @@ return appList"#,
     }
 
     pub fn set_window_level<R: tauri::Runtime>(window: &WebviewWindow<R>, level: &str) -> Result<(), String> {
-        use cocoa::base::id;
-        use objc::{msg_send, sel, sel_impl};
-
         // Raw NSWindowLevel constants (AppKit)
         let window_level: i64 = match level {
             "dock"         => 20,   // NSDockWindowLevel
@@ -231,14 +228,22 @@ return appList"#,
             _              => 0,    // NSNormalWindowLevel
         };
 
-        let ns_window = window.ns_window().map_err(|e| e.to_string())? as id;
+        // Cast to usize so the pointer is Send-safe across the thread boundary.
+        let ns_window_addr = window.ns_window().map_err(|e| e.to_string())? as usize;
 
-        unsafe {
-            // NSWindowCollectionBehaviorCanJoinAllSpaces (1<<3) | NSWindowCollectionBehaviorStationary (1<<4)
-            let collection_behavior: u64 = (1 << 3) | (1 << 4);
-            let _: () = msg_send![ns_window, setLevel: window_level];
-            let _: () = msg_send![ns_window, setCollectionBehavior: collection_behavior];
-        }
+        // AppKit calls must happen on the main thread.
+        window.run_on_main_thread(move || {
+            use cocoa::base::id;
+            use objc::{msg_send, sel, sel_impl};
+
+            let ns_window = ns_window_addr as id;
+            unsafe {
+                // NSWindowCollectionBehaviorCanJoinAllSpaces (1<<3) | NSWindowCollectionBehaviorStationary (1<<4)
+                let collection_behavior: u64 = (1 << 3) | (1 << 4);
+                let _: () = msg_send![ns_window, setLevel: window_level];
+                let _: () = msg_send![ns_window, setCollectionBehavior: collection_behavior];
+            }
+        }).map_err(|e| e.to_string())?;
 
         Ok(())
     }
