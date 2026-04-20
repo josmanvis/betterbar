@@ -4,10 +4,12 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { DockItem, DockPosition } from "../types";
 import { launchApp } from "../tauri-bridge";
+import { WindowPreview } from "./WindowPreview";
 
 interface DockIconProps {
   item: DockItem;
   isRunning: boolean;
+  runningPid?: number;
   iconSize: number;
   showLabel: boolean;
   position: DockPosition;
@@ -41,6 +43,7 @@ function tooltipClass(position: DockPosition) {
 export function DockIcon({
   item,
   isRunning,
+  runningPid,
   iconSize,
   showLabel,
   position,
@@ -160,7 +163,7 @@ export function DockIcon({
         )}
       </motion.button>
 
-      {/* Tooltip */}
+      {/* Tooltip / Window Preview */}
       <AnimatePresence>
         {showTooltip && !editMode && (
           <motion.div
@@ -168,9 +171,17 @@ export function DockIcon({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.88 }}
             transition={{ duration: 0.1 }}
-            className={`absolute z-50 px-2.5 py-1 rounded-lg bg-zinc-800 border border-white/[0.08] text-white text-xs font-medium whitespace-nowrap pointer-events-none shadow-xl ${tooltipClass(position)}`}
+            className={`absolute z-50 rounded-xl bg-zinc-800 border border-white/[0.08] shadow-xl ${tooltipClass(position)} ${
+              isRunning && runningPid !== undefined
+                ? "p-2.5"
+                : "px-2.5 py-1 pointer-events-none whitespace-nowrap"
+            }`}
           >
-            {item.name}
+            {isRunning && runningPid !== undefined ? (
+              <WindowPreview appName={item.name} pid={runningPid} position={position} />
+            ) : (
+              <span className="text-xs font-medium text-white">{item.name}</span>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

@@ -84,6 +84,14 @@ export function DockBar({
     );
   }
 
+  function findRunningApp(item: DockItem) {
+    return runningApps.find(
+      (app) =>
+        app.name.toLowerCase() === item.name.toLowerCase() ||
+        (item.bundleId && app.bundle_id.includes(item.name.toLowerCase()))
+    );
+  }
+
   // ── Two-finger swipe to change sets ────────────────────────────────────────
   const swipeAccum = useRef(0);
   const swipeLocked = useRef(false);
@@ -187,6 +195,7 @@ export function DockBar({
                   key={item.id}
                   item={item}
                   isRunning={isRunning(item)}
+                  runningPid={findRunningApp(item)?.pid}
                   iconSize={config.iconSize}
                   showLabel={config.showLabels}
                   position={config.position}
