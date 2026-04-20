@@ -1,5 +1,8 @@
 # BetterBar — Changelog
 
+## 0.3.0
+- Window preview thumbnails on hover for running apps (requires Screen Recording permission)
+
 ## [0.2.0] — in development
 
 ### Added
