@@ -554,19 +554,28 @@ return appList"#,
                 return vec![];
             }
 
-            let count = CFArrayGetCount(raw_array);
-
             let pid_key = CFStringCreateWithCString(
                 std::ptr::null(),
                 b"kCGWindowOwnerPID\0".as_ptr() as _,
                 CF_STRING_ENCODING_UTF8,
             );
+            if pid_key.is_null() {
+                CFRelease(raw_array);
+                return vec![];
+            }
+
             let num_key = CFStringCreateWithCString(
                 std::ptr::null(),
                 b"kCGWindowNumber\0".as_ptr() as _,
                 CF_STRING_ENCODING_UTF8,
             );
+            if num_key.is_null() {
+                CFRelease(pid_key);
+                CFRelease(raw_array);
+                return vec![];
+            }
 
+            let count = CFArrayGetCount(raw_array);
             let mut result = Vec::new();
 
             for i in 0..count {
@@ -591,8 +600,9 @@ return appList"#,
                 if wid_val.is_null() {
                     continue;
                 }
-                let mut window_id: i32 = 0;
-                if CFNumberGetValue(wid_val, CF_NUMBER_SINT32_TYPE, &mut window_id as *mut _ as _) {
+                // Use SInt64 to safely hold CGWindowID (uint32_t) without sign-bit truncation
+                let mut window_id: i64 = 0;
+                if CFNumberGetValue(wid_val, 4 /* kCFNumberSInt64Type */, &mut window_id as *mut _ as _) {
                     result.push(window_id as u32);
                 }
             }
@@ -625,16 +635,22 @@ return appList"#,
             return None;
         }
 
-        // Resize to max 280px wide (in-place)
-        let _ = Command::new("sips")
+        // Resize to max 280px wide (in-place); treat failure as fatal (broken file)
+        let sips_ok = Command::new("sips")
             .args(["--resampleWidth", "280", &tmp_path])
-            .output();
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
 
-        // Encode as base64 (same pattern as get_app_icon_base64)
-        let b64_out = Command::new("base64").arg(&tmp_path).output().ok()?;
+        // Encode as base64 — clean up temp file regardless of outcome
+        let b64_out = Command::new("base64").arg(&tmp_path).output();
         let _ = std::fs::remove_file(&tmp_path);
 
-        let encoded = String::from_utf8_lossy(&b64_out.stdout).replace('\n', "");
+        if !sips_ok {
+            return None;
+        }
+
+        let encoded = String::from_utf8_lossy(&b64_out.ok()?.stdout).replace('\n', "");
         if encoded.is_empty() {
             return None;
         }
