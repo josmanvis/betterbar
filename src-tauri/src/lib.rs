@@ -30,6 +30,12 @@ pub struct BatteryInfo {
     pub available: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowThumbnail {
+    pub image: String,         // "data:image/png;base64,..."
+    pub title: Option<String>,
+}
+
 // --- Commands ---
 
 #[tauri::command]
@@ -153,6 +159,14 @@ async fn check_screen_recording_permission() -> bool {
 async fn request_screen_recording_permission() {
     #[cfg(target_os = "macos")]
     { macos::request_screen_recording(); }
+}
+
+#[tauri::command]
+async fn get_window_thumbnail(pid: i32) -> Option<WindowThumbnail> {
+    #[cfg(target_os = "macos")]
+    { macos::get_window_thumbnail(pid) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = pid; None }
 }
 
 #[tauri::command]
@@ -531,6 +545,105 @@ return appList"#,
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
             .spawn();
     }
+
+    fn get_window_ids_for_pid(target_pid: i32) -> Vec<u32> {
+        let option = CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY | CG_WINDOW_LIST_EXCLUDE_DESKTOP_ELEMENTS;
+        unsafe {
+            let raw_array = CGWindowListCopyWindowInfo(option, CG_NULL_WINDOW_ID);
+            if raw_array.is_null() {
+                return vec![];
+            }
+
+            let count = CFArrayGetCount(raw_array);
+
+            let pid_key = CFStringCreateWithCString(
+                std::ptr::null(),
+                b"kCGWindowOwnerPID\0".as_ptr() as _,
+                CF_STRING_ENCODING_UTF8,
+            );
+            let num_key = CFStringCreateWithCString(
+                std::ptr::null(),
+                b"kCGWindowNumber\0".as_ptr() as _,
+                CF_STRING_ENCODING_UTF8,
+            );
+
+            let mut result = Vec::new();
+
+            for i in 0..count {
+                let dict = CFArrayGetValueAtIndex(raw_array, i);
+                if dict.is_null() {
+                    continue;
+                }
+
+                let pid_val = CFDictionaryGetValue(dict, pid_key);
+                if pid_val.is_null() {
+                    continue;
+                }
+                let mut owner_pid: i32 = 0;
+                if !CFNumberGetValue(pid_val, CF_NUMBER_SINT32_TYPE, &mut owner_pid as *mut _ as _) {
+                    continue;
+                }
+                if owner_pid != target_pid {
+                    continue;
+                }
+
+                let wid_val = CFDictionaryGetValue(dict, num_key);
+                if wid_val.is_null() {
+                    continue;
+                }
+                let mut window_id: i32 = 0;
+                if CFNumberGetValue(wid_val, CF_NUMBER_SINT32_TYPE, &mut window_id as *mut _ as _) {
+                    result.push(window_id as u32);
+                }
+            }
+
+            CFRelease(pid_key);
+            CFRelease(num_key);
+            CFRelease(raw_array);
+
+            result
+        }
+    }
+
+    pub fn get_window_thumbnail(pid: i32) -> Option<super::WindowThumbnail> {
+        if !check_screen_recording() {
+            return None;
+        }
+
+        let window_ids = get_window_ids_for_pid(pid);
+        let &window_id = window_ids.first()?;
+
+        let tmp_path = format!("/tmp/betterbar_thumb_{}.png", pid);
+
+        let captured = Command::new("screencapture")
+            .args(["-l", &window_id.to_string(), "-x", &tmp_path])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+        if !captured {
+            return None;
+        }
+
+        // Resize to max 280px wide (in-place)
+        let _ = Command::new("sips")
+            .args(["--resampleWidth", "280", &tmp_path])
+            .output();
+
+        // Encode as base64 (same pattern as get_app_icon_base64)
+        let b64_out = Command::new("base64").arg(&tmp_path).output().ok()?;
+        let _ = std::fs::remove_file(&tmp_path);
+
+        let encoded = String::from_utf8_lossy(&b64_out.stdout).replace('\n', "");
+        if encoded.is_empty() {
+            return None;
+        }
+
+        Some(super::WindowThumbnail {
+            image: format!("data:image/png;base64,{}", encoded),
+            title: None,
+        })
+    }
 }
 
 // --- App entry ---
@@ -551,6 +664,7 @@ pub fn run() {
             request_accessibility_permissions,
             check_screen_recording_permission,
             request_screen_recording_permission,
+            get_window_thumbnail,
             set_screen_inset,
             clear_screen_insets,
         ])
