@@ -31,6 +31,11 @@ export interface BatteryInfo {
   available: boolean;
 }
 
+export interface WindowThumbnail {
+  image: string;         // "data:image/png;base64,..."
+  title: string | null;
+}
+
 export interface AppSet {
   id: string;
   name: string;

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { BatteryInfo, RunningApp, ScreenInfo } from "./types";
+import { BatteryInfo, RunningApp, ScreenInfo, WindowThumbnail } from "./types";
 
 export async function getRunningApps(): Promise<RunningApp[]> {
   return invoke<RunningApp[]>("get_running_apps");
@@ -43,4 +43,16 @@ export async function setScreenInset(
   menuBarHeight: number,
 ): Promise<void> {
   return invoke("set_screen_inset", { position, barSize, menuBarHeight });
+}
+
+export async function checkScreenRecordingPermission(): Promise<boolean> {
+  return invoke<boolean>("check_screen_recording_permission");
+}
+
+export async function requestScreenRecordingPermission(): Promise<void> {
+  return invoke("request_screen_recording_permission");
+}
+
+export async function getWindowThumbnail(pid: number): Promise<WindowThumbnail | null> {
+  return invoke<WindowThumbnail | null>("get_window_thumbnail", { pid });
 }
