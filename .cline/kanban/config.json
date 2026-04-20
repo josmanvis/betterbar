@@ -1,0 +1,9 @@
+{
+  "shortcuts": [
+    {
+      "label": "Run",
+      "command": "p tauri dev",
+      "icon": "play"
+    }
+  ]
+}

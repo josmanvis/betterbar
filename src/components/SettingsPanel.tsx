@@ -46,7 +46,7 @@ export function SettingsPanel({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 8 }}
             transition={{ type: "spring", stiffness: 500, damping: 35 }}
-            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-72 rounded-2xl bg-zinc-900/95 backdrop-blur-xl border border-white/10 shadow-2xl p-4 text-white"
+            className="fixed bottom-16 left-[76px] z-50 w-72 rounded-2xl bg-zinc-900/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl p-4 text-white"
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-white">BetterBar Settings</h2>

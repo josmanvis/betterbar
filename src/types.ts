@@ -20,6 +20,21 @@ export interface ScreenInfo {
   width: number;
   height: number;
   scale_factor: number;
+  menu_bar_height: number;
+  dock_height: number;
+}
+
+export interface BatteryInfo {
+  percentage: number;
+  is_charging: boolean;
+  is_plugged: boolean;
+  available: boolean;
+}
+
+export interface AppSet {
+  id: string;
+  name: string;
+  items: DockItem[];
 }
 
 export interface BetterBarConfig {
@@ -28,21 +43,27 @@ export interface BetterBarConfig {
   autoHide: boolean;
   showLabels: boolean;
   theme: "dark" | "light" | "auto";
-  items: DockItem[];
+  sets: AppSet[];
+  activeSetId: string;
 }
 
+const DEFAULT_ITEMS: DockItem[] = [
+  { id: "finder",   name: "Finder",   path: "/System/Library/CoreServices/Finder.app",  bundleId: "com.apple.finder",       order: 0 },
+  { id: "safari",   name: "Safari",   path: "/Applications/Safari.app",                 bundleId: "com.apple.Safari",       order: 1 },
+  { id: "messages", name: "Messages", path: "/Applications/Messages.app",               bundleId: "com.apple.MobileSMS",    order: 2 },
+  { id: "mail",     name: "Mail",     path: "/System/Applications/Mail.app",            bundleId: "com.apple.mail",         order: 3 },
+  { id: "calendar", name: "Calendar", path: "/System/Applications/Calendar.app",        bundleId: "com.apple.iCal",         order: 4 },
+  { id: "terminal", name: "Terminal", path: "/System/Applications/Utilities/Terminal.app", bundleId: "com.apple.Terminal",  order: 5 },
+];
+
 export const DEFAULT_CONFIG: BetterBarConfig = {
-  position: "bottom",
-  iconSize: 56,
+  position: "left",
+  iconSize: 48,
   autoHide: false,
-  showLabels: true,
+  showLabels: false,
   theme: "dark",
-  items: [
-    { id: "finder", name: "Finder", path: "/System/Library/CoreServices/Finder.app", bundleId: "com.apple.finder", order: 0 },
-    { id: "safari", name: "Safari", path: "/Applications/Safari.app", bundleId: "com.apple.Safari", order: 1 },
-    { id: "messages", name: "Messages", path: "/Applications/Messages.app", bundleId: "com.apple.MobileSMS", order: 2 },
-    { id: "mail", name: "Mail", path: "/System/Applications/Mail.app", bundleId: "com.apple.mail", order: 3 },
-    { id: "calendar", name: "Calendar", path: "/System/Applications/Calendar.app", bundleId: "com.apple.iCal", order: 4 },
-    { id: "terminal", name: "Terminal", path: "/System/Applications/Utilities/Terminal.app", bundleId: "com.apple.Terminal", order: 5 },
+  activeSetId: "default",
+  sets: [
+    { id: "default", name: "Default", items: DEFAULT_ITEMS },
   ],
 };

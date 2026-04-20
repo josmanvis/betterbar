@@ -1,12 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { BetterBarConfig } from "../types";
-import { getScreenInfo, positionWindow, setWindowLevel } from "../tauri-bridge";
+import { getScreenInfo, positionWindow, setWindowLevel, setScreenInset } from "../tauri-bridge";
 
-const DOCK_HEIGHT = 80;
-const DOCK_THICKNESS = 80; // for left/right
-const EDGE_PADDING = 8;
+const SIDEBAR_SIZE = 68; // px — sidebar width (left/right) or height (top/bottom)
+const POLL_MS = 1500;    // poll interval to detect menu bar visibility changes
 
 export function useWindowPosition(config: BetterBarConfig) {
+  const lastBoundsRef = useRef<string>("");
+
   useEffect(() => {
     async function applyPosition() {
       try {
@@ -14,35 +15,41 @@ export function useWindowPosition(config: BetterBarConfig) {
         const scale = screen.scale_factor;
         const sw = screen.width;
         const sh = screen.height;
+        const menuH = screen.menu_bar_height; // logical px; 0 when menu bar is hidden
 
+        // Start our panel just below the menu bar (never overlap it)
         let x = 0, y = 0, w = 0, h = 0;
 
         switch (config.position) {
-          case "bottom":
-            w = Math.round(sw * 0.6);
-            h = DOCK_HEIGHT;
-            x = Math.round((sw - w) / 2);
-            y = Math.round(sh - h - EDGE_PADDING);
-            break;
-          case "top":
-            w = Math.round(sw * 0.6);
-            h = DOCK_HEIGHT;
-            x = Math.round((sw - w) / 2);
-            y = EDGE_PADDING;
-            break;
           case "left":
-            w = DOCK_THICKNESS;
-            h = Math.round(sh * 0.6);
-            x = EDGE_PADDING;
-            y = Math.round((sh - h) / 2);
+            x = 0;
+            y = menuH;
+            w = SIDEBAR_SIZE;
+            h = sh - menuH;
             break;
           case "right":
-            w = DOCK_THICKNESS;
-            h = Math.round(sh * 0.6);
-            x = Math.round(sw - w - EDGE_PADDING);
-            y = Math.round((sh - h) / 2);
+            x = sw - SIDEBAR_SIZE;
+            y = menuH;
+            w = SIDEBAR_SIZE;
+            h = sh - menuH;
+            break;
+          case "top":
+            x = 0;
+            y = menuH;
+            w = sw;
+            h = SIDEBAR_SIZE;
+            break;
+          case "bottom":
+            x = 0;
+            y = sh - SIDEBAR_SIZE;
+            w = sw;
+            h = SIDEBAR_SIZE;
             break;
         }
+
+        const boundsKey = `${x},${y},${w},${h}`;
+        if (boundsKey === lastBoundsRef.current) return; // no change
+        lastBoundsRef.current = boundsKey;
 
         await positionWindow(
           Math.round(x * scale),
@@ -51,11 +58,14 @@ export function useWindowPosition(config: BetterBarConfig) {
           Math.round(h * scale)
         );
         await setWindowLevel("floating");
+        await setScreenInset(config.position, SIDEBAR_SIZE, menuH);
       } catch (e) {
         console.error("Failed to position window:", e);
       }
     }
 
     applyPosition();
+    const timer = setInterval(applyPosition, POLL_MS);
+    return () => clearInterval(timer);
   }, [config.position]);
 }
