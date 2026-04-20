@@ -142,6 +142,20 @@ async fn request_accessibility_permissions() {
 }
 
 #[tauri::command]
+async fn check_screen_recording_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    { macos::check_screen_recording() }
+    #[cfg(not(target_os = "macos"))]
+    { true }
+}
+
+#[tauri::command]
+async fn request_screen_recording_permission() {
+    #[cfg(target_os = "macos")]
+    { macos::request_screen_recording(); }
+}
+
+#[tauri::command]
 async fn set_screen_inset<R: Runtime>(
     app:             AppHandle<R>,
     position:        String,
@@ -210,10 +224,41 @@ mod macos {
     type CGSConnectionID   = u32;
     type CGDirectDisplayID = u32;
 
+    // ── CoreFoundation raw types (linked transitively via cocoa crate) ────────────
+    type CFTypeRef  = *const std::os::raw::c_void;
+    type CFArrayRef = CFTypeRef;
+    type CFIndex    = isize;
+
+    extern "C" {
+        fn CFArrayGetCount(the_array: CFArrayRef) -> CFIndex;
+        fn CFArrayGetValueAtIndex(the_array: CFArrayRef, idx: CFIndex) -> CFTypeRef;
+        fn CFDictionaryGetValue(the_dict: CFTypeRef, key: CFTypeRef) -> CFTypeRef;
+        fn CFStringCreateWithCString(
+            alloc:    CFTypeRef,
+            c_str:    *const std::os::raw::c_char,
+            encoding: u32,
+        ) -> CFTypeRef;
+        fn CFNumberGetValue(
+            number:    CFTypeRef,
+            the_type:  i32,
+            value_ptr: *mut std::os::raw::c_void,
+        ) -> bool;
+        fn CFRelease(cf: CFTypeRef);
+    }
+
+    const CF_STRING_ENCODING_UTF8: u32            = 0x0800_0100;
+    const CF_NUMBER_SINT32_TYPE: i32              = 3;
+    const CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY: u32    = 1 << 0; // = 1
+    const CG_WINDOW_LIST_EXCLUDE_DESKTOP_ELEMENTS: u32 = 1 << 4; // = 16
+    const CG_NULL_WINDOW_ID: u32                  = 0;
+
     // CGMainDisplayID is public CoreGraphics API
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
         fn CGMainDisplayID() -> CGDirectDisplayID;
+        fn CGWindowListCopyWindowInfo(option: u32, relative_to: u32) -> *const std::os::raw::c_void;
+        fn CGPreflightScreenCaptureAccess() -> bool;
+        fn CGRequestScreenCaptureAccess() -> bool;
     }
 
     // dlsym is in libSystem (always available on macOS) — used to look up private CGS symbols
@@ -476,6 +521,16 @@ return appList"#,
     pub fn clear_screen_insets() {
         cgs_set_screen_insets(NSEdgeInsets::default());
     }
+
+    pub fn check_screen_recording() -> bool {
+        unsafe { CGPreflightScreenCaptureAccess() }
+    }
+
+    pub fn request_screen_recording() {
+        let _ = Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+            .spawn();
+    }
 }
 
 // --- App entry ---
@@ -494,6 +549,8 @@ pub fn run() {
             get_battery_info,
             check_accessibility_permissions,
             request_accessibility_permissions,
+            check_screen_recording_permission,
+            request_screen_recording_permission,
             set_screen_inset,
             clear_screen_insets,
         ])
