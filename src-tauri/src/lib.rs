@@ -47,6 +47,14 @@ async fn get_running_apps() -> Vec<RunningApp> {
 }
 
 #[tauri::command]
+async fn focus_app(bundle_id: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::focus_app(&bundle_id) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = bundle_id; Ok(()) }
+}
+
+#[tauri::command]
 async fn launch_app(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::launch_app(&path) }
@@ -190,6 +198,31 @@ async fn set_screen_inset<R: Runtime>(
     }
     let _ = (app, position, bar_size, menu_bar_height);
     Ok(())
+}
+
+/// Show + focus the settings window. Implemented in Rust so it bypasses any
+/// `core:window:allow-show` / `allow-set-focus` capability requirements.
+#[tauri::command]
+async fn open_settings_window<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("settings") {
+        window.show().map_err(|e| e.to_string())?;
+        let _ = window.unminimize();
+        window.set_focus().map_err(|e| e.to_string())?;
+    } else {
+        return Err("settings window not found".to_string());
+    }
+    Ok(())
+}
+
+/// Returns the floating bar's current outer position in physical pixels.
+/// Used to persist `floatPosition` after a native window drag.
+#[tauri::command]
+async fn get_window_outer_position<R: Runtime>(app: AppHandle<R>) -> Result<(i32, i32), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let pos = window.outer_position().map_err(|e| e.to_string())?;
+        return Ok((pos.x, pos.y));
+    }
+    Err("main window not found".to_string())
 }
 
 #[tauri::command]
@@ -393,52 +426,118 @@ return appList"#,
     }
 
     pub fn launch_app(path: &str) -> Result<(), String> {
-        Command::new("open")
+        let status = Command::new("open")
             .arg(path)
-            .spawn()
+            .status()
             .map_err(|e| e.to_string())?;
-        Ok(())
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("open failed for path: {}", path))
+        }
+    }
+
+    pub fn focus_app(bundle_id: &str) -> Result<(), String> {
+        let status = Command::new("open")
+            .args(["-b", bundle_id])
+            .status()
+            .map_err(|e| e.to_string())?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("open failed for bundle_id: {}", bundle_id))
+        }
     }
 
     pub fn get_app_icon_base64(bundle_id: &str) -> Option<String> {
-        let find_output = Command::new("mdfind")
+        let mut app_path = String::new();
+
+        // 1. Try mdfind
+        if let Ok(find_output) = Command::new("mdfind")
             .arg(format!("kMDItemCFBundleIdentifier == '{}'", bundle_id))
             .output()
-            .ok()?;
+        {
+            app_path = String::from_utf8_lossy(&find_output.stdout)
+                .lines()
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+        }
 
-        let app_path = String::from_utf8_lossy(&find_output.stdout)
-            .lines()
-            .next()?
-            .trim()
-            .to_string();
+        // 2. Fallback to osascript if mdfind fails
+        if app_path.is_empty() {
+            let script = format!(
+                r#"tell application "Finder" to POSIX path of (application file id "{}" as alias)"#,
+                bundle_id
+            );
+            if let Ok(osa_output) = Command::new("osascript").args(["-e", &script]).output() {
+                app_path = String::from_utf8_lossy(&osa_output.stdout)
+                    .trim()
+                    .to_string();
+            }
+        }
 
         if app_path.is_empty() {
             return None;
         }
 
-        let icns_path = format!("{}/Contents/Resources/", app_path);
-        let find_icns = Command::new("find")
-            .args([&icns_path, "-name", "*.icns", "-maxdepth", "1"])
+        // Determine icon name from Info.plist
+        let plist_path = format!("{}/Contents/Info.plist", app_path);
+        let mut icon_name = String::new();
+        if let Ok(defaults_output) = Command::new("defaults")
+            .args(["read", &plist_path, "CFBundleIconFile"])
             .output()
-            .ok()?;
+        {
+            icon_name = String::from_utf8_lossy(&defaults_output.stdout)
+                .trim()
+                .to_string();
+        }
 
-        let icns = String::from_utf8_lossy(&find_icns.stdout)
-            .lines()
-            .next()?
-            .trim()
-            .to_string();
+        let mut icns_path = String::new();
+        if !icon_name.is_empty() {
+            if !icon_name.ends_with(".icns") {
+                icon_name.push_str(".icns");
+            }
+            let candidate = format!("{}/Contents/Resources/{}", app_path, icon_name);
+            if std::path::Path::new(&candidate).exists() {
+                icns_path = candidate;
+            }
+        }
 
-        if icns.is_empty() {
+        // Fallback to searching for the first .icns file
+        if icns_path.is_empty() {
+            let resources_path = format!("{}/Contents/Resources/", app_path);
+            if let Ok(find_icns) = Command::new("find")
+                .args([&resources_path, "-name", "*.icns", "-maxdepth", "1"])
+                .output()
+            {
+                icns_path = String::from_utf8_lossy(&find_icns.stdout)
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+            }
+        }
+
+        if icns_path.is_empty() {
             return None;
         }
 
         let tmp = format!("/tmp/betterbar_icon_{}.png", bundle_id.replace('.', "_"));
-        Command::new("sips")
-            .args(["-s", "format", "png", "--resampleWidth", "64", &icns, "--out", &tmp])
-            .output()
-            .ok()?;
+        let sips_result = Command::new("sips")
+            .args(["-s", "format", "png", "--resampleWidth", "64", &icns_path, "--out", &tmp])
+            .output();
 
-        let b64 = Command::new("base64").arg(&tmp).output().ok()?;
+        if sips_result.is_err() {
+            return None;
+        }
+
+        let b64_output = Command::new("base64").arg(&tmp).output();
+        let _ = std::fs::remove_file(&tmp); // cleanup
+
+        let b64 = b64_output.ok()?;
         let encoded = String::from_utf8_lossy(&b64.stdout).replace('\n', "");
         if encoded.is_empty() {
             None
@@ -671,6 +770,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_running_apps,
             launch_app,
+            focus_app,
             get_screen_info,
             position_window,
             set_window_level,
@@ -683,6 +783,8 @@ pub fn run() {
             get_window_thumbnail,
             set_screen_inset,
             clear_screen_insets,
+            open_settings_window,
+            get_window_outer_position,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

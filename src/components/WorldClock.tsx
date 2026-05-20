@@ -9,11 +9,11 @@ const CITIES = [
 ] as const;
 
 function formatTime(tz: string, now: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-GB", {
     timeZone: tz,
-    hour: "numeric",
+    hour: "2-digit",
     minute: "2-digit",
-    hour12: true,
+    hour12: false,
   }).format(now);
 }
 
@@ -25,7 +25,6 @@ export function WorldClock({ isVertical }: WorldClockProps) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    // Sync to the next minute boundary, then tick every minute
     const msToNext = 60_000 - (Date.now() % 60_000);
     const initial = setTimeout(() => {
       setNow(new Date());
@@ -37,19 +36,19 @@ export function WorldClock({ isVertical }: WorldClockProps) {
 
   if (isVertical) {
     return (
-      <div className="w-full px-1.5 py-2 flex flex-col gap-[3px]">
+      <div className="w-full px-1.5 py-1.5 flex flex-col gap-px">
         {CITIES.map(({ code, tz }) => {
           const time = formatTime(tz, now);
-          // Split "3:24 PM" → ["3:24", "PM"]
-          const [hm, ampm] = time.split(" ");
           return (
-            <div key={code} className="flex items-baseline justify-between px-1">
-              <span className="text-[9px] font-semibold tracking-wide text-zinc-500 uppercase leading-none w-7">
+            <div
+              key={code}
+              className="flex items-baseline justify-between leading-none"
+            >
+              <span className="text-[8px] font-semibold tracking-[0.15em] text-[var(--bb-mute)] uppercase">
                 {code}
               </span>
-              <span className="text-[10px] font-medium text-zinc-300 leading-none tabular-nums">
-                {hm}
-                <span className="text-[8px] text-zinc-500 ml-[2px]">{ampm}</span>
+              <span className="text-[10px] text-[var(--bb-text)] tabular-nums">
+                {time}
               </span>
             </div>
           );
@@ -58,19 +57,17 @@ export function WorldClock({ isVertical }: WorldClockProps) {
     );
   }
 
-  // Horizontal layout — show as a horizontal row with less info
   return (
     <div className="h-full flex items-center gap-3 px-2">
       {CITIES.map(({ code, tz }) => {
         const time = formatTime(tz, now);
-        const [hm, ampm] = time.split(" ");
         return (
-          <div key={code} className="flex flex-col items-center leading-none">
-            <span className="text-[8px] font-semibold tracking-wide text-zinc-500 uppercase mb-[2px]">
+          <div key={code} className="flex flex-col items-center leading-none gap-px">
+            <span className="text-[7px] font-semibold tracking-[0.15em] text-[var(--bb-mute)] uppercase">
               {code}
             </span>
-            <span className="text-[10px] font-medium text-zinc-300 tabular-nums">
-              {hm}<span className="text-[8px] text-zinc-500 ml-[1px]">{ampm}</span>
+            <span className="text-[10px] text-[var(--bb-text)] tabular-nums">
+              {time}
             </span>
           </div>
         );

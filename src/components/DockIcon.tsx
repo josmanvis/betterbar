@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { DockItem, DockPosition } from "../types";
-import { launchApp } from "../tauri-bridge";
+import { EyeSlash, PencilSimple, X } from "@phosphor-icons/react";
+import { DockItem, DockPosition, IconStyle } from "../types";
+import { launchApp, focusApp } from "../tauri-bridge";
 import { WindowPreview } from "./WindowPreview";
 
 interface DockIconProps {
@@ -13,30 +14,34 @@ interface DockIconProps {
   iconSize: number;
   showLabel: boolean;
   position: DockPosition;
+  iconStyle?: IconStyle;
+  grayscaleIdle?: boolean;
   onRemove?: (id: string) => void;
+  onRename?: (id: string, name: string) => void;
+  onHide?: (id: string) => void;
   editMode: boolean;
 }
 
-const APP_EMOJI: Record<string, string> = {
-  finder: "🗂", safari: "🧭", messages: "💬", mail: "📧",
-  calendar: "📅", terminal: "⬛", notes: "📝", photos: "🖼",
-  music: "🎵", podcasts: "🎙", maps: "🗺", xcode: "🔨",
+const APP_GLYPH: Record<string, string> = {
+  finder:   "FN", safari:   "SF", messages: "MS", mail:     "MA",
+  calendar: "CA", terminal: "TM", notes:    "NT", photos:   "PH",
+  music:    "MU", podcasts: "PC", maps:     "MP", xcode:    "XC",
 };
 
-function getFallbackEmoji(item: DockItem): string {
+function getFallbackGlyph(item: DockItem): string {
   const key = item.id.toLowerCase();
-  for (const [k, v] of Object.entries(APP_EMOJI)) {
+  for (const [k, v] of Object.entries(APP_GLYPH)) {
     if (key.includes(k)) return v;
   }
-  return item.name.charAt(0).toUpperCase();
+  return item.name.slice(0, 2).toUpperCase();
 }
 
 function tooltipClass(position: DockPosition) {
   switch (position) {
-    case "left":   return "left-full ml-3 top-1/2 -translate-y-1/2";
-    case "right":  return "right-full mr-3 top-1/2 -translate-y-1/2";
-    case "top":    return "top-full mt-3 left-1/2 -translate-x-1/2";
-    case "bottom": return "bottom-full mb-3 left-1/2 -translate-x-1/2";
+    case "left":   return "left-full ml-2 top-1/2 -translate-y-1/2";
+    case "right":  return "right-full mr-2 top-1/2 -translate-y-1/2";
+    case "top":    return "top-full mt-2 left-1/2 -translate-x-1/2";
+    case "bottom": return "bottom-full mb-2 left-1/2 -translate-x-1/2";
   }
 }
 
@@ -47,13 +52,63 @@ export function DockIcon({
   iconSize,
   showLabel,
   position,
+  iconStyle = "auto",
+  grayscaleIdle = true,
   onRemove,
+  onRename,
+  onHide,
   editMode,
 }: DockIconProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(item.name);
   const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  // Close the menu on outside-click / Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleDocDown(e: MouseEvent) {
+      const target = e.target as Node;
+      const wrap = document.getElementById(`bb-icon-menu-${item.id}`);
+      if (wrap && !wrap.contains(target)) setMenuOpen(false);
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") { setMenuOpen(false); setRenaming(false); }
+    }
+    document.addEventListener("mousedown", handleDocDown);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleDocDown);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [menuOpen, item.id]);
+
+  useEffect(() => {
+    if (renaming) renameInputRef.current?.select();
+  }, [renaming]);
+
+  function handleContextMenu(e: React.MouseEvent) {
+    if (editMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setRenameValue(item.name);
+    setRenaming(false);
+    setMenuOpen(true);
+    setShowTooltip(false);
+  }
+
+  function commitRename() {
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== item.name && onRename) {
+      onRename(item.id, trimmed);
+    }
+    setRenaming(false);
+    setMenuOpen(false);
+  }
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id });
@@ -76,35 +131,46 @@ export function DockIcon({
   async function handleClick() {
     if (editMode) return;
     setPressed(true);
-    setTimeout(() => setPressed(false), 180);
-    try { await launchApp(item.path); } catch (e) { console.error(e); }
+    setTimeout(() => setPressed(false), 120);
+    try {
+      if (item.bundleId) {
+        // focusApp uses `open -b <bundleId>` which is more reliable than paths
+        await focusApp(item.bundleId).catch(() => launchApp(item.path));
+      } else {
+        await launchApp(item.path);
+      }
+    } catch (e) {
+      console.error("[BetterBar] Failed to launch app:", e);
+    }
   }
 
   const isVertical = position === "left" || position === "right";
+
+  // Brutalist running indicator: full-height 2px chartreuse stripe on the inner edge.
+  const runningStripeClass =
+    position === "left"   ? "left-0 top-0 bottom-0 w-[2px]"  :
+    position === "right"  ? "right-0 top-0 bottom-0 w-[2px]" :
+    position === "top"    ? "top-0 left-0 right-0 h-[2px]"   :
+                            "bottom-0 left-0 right-0 h-[2px]";
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative flex flex-col items-center ${isVertical ? "w-full" : "h-full"}`}
+      className={`relative flex flex-col items-center justify-center ${isVertical ? "w-full" : "h-full"}`}
       {...(editMode ? { ...attributes, ...listeners } : {})}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Running indicator — left edge stripe (Sidebar.app style) */}
+      {/* Running stripe — hard 2px chartreuse on the inner edge */}
       <AnimatePresence>
         {isRunning && !editMode && (
           <motion.div
-            initial={{ scaleY: 0, opacity: 0 }}
-            animate={{ scaleY: 1, opacity: 1 }}
-            exit={{ scaleY: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 600, damping: 40 }}
-            className={`absolute ${
-              position === "left"   ? "left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full" :
-              position === "right"  ? "right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-l-full" :
-              position === "top"    ? "top-0 left-1/2 -translate-x-1/2 h-[3px] w-5 rounded-b-full" :
-                                      "bottom-0 left-1/2 -translate-x-1/2 h-[3px] w-5 rounded-t-full"
-            } bg-white`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.08 }}
+            className={`absolute z-10 ${runningStripeClass} bg-[var(--bb-accent)]`}
           />
         )}
       </AnimatePresence>
@@ -113,74 +179,145 @@ export function DockIcon({
       {editMode && onRemove && (
         <button
           onPointerDown={(e) => { e.stopPropagation(); onRemove(item.id); }}
-          className="absolute -top-1 -right-1 z-10 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-bold hover:bg-red-600 transition-colors"
+          className="absolute -top-0.5 -right-0.5 z-20 w-4 h-4 bg-[var(--bb-bad)] text-black flex items-center justify-center border border-black hover:bg-red-500"
         >
-          ×
+          <X size={9} weight="bold" />
         </button>
       )}
 
-      {/* Hover background + icon */}
+      {/* Slot + icon */}
       <motion.button
         onClick={handleClick}
-        animate={{ scale: pressed ? 0.82 : hovered ? 1.06 : 1 }}
-        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        style={{ width: iconSize + 12, height: iconSize + 12 }}
+        onContextMenu={handleContextMenu}
+        animate={{ scale: pressed ? 0.92 : 1 }}
+        transition={{ duration: 0.08 }}
+        style={{ width: iconSize + 8, height: iconSize + 8 }}
         className={`
-          relative flex flex-col items-center justify-center gap-0.5 rounded-xl
-          focus:outline-none select-none cursor-pointer shrink-0
-          transition-colors duration-100
-          ${hovered ? "bg-white/[0.08]" : "bg-transparent"}
+          relative flex flex-col items-center justify-center gap-0.5
+          rounded-none focus:outline-none select-none cursor-pointer shrink-0
+          border ${hovered || isRunning || menuOpen ? "border-[var(--bb-line-2)]" : "border-transparent"}
+          ${hovered || menuOpen ? "bg-[var(--bb-pane)]" : "bg-transparent"}
+          transition-colors duration-75
           ${editMode ? "animate-wiggle" : ""}
         `}
       >
-        {/* App icon */}
         <div
-          style={{ width: iconSize, height: iconSize }}
+          style={{
+            width: iconSize,
+            height: iconSize,
+            filter:
+              !grayscaleIdle || isRunning || hovered
+                ? "none"
+                : "grayscale(80%) contrast(1.05) brightness(0.92)",
+            transition: "filter 120ms linear",
+          }}
           className="flex items-center justify-center shrink-0"
         >
-          {item.icon ? (
+          {iconStyle === "auto" && item.icon ? (
             <img
               src={item.icon}
               alt={item.name}
-              className="w-full h-full object-contain rounded-[22%]"
+              className="w-full h-full object-contain"
               draggable={false}
             />
           ) : (
             <div
-              className="w-full h-full flex items-center justify-center rounded-[22%] bg-gradient-to-br from-zinc-600 to-zinc-800 text-white font-semibold shadow-inner"
-              style={{ fontSize: iconSize * 0.4 }}
+              className="w-full h-full flex items-center justify-center bg-[var(--bb-pane-2)] border border-[var(--bb-line-2)] text-[var(--bb-accent)] font-bold tracking-tight"
+              style={{ fontSize: Math.max(10, iconSize * 0.32) }}
             >
-              {getFallbackEmoji(item)}
+              {getFallbackGlyph(item)}
             </div>
           )}
         </div>
 
-        {/* Label (only when enabled and sidebar is vertical) */}
         {showLabel && isVertical && (
-          <span className="text-[9px] text-zinc-400 leading-none truncate max-w-[56px] text-center">
+          <span className={`
+            text-[8px] uppercase tracking-wider leading-none truncate max-w-[58px] text-center font-medium
+            ${isRunning ? "text-[var(--bb-accent)]" : "text-[var(--bb-dim)]"}
+          `}>
             {item.name}
           </span>
         )}
       </motion.button>
 
+      {/* Context menu (right-click) — overlays the icon slot so it stays
+          within the bar's overflow-hidden bounds regardless of bar thickness. */}
+      <AnimatePresence>
+        {menuOpen && !editMode && (
+          <motion.div
+            id={`bb-icon-menu-${item.id}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.08 }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+            style={{
+              width: iconSize + 8,
+              height: iconSize + 8,
+              top: 0,
+              left: "50%",
+              transform: "translateX(-50%)",
+            }}
+            className="absolute z-[60] bg-black border border-[var(--bb-accent)] flex flex-col items-stretch"
+          >
+            {renaming ? (
+              <input
+                ref={renameInputRef}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename();
+                  if (e.key === "Escape") { setRenaming(false); setMenuOpen(false); }
+                }}
+                className="w-full h-full bg-black text-[var(--bb-text)] text-[10px] px-1 outline-none min-w-0 text-center tabular-nums"
+                autoFocus
+              />
+            ) : (
+              <>
+                <button
+                  onClick={() => setRenaming(true)}
+                  title="Edit Display"
+                  className="flex-1 flex flex-col items-center justify-center gap-0.5 text-[var(--bb-dim)] hover:text-[var(--bb-accent)] hover:bg-[var(--bb-pane)] border-b border-[var(--bb-line)] transition-colors"
+                >
+                  <PencilSimple size={14} weight="bold" />
+                  <span className="text-[7px] uppercase tracking-[0.15em]">Edit</span>
+                </button>
+                <button
+                  onClick={() => { onHide?.(item.id); setMenuOpen(false); }}
+                  title="Hide (undo from settings)"
+                  className="flex-1 flex flex-col items-center justify-center gap-0.5 text-[var(--bb-dim)] hover:text-[var(--bb-warn)] hover:bg-[var(--bb-pane)] transition-colors"
+                >
+                  <EyeSlash size={14} weight="bold" />
+                  <span className="text-[7px] uppercase tracking-[0.15em]">Hide</span>
+                </button>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Tooltip / Window Preview */}
       <AnimatePresence>
-        {showTooltip && !editMode && (
+        {showTooltip && !menuOpen && !editMode && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.88 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.88 }}
-            transition={{ duration: 0.1 }}
-            className={`absolute z-50 rounded-xl bg-zinc-800 border border-white/[0.08] shadow-xl ${tooltipClass(position)} ${
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.08 }}
+            className={`absolute z-50 bg-black border border-[var(--bb-line-2)] shadow-[3px_3px_0_0_rgba(0,0,0,1)] ${tooltipClass(position)} ${
               isRunning && runningPid !== undefined
-                ? "p-2.5"
-                : "px-2.5 py-1 pointer-events-none whitespace-nowrap"
+                ? "p-1.5"
+                : "px-2 py-1 pointer-events-none whitespace-nowrap"
             }`}
           >
             {isRunning && runningPid !== undefined ? (
               <WindowPreview appName={item.name} pid={runningPid} position={position} />
             ) : (
-              <span className="text-xs font-medium text-white">{item.name}</span>
+              <span className="text-[11px] text-[var(--bb-text)]">
+                <span className="text-[var(--bb-accent)]">&gt;</span> {item.name}
+              </span>
             )}
           </motion.div>
         )}

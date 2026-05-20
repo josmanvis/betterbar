@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/ibm-plex-mono/700.css";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Brutalist Terminal — palette
+   Pure black canvas, off-black panes, chartreuse accent, bone-white text.
+   Every surface is a hard rectangle. No radii, no glows, no gradients.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --bb-bg:        #000000;
+  --bb-pane:      #0a0a0a;
+  --bb-pane-2:    #111111;
+  --bb-line:      #1f1f1f;
+  --bb-line-2:    #2b2b2b;
+  --bb-text:      #e7e5dc;     /* bone */
+  --bb-dim:       #6b6b66;
+  --bb-mute:      #3a3a36;
+  --bb-accent:    #c5f500;     /* chartreuse */
+  --bb-accent-d:  #9ec500;
+  --bb-warn:      #ff8a3d;
+  --bb-bad:       #ff4d4d;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -12,14 +38,88 @@ html, body, #root {
   height: 100%;
   background: transparent;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  /* Mono everywhere — IBM Plex Mono with terminal fallbacks. */
+  font-family: "IBM Plex Mono", "Menlo", "Monaco", ui-monospace, monospace;
+  font-feature-settings: "tnum", "zero", "ss03";
+  color: var(--bb-text);
 }
 
+/* Selection: invert. */
+::selection { background: var(--bb-accent); color: #000; }
+
+/* Tailwind v4 removed the default `cursor: pointer` on buttons — restore it
+   so the brutalist-terminal UI still feels clickable on hover. */
+button:not(:disabled), [role="button"]:not(:disabled) {
+  cursor: pointer;
+}
+button:disabled, [role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* Custom scrollbar (only inside the settings window, where we allow scroll). */
+.bb-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.bb-scroll::-webkit-scrollbar-track { background: var(--bb-bg); border-left: 1px solid var(--bb-line); }
+.bb-scroll::-webkit-scrollbar-thumb { background: var(--bb-line-2); border: 2px solid var(--bb-bg); }
+.bb-scroll::-webkit-scrollbar-thumb:hover { background: var(--bb-accent); }
+
+/* ── Scanline overlay — quiet 2px striping for the bar. ─────────────────────── */
+.bb-scanlines {
+  position: relative;
+}
+.bb-scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.02) 0px,
+    rgba(255, 255, 255, 0.02) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  mix-blend-mode: overlay;
+}
+
+/* ── Caret blink for terminal prompts. ──────────────────────────────────────── */
+@keyframes bb-blink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.bb-caret { animation: bb-blink 1.05s steps(1) infinite; }
+
+/* ── Wiggle (kept for edit-mode icons). ─────────────────────────────────────── */
 @keyframes wiggle {
-  0%, 100% { transform: rotate(-2deg); }
-  50% { transform: rotate(2deg); }
+  0%, 100% { transform: rotate(-1.5deg); }
+  50% { transform: rotate(1.5deg); }
 }
+.animate-wiggle { animation: wiggle 0.32s ease-in-out infinite; }
 
-.animate-wiggle {
-  animation: wiggle 0.3s ease-in-out infinite;
+/* ── Brutalist range input. ─────────────────────────────────────────────────── */
+input[type="range"].bb-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  background: transparent;
+  cursor: ew-resize;
 }
+input[type="range"].bb-range::-webkit-slider-runnable-track {
+  height: 18px;
+  background:
+    linear-gradient(var(--bb-accent), var(--bb-accent)) left center / var(--fill, 0%) 4px no-repeat,
+    linear-gradient(var(--bb-line-2), var(--bb-line-2)) center / 100% 4px no-repeat;
+  border: 1px solid var(--bb-line);
+}
+input[type="range"].bb-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 18px;
+  background: var(--bb-text);
+  border: 1px solid #000;
+  margin-top: 0;
+  cursor: ew-resize;
+}
+input[type="range"].bb-range:focus { outline: none; }
+input[type="range"].bb-range:focus::-webkit-slider-thumb { background: var(--bb-accent); }

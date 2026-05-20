@@ -1,5 +1,43 @@
 # BetterBar — Changelog
 
+## 0.6.0
+- **Always-on edge drag handles** — the 10px hover bands on all four bar edges now work regardless of `FREE_FLOAT`. Left-click drag repositions the bar via `getCurrentWindow().startDragging()`; if the bar was docked, dragging auto-engages free-float mode at the new position (`src/components/DockBar.tsx`, new `setFreeFloat` setter in `src/store.ts`). The window-move listener is now always active and writes back to `floatPosition` on every native drag.
+- **Right-click drag = resize** — the dedicated inner-edge `ResizeHandle` is gone. Right-click + drag on any edge stripe now resizes the bar: perpendicular edges adjust thickness (`barSize`), parallel edges adjust length (`barLength`, only in free-float + custom mode). Direction follows the grabbed edge's outward normal. Implementation uses pointer capture for smooth tracking.
+- **Icon context menu** — right-click an app icon to open a custom menu with `Edit Display` (inline rename, persisted to `DockItem.name`) and `Hide`. Hidden items are kept in the active set but filtered out of the bar (`src/components/DockIcon.tsx`).
+- **New `DockItem.hidden` field** + `renameItem` / `setItemHidden` operations in `src/store.ts`.
+- **Settings `ITEMS` section** — new section lists every item in the active set with rename and show/hide toggles, so hides done from the bar can be undone here (`src/SettingsApp.tsx`).
+- **Cursor restore for Tailwind v4** — added a global `button:not(:disabled) { cursor: pointer; }` rule in `src/index.css` since Tailwind v4 dropped this from its preflight stylesheet. Buttons across the settings window now feel clickable on hover.
+
+## 0.5.0
+- **Free-floating mode** — new `FREE_FLOAT` toggle in settings lets the user drag BetterBar anywhere on screen instead of pinning it to an edge (`src/SettingsApp.tsx`, `src/store.ts`, `src/types.ts`).
+- **Bar length modes** — the `BAR_LENGTH` settings section now offers three modes via a segmented control: `EDGE` (full screen-edge length), `AUTO` (shrink-wrap to icons + indicators, measured via `ResizeObserver` in `src/components/DockBar.tsx`), `CUSTOM` (pixel-precise slider). `useWindowPosition` resolves the long-axis length from the mode and passes a measured `autoLength` through from `DockBar`. In auto mode the bar drops its `flex-1` spacer and shrink-wraps so the OS window can be sized to fit (`src/hooks/useWindowPosition.ts`, `src/components/DockBar.tsx`).
+  - `useWindowPosition` now branches: docked path is unchanged; the float path computes a finite rect (`barSize` × `barLength`) at `floatPosition`, clamps to the screen's visibleFrame (avoids the menu bar / system Dock), and clears the screen reservation via the existing `clear_screen_insets` Rust command (newly registered in `invoke_handler` and wrapped in `src/tauri-bridge.ts`).
+  - Bar orientation in float mode is inherited from the configured `position` (left/right → vertical, top/bottom → horizontal).
+  - New `BAR_LENGTH` slider in settings (200–1400px, disabled/dimmed when free-float is off).
+  - Hover-edge drag handle: when within 10px of any of the bar's four edges, a 2px chartreuse stripe appears on that edge and acts as the native drag handle via `getCurrentWindow().startDragging()` (`src/components/DockBar.tsx`). Clicks on the interior (icons, buttons) still work normally.
+  - Position is persisted: `tauri://moved` fires after a drag → we read `outer_position()` via the new `get_window_outer_position` Rust command, convert physical→logical pixels with the screen scale factor, and save to `config.floatPosition` (`src-tauri/src/lib.rs`).
+  - Toggling off snaps the bar back to whatever `position` is configured and re-reserves the screen inset (handled automatically by the reactive effect).
+  - Added `core:window:allow-start-dragging` capability (`src-tauri/capabilities/default.json`).
+
+## 0.4.0
+- **Bar geometry**: Left/right bars now subtract `dock_height` in addition to `menu_bar_height`, so they stop cleanly above the system Dock instead of running underneath it (`src/hooks/useWindowPosition.ts`). Bottom bar likewise stacks above the system Dock.
+- **Settings cog**: Replaced the JS-side `getAllWindows().show()` path with a dedicated Rust command `open_settings_window` (`src-tauri/src/lib.rs`, `src/tauri-bridge.ts`). Custom commands don't require window-permission capabilities, so the cog works without any capability fiddling. The redundant `core:window:allow-*` permissions added previously can stay or go — they're no longer load-bearing.
+- **Defensive load**: `loadConfig` now clamps `barSize` to `[48, 200]` and substitutes defaults for non-finite numbers, recovering gracefully from corrupted persisted state (`src/store.ts`).
+- **Brutalist Terminal redesign** of the bar and settings window — pure black canvas, IBM Plex Mono throughout, chartreuse (#c5f500) accent on a single semantic state (active/running). 1px hard borders, no radii, no glows.
+  - New CSS palette in `src/index.css` (CSS variables, scanline overlay utility, blinking caret, brutalist range styling).
+  - `src/components/DockBar.tsx` — `RailStamp` terminal-style header (`BB▍` blinking caret), micro-labelled dividers (`TIME` / `PWR` / `SET`), hard-edged `RailButton`s with bracketed framing.
+  - `src/components/DockIcon.tsx` — square slots, full-color desaturated when not running, chartreuse 2px stripe on the inner edge for running apps; tooltip rendered as a black box with `>` prompt prefix.
+  - `src/components/BatteryIndicator.tsx` — segmented bar (8 bars), tonal color (chartreuse charging / amber low / red critical), Phosphor `Lightning` glyph for charging.
+  - `src/components/WorldClock.tsx` — 24h tabular numerals, monospace columns.
+  - `src/SettingsApp.tsx` — terminal-window layout with numbered sections (`[01] POSITION`, etc.), bracketed segmented control for position, ASCII-fill range slider, `[X] / [ ]` toggles, status footer reading `pos=… bar=…px icon=…px`.
+  - Iconography: `@phosphor-icons/react` (Bold weight) replacing all unicode glyphs.
+- Settings cog now opens a dedicated, native-decorated settings window (`src-tauri/tauri.conf.json`, `src/SettingsApp.tsx`, `src/main.tsx`).
+  - Removed the inline `SettingsPanel` popover; the main bar is no longer crowded by a popover and can stay clipped (`overflow-hidden`) without conflicts.
+  - Cross-window state sync via `storage` events in `src/store.ts` — changes in either window propagate immediately.
+  - Added the explicit window permissions (`core:window:allow-show`, `allow-set-focus`, `allow-unminimize`, `allow-get-all-windows`) to `src-tauri/capabilities/default.json` — without these, the cog click silently no-ops in Tauri 2 (`core:default` does not include them).
+- Resizable bar thickness via inner-edge drag handle (`src/components/DockBar.tsx`) — drag the inner edge to grow/shrink the bar (clamped 48–200px). New `barSize` field on `BetterBarConfig`; `useWindowPosition` now resizes the OS window and updates the screen inset accordingly. Also exposed as a slider in the settings window.
+- Removed scroll/overflow on the icon container (`src/components/DockBar.tsx`); excess icons are clipped by the bar's existing `overflow-hidden`.
+
 ## 0.3.0
 - Window preview thumbnails on hover for running apps (requires Screen Recording permission)
 
