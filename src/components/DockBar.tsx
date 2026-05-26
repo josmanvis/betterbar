@@ -23,6 +23,7 @@ import { WorldClock } from "./WorldClock";
 import { BatteryIndicator } from "./BatteryIndicator";
 import { MusicIndicator } from "./MusicIndicator";
 import { WindowPreview } from "./WindowPreview";
+import { DEVICE_GLYPHS } from "./deviceIcons";
 import {
   AppSet, BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
   BetterBarConfig, DockItem, FLOAT_DRAG_EDGE, IconStyle, RunningApp, DockPosition,
@@ -45,10 +46,6 @@ import {
   focusWindow,
   launchSimulator,
 } from "../tauri-bridge";
-
-// Stable empty array so passing "no items" to useAppIcons doesn't re-fire the
-// effect every render when glyph mode is on.
-const EMPTY_ITEMS: DockItem[] = [];
 
 async function handleOpenSettings() {
   try {
@@ -75,63 +72,13 @@ const SIM_GROUPS: ({ type: string; label: string } | "sep")[] = [
   { type: "macos",       label: "Mac OS" },
 ];
 
-const SIMS_DEVICES = [
-  {
-    type: "ipad",
-    label: "iPad",
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
-        <rect x="1" y="4" width="18" height="12" rx="1"/>
-      </svg>
-    ),
-  },
-  {
-    type: "iphone",
-    label: "iPhone",
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
-        <rect x="5" y="1" width="10" height="18" rx="2"/>
-      </svg>
-    ),
-  },
-  {
-    type: "androidphone",
-    label: "Android Phone",
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
-        <rect x="4" y="1" width="12" height="18" rx="1.5"/>
-        <circle cx="10" cy="3.5" r="0.5" fill="currentColor"/>
-      </svg>
-    ),
-  },
-  {
-    type: "androidtablet",
-    label: "Android Tablet",
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
-        <rect x="1" y="3.5" width="18" height="13" rx="1"/>
-        <circle cx="10" cy="5" r="0.5" fill="currentColor"/>
-      </svg>
-    ),
-  },
-  {
-    type: "windows11",
-    label: "Windows",
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
-        <path d="M2 2h7v7H2zM11 2h7v7h-7zM2 11h7v7H2zM11 11h7v7h-7z"/>
-      </svg>
-    ),
-  },
-  {
-    type: "macos",
-    label: "Mac OS",
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
-        <path d="M10 1c-2 0-3.5 1.5-4.5 3.5S4 8.5 4 10c0 2.5 1.5 5 3 6s1.5 1 3 0 4.5-4 4.5-6.5c0-2.5-1.5-6-4-7S11 1 10 1z"/>
-      </svg>
-    ),
-  },
+const SIMS_DEVICES: { type: string; label: string; glyph: string }[] = [
+  { type: "ipad",          label: "iPad",           glyph: "ipad" },
+  { type: "iphone",        label: "iPhone",         glyph: "iphone" },
+  { type: "androidphone",  label: "Android Phone",  glyph: "androidphone" },
+  { type: "androidtablet", label: "Android Tablet", glyph: "androidtablet" },
+  { type: "windows11",     label: "Windows",        glyph: "windows" },
+  { type: "macos",         label: "Mac OS",         glyph: "macos" },
 ];
 
 async function handleSimulatorMenu() {
@@ -170,6 +117,7 @@ interface DockBarProps {
   onSetItemIcon?: (id: string, icon: string | undefined) => void;
   onSetItemDeviceIcon?: (id: string, deviceIcon: string | undefined) => void;
   onSetItemForceGlyph?: (id: string, forceGlyph: boolean | undefined) => void;
+  onSetItemForceNative?: (id: string, forceNative: boolean | undefined) => void;
 
   onSetItemDisplayType?: (id: string, displayType: "icon" | "icon_label" | "label" | undefined) => void;
 }
@@ -181,7 +129,7 @@ export function DockBar({
   onFloatPositionChange, onSetFreeFloat,
   onRenameItem, onSetItemHidden,
   onAddItem, onToggleGrouping,
-  onSetItemIcon, onSetItemDeviceIcon, onSetItemForceGlyph, onSetItemDisplayType,
+  onSetItemIcon, onSetItemDeviceIcon, onSetItemForceGlyph, onSetItemForceNative, onSetItemDisplayType,
 }: DockBarProps) {
 
   const [swipeLabel, setSwipeLabel] = useState<string | null>(null);
@@ -263,20 +211,22 @@ export function DockBar({
     }
   });
 
-  // Combined list of items + running apps whose icons we want resolved.
-  const iconLookupItems: DockItem[] =
-    config.iconStyle === "auto"
-      ? [
-          ...activeSet.items,
-          ...runningUnpinned.map((app) => ({
-            id: `running-${app.pid}`,
-            name: app.name,
-            path: "",
-            bundleId: app.bundle_id,
-            order: 0,
-          })),
-        ]
-      : EMPTY_ITEMS;
+  // Combined list of items + running apps whose icons we want resolved. Pinned
+  // items are always resolved (even in GLYPH mode) so a per-item "Default
+  // (native)" override has a native icon to show; running-unpinned icons only
+  // matter in AUTO mode.
+  const iconLookupItems: DockItem[] = [
+    ...activeSet.items,
+    ...(config.iconStyle === "auto"
+      ? runningUnpinned.map((app) => ({
+          id: `running-${app.pid}`,
+          name: app.name,
+          path: "",
+          bundleId: app.bundle_id,
+          order: 0,
+        }))
+      : []),
+  ];
   const appIcons = useAppIcons(iconLookupItems);
 
   // Request missing permissions once per launch
@@ -636,8 +586,14 @@ export function DockBar({
               }}
             >
               {sortedItems.map((item) => {
+                // Native icon is used when the item explicitly opts in via
+                // "Default (native)" (forceNative) or when the global style is
+                // AUTO. In GLYPH mode untouched items fall through to the glyph.
+                const wantsNative = item.forceNative || config.iconStyle === "auto";
                 const resolvedIcon =
-                  item.deviceIcon ? undefined : (item.icon ?? (item.bundleId ? appIcons[item.bundleId] : undefined));
+                  item.deviceIcon || item.forceGlyph
+                    ? undefined
+                    : (item.icon ?? (wantsNative && item.bundleId ? appIcons[item.bundleId] : undefined));
                 
                 const isUngrouped = item.bundleId && config.ungroupedBundleIds?.includes(item.bundleId);
                 const itemWindows = isUngrouped
@@ -674,6 +630,7 @@ export function DockBar({
                       onSetItemIcon={onSetItemIcon}
                       onSetItemDeviceIcon={onSetItemDeviceIcon}
                       onSetItemForceGlyph={onSetItemForceGlyph}
+                      onSetItemForceNative={onSetItemForceNative}
                       onSetItemDisplayType={onSetItemDisplayType}
                       ungroupedBundleIds={config.ungroupedBundleIds}
                       isActive={isActiveItem(item)}
@@ -700,6 +657,7 @@ export function DockBar({
                     onSetItemIcon={onSetItemIcon}
                     onSetItemDeviceIcon={onSetItemDeviceIcon}
                     onSetItemForceGlyph={onSetItemForceGlyph}
+                    onSetItemForceNative={onSetItemForceNative}
                     onSetItemDisplayType={onSetItemDisplayType}
                     ungroupedBundleIds={config.ungroupedBundleIds}
                   />
@@ -804,7 +762,9 @@ export function DockBar({
                     }}
                     barSize={config.barSize}
                   >
-                    {d.icon}
+                    <span className="w-[14px] h-[14px] flex items-center justify-center">
+                      {DEVICE_GLYPHS[d.glyph]}
+                    </span>
                   </SimButton>
                 ))}
                 {config.showSimDropdown && (

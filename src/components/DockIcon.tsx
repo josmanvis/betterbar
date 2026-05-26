@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Menu, MenuItem, CheckMenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
-import type { ReactNode } from "react";
 import { DockItem, DockPosition, IconStyle } from "../types";
 import { launchApp, focusApp, focusWindow, hideApp, quitApp, zoomAppWindow } from "../tauri-bridge";
 import { WindowPreview } from "./WindowPreview";
+import { DEVICE_GLYPHS } from "./deviceIcons";
 
 interface DockIconProps {
   item: DockItem;
@@ -27,6 +27,7 @@ interface DockIconProps {
   onSetItemIcon?: (id: string, icon: string | undefined) => void;
   onSetItemDeviceIcon?: (id: string, deviceIcon: string | undefined) => void;
   onSetItemForceGlyph?: (id: string, forceGlyph: boolean | undefined) => void;
+  onSetItemForceNative?: (id: string, forceNative: boolean | undefined) => void;
   onSetItemDisplayType?: (id: string, displayType: "icon" | "icon_label" | "label" | undefined) => void;
   ungroupedBundleIds?: string[];
 }
@@ -37,38 +38,7 @@ const APP_GLYPH: Record<string, string> = {
   music:    "MU", podcasts: "PC", maps:     "MP", xcode:    "XC",
 };
 
-const DEVICE_ICONS: Record<string, ReactNode> = {
-  ipad: (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-full h-full">
-      <rect x="1" y="4" width="18" height="12" rx="1"/>
-    </svg>
-  ),
-  iphone: (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-full h-full">
-      <rect x="5" y="1" width="10" height="18" rx="2"/>
-    </svg>
-  ),
-  watch: (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-full h-full">
-      <rect x="5" y="4" width="10" height="12" rx="2.5"/>
-    </svg>
-  ),
-  windows: (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-full h-full">
-      <path d="M2 2h7v7H2zM11 2h7v7h-7zM2 11h7v7H2zM11 11h7v7h-7z"/>
-    </svg>
-  ),
-  macos: (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-full h-full">
-      <path d="M10 1c-2 0-3.5 1.5-4.5 3.5S4 8.5 4 10c0 2.5 1.5 5 3 6s1.5 1 3 0 4.5-4 4.5-6.5c0-2.5-1.5-6-4-7S11 1 10 1z"/>
-    </svg>
-  ),
-  linux: (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-full h-full">
-      <path d="M10 2C7 2 5 4.5 5 7.5c0 1.5.5 2.5 1.5 3.5L5 14c0 0 1.5 2 5 2s5-2 5-2l-1.5-3c1-1 1.5-2 1.5-3.5C15 4.5 13 2 10 2z"/>
-    </svg>
-  ),
-};
+const DEVICE_ICONS = DEVICE_GLYPHS;
 
 function getFallbackGlyph(item: DockItem): string {
   const key = item.id.toLowerCase();
@@ -97,6 +67,7 @@ export function DockIcon({
   iconSize,
   showLabel,
   position,
+  iconStyle,
   grayscaleIdle = true,
   onRemove,
   onRename,
@@ -105,6 +76,7 @@ export function DockIcon({
   onSetItemIcon,
   onSetItemDeviceIcon,
   onSetItemForceGlyph,
+  onSetItemForceNative,
   onSetItemDisplayType,
   ungroupedBundleIds,
 }: DockIconProps) {
@@ -189,43 +161,60 @@ export function DockIcon({
     items.push(await PredefinedMenuItem.new({ item: "Separator" }));
 
     // ── Change Icon submenu ────────────────────────────────────────
-    const iconItems: (MenuItem | PredefinedMenuItem)[] = [];
+    const iconItems: (MenuItem | CheckMenuItem | PredefinedMenuItem)[] = [];
 
-    iconItems.push(await MenuItem.new({
+    // Effective icon mode: explicit per-item choice wins; otherwise follow the
+    // global icon style (AUTO → native, GLYPH → glyph).
+    const iconMode = item.forceGlyph
+      ? "glyph"
+      : item.deviceIcon
+        ? "device"
+        : item.icon
+          ? "custom"
+          : item.forceNative
+            ? "native"
+            : iconStyle === "glyph"
+              ? "glyph"
+              : "native";
+
+    iconItems.push(await CheckMenuItem.new({
       text: "Default (native)",
-      action: () => {
-        onSetItemDeviceIcon?.(item.id, undefined);
-        onSetItemForceGlyph?.(item.id, undefined);
-      },
+      checked: iconMode === "native",
+      action: () => onSetItemForceNative?.(item.id, true),
     }));
 
-    iconItems.push(await MenuItem.new({
+    iconItems.push(await CheckMenuItem.new({
       text: "Glyph",
+      checked: iconMode === "glyph",
       action: () => onSetItemForceGlyph?.(item.id, true),
     }));
 
     iconItems.push(await PredefinedMenuItem.new({ item: "Separator" }));
 
     const deviceKeys = [
-      { key: "ipad",    label: "iPad" },
-      { key: "iphone",  label: "iPhone" },
-      { key: "watch",   label: "Apple Watch" },
-      { key: "windows", label: "Windows" },
-      { key: "macos",   label: "macOS" },
-      { key: "linux",   label: "Linux" },
+      { key: "iphone",        label: "iPhone" },
+      { key: "ipad",          label: "iPad" },
+      { key: "watch",         label: "Apple Watch" },
+      { key: "macos",         label: "macOS" },
+      { key: "androidphone",  label: "Android Phone" },
+      { key: "androidtablet", label: "Android Tablet" },
+      { key: "windows",       label: "Windows" },
+      { key: "linux",         label: "Linux" },
     ];
 
     for (const d of deviceKeys) {
-      iconItems.push(await MenuItem.new({
+      iconItems.push(await CheckMenuItem.new({
         text: d.label,
+        checked: item.deviceIcon === d.key,
         action: () => onSetItemDeviceIcon?.(item.id, d.key),
       }));
     }
 
     iconItems.push(await PredefinedMenuItem.new({ item: "Separator" }));
 
-    iconItems.push(await MenuItem.new({
+    iconItems.push(await CheckMenuItem.new({
       text: "Custom Image...",
+      checked: iconMode === "custom",
       action: () => fileInputRef.current?.click(),
     }));
 

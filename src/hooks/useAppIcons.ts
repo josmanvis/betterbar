@@ -1,45 +1,43 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DockItem } from "../types";
 import { getAppIcon } from "../tauri-bridge";
 
-/** Resolve bundleId → base64 icon data URL. Caches across re-renders so each
- *  bundle is fetched at most once per session. */
+/** Resolve bundleId → base64 icon data URL. Each bundle is fetched at most once
+ *  per session and cached. */
 export function useAppIcons(items: DockItem[]): Record<string, string> {
   const [icons, setIcons] = useState<Record<string, string>>({});
-  const cacheRef = useRef<Record<string, "loading" | "miss" | string>>({});
+  // Per-bundle fetch status, so we never fire a duplicate request.
+  const statusRef = useRef<Record<string, "loading" | "done" | "miss">>({});
+
+  // Unique bundle ids that still need a native icon (items with a custom icon
+  // are skipped). Derived as a stable string key so the effect below only runs
+  // when the actual set changes — not on every render. Re-running on every
+  // render previously cancelled in-flight fetches and left them stuck.
+  const bundleIds = useMemo(
+    () => Array.from(new Set(items.filter((i) => i.bundleId && !i.icon).map((i) => i.bundleId!))),
+    [items]
+  );
+  const key = bundleIds.join("|");
 
   useEffect(() => {
-    let cancelled = false;
-    console.log("[BB.useAppIcons] effect run, items:",
-      items.map((i) => ({ id: i.id, bundleId: i.bundleId, hasIcon: !!i.icon })));
-
-    items.forEach(async (item) => {
-      if (!item.bundleId || item.icon) return;
-      if (cacheRef.current[item.bundleId]) {
-        console.log("[BB.useAppIcons] cached", item.bundleId, "→", cacheRef.current[item.bundleId].slice(0, 40));
-        return;
-      }
-      cacheRef.current[item.bundleId] = "loading";
-      console.log("[BB.useAppIcons] fetching", item.bundleId);
+    bundleIds.forEach(async (bundleId) => {
+      if (statusRef.current[bundleId]) return; // loading | done | miss
+      statusRef.current[bundleId] = "loading";
       try {
-        const data = await getAppIcon(item.bundleId);
-        if (cancelled) return;
+        const data = await getAppIcon(bundleId);
         if (data) {
-          console.log("[BB.useAppIcons] resolved", item.bundleId, "len:", data.length);
-          cacheRef.current[item.bundleId] = data;
-          setIcons((prev) => ({ ...prev, [item.bundleId!]: data }));
+          statusRef.current[bundleId] = "done";
+          setIcons((prev) => ({ ...prev, [bundleId]: data }));
         } else {
-          console.log("[BB.useAppIcons] miss", item.bundleId);
-          cacheRef.current[item.bundleId] = "miss";
+          statusRef.current[bundleId] = "miss";
         }
       } catch (e) {
-        cacheRef.current[item.bundleId!] = "miss";
-        console.error("[BetterBar] icon load failed for", item.bundleId, e);
+        statusRef.current[bundleId] = "miss";
+        console.error("[BetterBar] icon load failed for", bundleId, e);
       }
     });
-
-    return () => { cancelled = true; };
-  }, [items]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   return icons;
 }

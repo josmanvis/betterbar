@@ -13,6 +13,7 @@ export default function App() {
     setItemIcon,
     setItemDeviceIcon,
     setItemForceGlyph,
+    setItemForceNative,
     setItemDisplayType,
     setBarSize,
     setBarLength,
@@ -40,6 +41,7 @@ export default function App() {
       onSetItemIcon={setItemIcon}
       onSetItemDeviceIcon={setItemDeviceIcon}
       onSetItemForceGlyph={setItemForceGlyph}
+      onSetItemForceNative={setItemForceNative}
       onSetItemDisplayType={setItemDisplayType}
     />
   );

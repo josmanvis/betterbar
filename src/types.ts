@@ -8,6 +8,7 @@ export interface DockItem {
   icon?: string; // base64 data URL — user-set custom image
   deviceIcon?: string; // key into built-in device icon set: "ipad" | "iphone" | "watch" | "windows" | "macos" | "linux"
   forceGlyph?: boolean; // when true, always render the 2-letter fallback glyph (overrides deviceIcon & native icon)
+  forceNative?: boolean; // when true, always use the native macOS icon — overrides global GLYPH icon style
   showLabel?: boolean; // per-item override for showLabels (deprecated — use displayType)
   displayType?: "icon" | "icon_label" | "label"; // unified display mode; overrides showLabel
   order: number;

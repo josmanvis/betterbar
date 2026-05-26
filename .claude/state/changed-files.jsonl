@@ -1,2 +1,14 @@
 {"file":"src-tauri/Cargo.toml","action":"Edit","timestamp":"2026-05-22T01:33:03Z","important":false}
 {"file":"src-tauri/src/lib.rs","action":"Edit","timestamp":"2026-05-22T01:33:46Z","important":false}
+{"file":"history.md","action":"Edit","timestamp":"2026-05-26T22:47:57Z","important":false}
+{"file":"package.json","action":"Edit","timestamp":"2026-05-26T22:48:05Z","important":false}
+{"file":"src-tauri/Cargo.toml","action":"Edit","timestamp":"2026-05-26T22:48:12Z","important":false}
+{"file":"src-tauri/tauri.conf.json","action":"Edit","timestamp":"2026-05-26T22:48:17Z","important":false}
+{"file":"src/components/deviceIcons.tsx","action":"Write","timestamp":"2026-05-26T22:52:48Z","important":false}
+{"file":"src/components/DockBar.tsx","action":"Edit","timestamp":"2026-05-26T22:53:05Z","important":false}
+{"file":"src/components/DockIcon.tsx","action":"Edit","timestamp":"2026-05-26T22:53:28Z","important":false}
+{"file":"/tmp/bb-icons-preview.html","action":"Write","timestamp":"2026-05-26T22:54:53Z","important":false}
+{"file":"src/types.ts","action":"Edit","timestamp":"2026-05-26T23:05:52Z","important":false}
+{"file":"src/store.ts","action":"Edit","timestamp":"2026-05-26T23:06:05Z","important":false}
+{"file":"src/App.tsx","action":"Edit","timestamp":"2026-05-26T23:06:20Z","important":false}
+{"file":"src/hooks/useAppIcons.ts","action":"Write","timestamp":"2026-05-26T23:36:20Z","important":false}

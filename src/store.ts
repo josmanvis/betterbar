@@ -173,7 +173,7 @@ export function useConfig() {
     (id: string, icon: string | undefined) => {
       updateActiveSet((s) => ({
         ...s,
-        items: s.items.map((i) => (i.id === id ? { ...i, icon, deviceIcon: undefined, forceGlyph: undefined } : i)),
+        items: s.items.map((i) => (i.id === id ? { ...i, icon, deviceIcon: undefined, forceGlyph: undefined, forceNative: undefined } : i)),
       }));
     },
     [updateActiveSet]
@@ -183,7 +183,7 @@ export function useConfig() {
     (id: string, deviceIcon: string | undefined) => {
       updateActiveSet((s) => ({
         ...s,
-        items: s.items.map((i) => (i.id === id ? { ...i, deviceIcon, icon: undefined, forceGlyph: undefined } : i)),
+        items: s.items.map((i) => (i.id === id ? { ...i, deviceIcon, icon: undefined, forceGlyph: undefined, forceNative: undefined } : i)),
       }));
     },
     [updateActiveSet]
@@ -193,7 +193,17 @@ export function useConfig() {
     (id: string, forceGlyph: boolean | undefined) => {
       updateActiveSet((s) => ({
         ...s,
-        items: s.items.map((i) => (i.id === id ? { ...i, forceGlyph, deviceIcon: undefined, icon: undefined } : i)),
+        items: s.items.map((i) => (i.id === id ? { ...i, forceGlyph, deviceIcon: undefined, icon: undefined, forceNative: undefined } : i)),
+      }));
+    },
+    [updateActiveSet]
+  );
+
+  const setItemForceNative = useCallback(
+    (id: string, forceNative: boolean | undefined) => {
+      updateActiveSet((s) => ({
+        ...s,
+        items: s.items.map((i) => (i.id === id ? { ...i, forceNative, icon: undefined, deviceIcon: undefined, forceGlyph: undefined } : i)),
       }));
     },
     [updateActiveSet]
@@ -393,6 +403,7 @@ export function useConfig() {
     setItemIcon,
     setItemDeviceIcon,
     setItemForceGlyph,
+    setItemForceNative,
     setItemShowLabel,
     setItemDisplayType,
     switchSet,
