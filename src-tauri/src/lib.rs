@@ -435,6 +435,17 @@ mod macos {
         fn CGRequestScreenCaptureAccess() -> bool;
     }
 
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXUIElementCreateApplication(pid: i32) -> CFTypeRef;
+        fn AXUIElementCopyAttributeValue(
+            element: CFTypeRef,
+            attribute: CFTypeRef,
+            value: *mut CFTypeRef,
+        ) -> i32;
+        fn _AXUIElementGetWindow(element: CFTypeRef, id: *mut u32) -> i32;
+    }
+
     // dlsym is in libSystem (always available on macOS) — used to look up private CGS symbols
     extern "C" {
         fn dlsym(
@@ -939,6 +950,60 @@ end tell"#,
         }
     }
 
+    fn get_ax_window_title(target_pid: i32, target_window_id: u32) -> Option<String> {
+        unsafe {
+            let app_ref = AXUIElementCreateApplication(target_pid);
+            if app_ref.is_null() { return None; }
+
+            let attr_windows = CFStringCreateWithCString(
+                std::ptr::null(),
+                b"AXWindows\0".as_ptr() as _,
+                CF_STRING_ENCODING_UTF8,
+            );
+
+            let mut windows_ref: CFTypeRef = std::ptr::null();
+            if AXUIElementCopyAttributeValue(app_ref, attr_windows, &mut windows_ref) != 0 || windows_ref.is_null() {
+                CFRelease(app_ref);
+                CFRelease(attr_windows);
+                return None;
+            }
+
+            let count = CFArrayGetCount(windows_ref);
+            let attr_title = CFStringCreateWithCString(
+                std::ptr::null(),
+                b"AXTitle\0".as_ptr() as _,
+                CF_STRING_ENCODING_UTF8,
+            );
+
+            let mut result = None;
+
+            for i in 0..count {
+                let window = CFArrayGetValueAtIndex(windows_ref, i);
+                if window.is_null() { continue; }
+
+                let mut cg_win_id: u32 = 0;
+                if _AXUIElementGetWindow(window, &mut cg_win_id) == 0 {
+                    if cg_win_id == target_window_id {
+                        let mut title_ref: CFTypeRef = std::ptr::null();
+                        if AXUIElementCopyAttributeValue(window, attr_title, &mut title_ref) == 0 && !title_ref.is_null() {
+                            let cf_str = core_foundation::string::CFString::wrap_under_get_rule(title_ref as _);
+                            result = Some(cf_str.to_string());
+                            CFRelease(title_ref);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            CFRelease(attr_title);
+            CFRelease(windows_ref);
+            CFRelease(attr_windows);
+            CFRelease(app_ref);
+
+            result
+        }
+    }
+
     pub fn get_on_screen_windows() -> Vec<WindowDetails> {
         let option = CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY | CG_WINDOW_LIST_EXCLUDE_DESKTOP_ELEMENTS;
         unsafe {
@@ -1026,6 +1091,13 @@ end tell"#,
                 if !name_val.is_null() {
                     let cf_str = core_foundation::string::CFString::wrap_under_get_rule(name_val as _);
                     title = cf_str.to_string();
+                }
+
+                // If CoreGraphics title is empty (e.g. for Simulator), try to fallback to Accessibility API
+                if title.trim().is_empty() {
+                    if let Some(fallback) = get_ax_window_title(pid, window_id as u32) {
+                        title = fallback;
+                    }
                 }
 
                 // Filter out empty titles to avoid helper/invisible windows

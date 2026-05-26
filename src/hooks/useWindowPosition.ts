@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { BetterBarConfig } from "../types";
 import {
   clearScreenInsets, getScreenInfo, positionWindow,
-  setScreenInset, setWindowLevel,
+  setScreenInset, setWindowLevel, updateBarGeometry,
 } from "../tauri-bridge";
 
 const POLL_MS = 1500; // poll interval to detect menu bar visibility changes
@@ -11,6 +11,7 @@ export function useWindowPosition(
   config: BetterBarConfig,
   onFloatPositionChange?: (pos: { x: number; y: number }) => void,
   autoLength?: number | null,
+  expandedSize?: number,
 ) {
   const lastBoundsRef = useRef<string>("");
   const lastModeRef = useRef<"docked" | "float" | null>(null);
@@ -28,16 +29,18 @@ export function useWindowPosition(
       const menuH = screen.menu_bar_height;
       const dockH = screen.dock_height;
 
+      const effectiveBarSize = expandedSize ? Math.max(barSize, expandedSize) : barSize;
+      
       let x = 0, y = 0, w = 0, h = 0;
       switch (config.position) {
         case "left":
-          x = 0; y = menuH; w = barSize; h = sh - menuH - dockH; break;
+          x = 0; y = menuH; w = effectiveBarSize; h = sh - menuH - dockH; break;
         case "right":
-          x = sw - barSize; y = menuH; w = barSize; h = sh - menuH - dockH; break;
+          x = sw - effectiveBarSize; y = menuH; w = effectiveBarSize; h = sh - menuH - dockH; break;
         case "top":
-          x = 0; y = menuH; w = sw; h = barSize; break;
+          x = 0; y = menuH; w = sw; h = effectiveBarSize; break;
         case "bottom":
-          x = 0; y = sh - barSize - dockH; w = sw; h = barSize; break;
+          x = 0; y = sh - effectiveBarSize - dockH; w = sw; h = effectiveBarSize; break;
       }
 
       const key = `docked:${x},${y},${w},${h}`;
@@ -51,7 +54,11 @@ export function useWindowPosition(
         Math.round(h * scale),
       );
       await setWindowLevel("floating");
-      await setScreenInset(config.position, barSize, menuH);
+      if (config.preventOverlap) {
+        await setScreenInset(config.position, barSize, menuH);
+      } else {
+        await clearScreenInsets();
+      }
     }
 
     async function applyFloat(screen: Awaited<ReturnType<typeof getScreenInfo>>) {
@@ -79,8 +86,9 @@ export function useWindowPosition(
           break;
       }
 
-      const w = isVertical ? barSize : resolvedLen;
-      const h = isVertical ? resolvedLen : barSize;
+      const effectiveBarSize = expandedSize ? Math.max(barSize, expandedSize) : barSize;
+      const w = isVertical ? effectiveBarSize : resolvedLen;
+      const h = isVertical ? resolvedLen : effectiveBarSize;
 
       console.log("[BB.applyFloat]", {
         mode: barLengthMode, autoLength, isVertical, resolvedLen,
@@ -113,7 +121,8 @@ export function useWindowPosition(
       const cy = Math.max(minY, Math.min(maxY, y));
 
       // If clamping (or initialization) changed the saved position, persist it.
-      if (!floatPosition || cx !== floatPosition.x || cy !== floatPosition.y) {
+      // Do not persist if we are temporarily expanded.
+      if (!expandedSize && (!floatPosition || cx !== floatPosition.x || cy !== floatPosition.y)) {
         cbRef.current?.({ x: cx, y: cy });
       }
 
@@ -142,6 +151,7 @@ export function useWindowPosition(
     async function applyPosition() {
       try {
         const screen = await getScreenInfo();
+        await updateBarGeometry(config.strictOverlap, config.position, barSize);
         if (freeFloat) {
           await applyFloat(screen);
           lastModeRef.current = "float";
@@ -157,5 +167,5 @@ export function useWindowPosition(
     applyPosition();
     const timer = setInterval(applyPosition, POLL_MS);
     return () => clearInterval(timer);
-  }, [config.position, barSize, barLength, barLengthMode, autoLength, freeFloat, floatPosition]);
+  }, [config.position, barSize, barLength, barLengthMode, autoLength, freeFloat, floatPosition, expandedSize]);
 }
