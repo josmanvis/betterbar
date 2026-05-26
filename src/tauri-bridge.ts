@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { BatteryInfo, RunningApp, ScreenInfo, WindowThumbnail, WindowDetails } from "./types";
+import { BatteryInfo, MusicInfo, RunningApp, ScreenInfo, WindowThumbnail, WindowDetails } from "./types";
 
 export async function getRunningApps(): Promise<RunningApp[]> {
   return invoke<RunningApp[]>("get_running_apps");
@@ -100,4 +100,40 @@ export async function focusWindow(pid: number, title: string): Promise<void> {
 
 export async function getWindowIdThumbnail(windowId: number): Promise<WindowThumbnail | null> {
   return invoke<WindowThumbnail | null>("get_window_id_thumbnail", { windowId });
+}
+
+export async function hideApp(bundleId: string): Promise<void> {
+  return invoke("hide_app", { bundleId });
+}
+
+export async function quitApp(bundleId: string): Promise<void> {
+  return invoke("quit_app", { bundleId });
+}
+
+export async function zoomAppWindow(bundleId: string): Promise<void> {
+  return invoke("zoom_app_window", { bundleId });
+}
+
+export async function getMusicInfo(): Promise<MusicInfo> {
+  return invoke<MusicInfo>("get_music_info");
+}
+
+export async function focusMusicApp(appName: string): Promise<void> {
+  return invoke("focus_music_app", { appName });
+}
+
+export async function musicPlayPause(): Promise<void> {
+  return invoke("music_play_pause");
+}
+
+export async function musicNext(): Promise<void> {
+  return invoke("music_next");
+}
+
+export async function musicPrevious(): Promise<void> {
+  return invoke("music_previous");
+}
+
+export async function launchSimulator(simulatorType: string): Promise<void> {
+  return invoke("launch_simulator", { simulatorType });
 }

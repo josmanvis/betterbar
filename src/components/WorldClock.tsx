@@ -12,6 +12,7 @@ const DEFAULT_CLOCKS: ClockConfig[] = [
   { id: "nyc", code: "NYC", tz: "America/New_York" },
   { id: "esp", code: "ESP", tz: "Europe/Madrid" },
   { id: "ind", code: "IND", tz: "Asia/Kolkata" },
+  { id: "gha", code: "GHA", tz: "Africa/Accra" },
 ];
 
 function formatTime(tz: string, now: Date): string {

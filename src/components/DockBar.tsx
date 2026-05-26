@@ -12,12 +12,16 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import {
-  GearSix, Warning,
+  GearSix,
 } from "@phosphor-icons/react";
+import {
+  Menu, MenuItem, CheckMenuItem, PredefinedMenuItem,
+} from "@tauri-apps/api/menu";
 import { DockIcon } from "./DockIcon";
 import { TerminalInput } from "./TerminalInput";
 import { WorldClock } from "./WorldClock";
 import { BatteryIndicator } from "./BatteryIndicator";
+import { MusicIndicator } from "./MusicIndicator";
 import { WindowPreview } from "./WindowPreview";
 import {
   AppSet, BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
@@ -27,15 +31,19 @@ import { useRunningApps } from "../hooks/useRunningApps";
 import { useRunningWindows } from "../hooks/useRunningWindows";
 import { useWindowPosition } from "../hooks/useWindowPosition";
 import { useBattery } from "../hooks/useBattery";
+import { useMusic } from "../hooks/useMusic";
 import { useAppIcons } from "../hooks/useAppIcons";
 import {
   checkAccessibilityPermissions,
   requestAccessibilityPermissions,
+  checkScreenRecordingPermission,
+  requestScreenRecordingPermission,
   openSettingsWindow,
   getWindowOuterPosition,
   getScreenInfo,
   focusApp,
   focusWindow,
+  launchSimulator,
 } from "../tauri-bridge";
 
 // Stable empty array so passing "no items" to useAppIcons doesn't re-fire the
@@ -50,6 +58,101 @@ async function handleOpenSettings() {
   }
 }
 
+const SIM_GROUPS: ({ type: string; label: string } | "sep")[] = [
+  { type: "iphone",      label: "iPhone 17" },
+  { type: "iphonepro",   label: "iPhone 17 Pro" },
+  { type: "iphonepromax", label: "iPhone 17 Pro Max" },
+  { type: "iphoneair",   label: "iPhone Air" },
+  { type: "iphonee",     label: "iPhone 17e" },
+  { type: "ipad",        label: "iPad (A16)" },
+  { type: "ipadpro",     label: "iPad Pro 13\" (M5)" },
+  { type: "ipadpro11",   label: "iPad Pro 11\" (M5)" },
+  { type: "ipadmini",    label: "iPad mini (A17 Pro)" },
+  { type: "ipadair",     label: "iPad Air 13\" (M4)" },
+  { type: "ipadair11",   label: "iPad Air 11\" (M4)" },
+  "sep",
+  { type: "windows11",   label: "Windows 11" },
+  { type: "macos",       label: "Mac OS" },
+];
+
+const SIMS_DEVICES = [
+  {
+    type: "ipad",
+    label: "iPad",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
+        <rect x="1" y="4" width="18" height="12" rx="1"/>
+      </svg>
+    ),
+  },
+  {
+    type: "iphone",
+    label: "iPhone",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
+        <rect x="5" y="1" width="10" height="18" rx="2"/>
+      </svg>
+    ),
+  },
+  {
+    type: "androidphone",
+    label: "Android Phone",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
+        <rect x="4" y="1" width="12" height="18" rx="1.5"/>
+        <circle cx="10" cy="3.5" r="0.5" fill="currentColor"/>
+      </svg>
+    ),
+  },
+  {
+    type: "androidtablet",
+    label: "Android Tablet",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
+        <rect x="1" y="3.5" width="18" height="13" rx="1"/>
+        <circle cx="10" cy="5" r="0.5" fill="currentColor"/>
+      </svg>
+    ),
+  },
+  {
+    type: "windows11",
+    label: "Windows",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
+        <path d="M2 2h7v7H2zM11 2h7v7h-7zM2 11h7v7H2zM11 11h7v7h-7z"/>
+      </svg>
+    ),
+  },
+  {
+    type: "macos",
+    label: "Mac OS",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[14px] h-[14px]">
+        <path d="M10 1c-2 0-3.5 1.5-4.5 3.5S4 8.5 4 10c0 2.5 1.5 5 3 6s1.5 1 3 0 4.5-4 4.5-6.5c0-2.5-1.5-6-4-7S11 1 10 1z"/>
+      </svg>
+    ),
+  },
+];
+
+async function handleSimulatorMenu() {
+  const items: (MenuItem | PredefinedMenuItem)[] = [];
+  for (const sim of SIM_GROUPS) {
+    if (sim === "sep") {
+      items.push(await PredefinedMenuItem.new({ item: "Separator" }));
+    } else {
+      items.push(await MenuItem.new({
+        text: sim.label,
+        action: () => {
+          console.log("[BB] Launch simulator:", sim.type);
+          launchSimulator(sim.type).catch((err) => console.error("[BB] simulator failed:", err));
+        },
+      }));
+    }
+  }
+  const menu = await Menu.new({ items });
+  await menu.popup();
+}
+
 interface DockBarProps {
   config: BetterBarConfig;
   activeSet: AppSet;
@@ -62,6 +165,13 @@ interface DockBarProps {
   onSetFreeFloat: (v: boolean) => void;
   onRenameItem: (id: string, name: string) => void;
   onSetItemHidden: (id: string, hidden: boolean) => void;
+  onAddItem: (item: DockItem) => void;
+  onToggleGrouping: (bundleId: string) => void;
+  onSetItemIcon?: (id: string, icon: string | undefined) => void;
+  onSetItemDeviceIcon?: (id: string, deviceIcon: string | undefined) => void;
+  onSetItemForceGlyph?: (id: string, forceGlyph: boolean | undefined) => void;
+
+  onSetItemDisplayType?: (id: string, displayType: "icon" | "icon_label" | "label" | undefined) => void;
 }
 
 export function DockBar({
@@ -70,9 +180,10 @@ export function DockBar({
   onSwitchSet,
   onFloatPositionChange, onSetFreeFloat,
   onRenameItem, onSetItemHidden,
+  onAddItem, onToggleGrouping,
+  onSetItemIcon, onSetItemDeviceIcon, onSetItemForceGlyph, onSetItemDisplayType,
 }: DockBarProps) {
 
-  const [axGranted, setAxGranted] = useState<boolean | null>(null);
   const [swipeLabel, setSwipeLabel] = useState<string | null>(null);
   const [hoverEdge, setHoverEdge] = useState<BarEdge | null>(null);
   const [resizing, setResizing] = useState<ResizeState | null>(null);
@@ -82,6 +193,7 @@ export function DockBar({
   const barRef = useRef<HTMLDivElement>(null);
 
   const battery = useBattery();
+  const music = useMusic();
   const runningApps = useRunningApps();
   const runningWindows = useRunningWindows();
   const isVertical = config.position === "left" || config.position === "right";
@@ -167,8 +279,25 @@ export function DockBar({
       : EMPTY_ITEMS;
   const appIcons = useAppIcons(iconLookupItems);
 
+  // Request missing permissions once per launch
+  const initialPermsRequested = useRef(false);
   useEffect(() => {
-    checkAccessibilityPermissions().then(setAxGranted).catch(() => setAxGranted(false));
+    if (initialPermsRequested.current) return;
+    initialPermsRequested.current = true;
+
+    async function requestMissing() {
+      try {
+        const [ax, sr] = await Promise.all([
+          checkAccessibilityPermissions(),
+          checkScreenRecordingPermission(),
+        ]);
+        if (!ax) requestAccessibilityPermissions();
+        if (!sr) requestScreenRecordingPermission();
+      } catch (e) {
+        console.error("[BetterBar] Failed to request permissions:", e);
+      }
+    }
+    requestMissing();
   }, []);
 
   const sensors = useSensors(
@@ -201,6 +330,16 @@ export function DockBar({
       (app) =>
         app.name.toLowerCase() === item.name.toLowerCase() ||
         (item.bundleId && app.bundle_id.includes(item.name.toLowerCase()))
+    );
+  }
+
+  const activeApp = runningApps.find((app) => app.is_active);
+
+  function isActiveItem(item: DockItem) {
+    if (!activeApp) return false;
+    return (
+      activeApp.name.toLowerCase() === item.name.toLowerCase() ||
+      (item.bundleId !== undefined && activeApp.bundle_id === item.bundleId)
     );
   }
 
@@ -274,7 +413,7 @@ export function DockBar({
     obs.observe(el);
     return () => obs.disconnect();
   }, [config.freeFloat, config.barLengthMode, config.position, config.barSize,
-      config.showLabels, activeSet.items.length, axGranted]);
+      config.showLabels, activeSet.items.length]);
 
   // ── Free-float: persist position after a native drag.
   //   In docked mode this listener is NOT active — programmatic positionWindow
@@ -427,7 +566,7 @@ export function DockBar({
         onMouseLeave={() => { if (!resizing) setHoverEdge(null); }}
         className={`
           fixed ${edgeClass} z-50 flex
-          ${isVertical ? "flex-col items-stretch" : "flex-row items-stretch"}
+          ${isVertical ? "flex-col items-stretch" : "flex-row items-stretch pl-3"}
           ${config.transparentBg ? "bg-black/35 backdrop-blur-md" : "bg-black"} ${panelBorder}
           border-[var(--bb-line)]
           select-none overflow-hidden bb-scanlines
@@ -452,34 +591,18 @@ export function DockBar({
         )}
 
         {/* Top-of-rail terminal stamp / input */}
-        <TerminalInput
-          isVertical={isVertical}
-          editMode={false}
-          onExpandedChange={setTerminalExpanded}
-          barSize={config.barSize}
-          defaultTerminal={config.defaultTerminal}
-          position={config.position}
-        />
-
-        {/* Accessibility banner */}
-        {axGranted === false && (
-          <button
-            onClick={() => requestAccessibilityPermissions()}
-            title="Grant Accessibility permissions"
-            className={`
-              shrink-0 flex items-center justify-center gap-1
-              text-[var(--bb-warn)]
-              border border-[var(--bb-warn)]/40 bg-[var(--bb-warn)]/[0.06]
-              hover:bg-[var(--bb-warn)]/[0.14] transition-colors
-              ${isVertical ? "mx-1 my-1 py-1.5 text-[8px] flex-col" : "my-1 mx-1 px-2 text-[8px] flex-row h-[calc(100%-8px)]"}
-            `}
-          >
-            <Warning size={12} weight="bold" />
-            <span className="leading-tight uppercase tracking-wider">Needs access</span>
-          </button>
+        {config.showTerminalIcon && (
+          <TerminalInput
+            isVertical={isVertical}
+            onExpandedChange={setTerminalExpanded}
+            barSize={config.barSize}
+            defaultTerminal={config.defaultTerminal}
+            position={config.position}
+          />
         )}
 
         {/* App icons */}
+        {config.showDockArea && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
             items={sortedItems.map((i) => i.id)}
@@ -490,10 +613,31 @@ export function DockBar({
                 flex ${isVertical ? "flex-col" : "flex-row"} items-stretch
                 ${isVertical ? "w-full pt-1 gap-px" : "h-full pl-1 gap-px"}
               `}
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes('text/x-betterbar-id')) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+              }}
+              onDrop={(e) => {
+                if (e.dataTransfer.types.includes('text/x-betterbar-id')) return;
+                e.preventDefault();
+                const files = Array.from(e.dataTransfer.files);
+                for (const file of files) {
+                  const filePath = (file as any).path;
+                  if (!filePath) continue;
+                  const name = filePath.split('/').pop() || 'File';
+                  onAddItem({
+                    id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    name,
+                    path: filePath,
+                    order: sortedItems.length,
+                  });
+                }
+              }}
             >
               {sortedItems.map((item) => {
                 const resolvedIcon =
-                  item.icon ?? (item.bundleId ? appIcons[item.bundleId] : undefined);
+                  item.deviceIcon ? undefined : (item.icon ?? (item.bundleId ? appIcons[item.bundleId] : undefined));
                 
                 const isUngrouped = item.bundleId && config.ungroupedBundleIds?.includes(item.bundleId);
                 const itemWindows = isUngrouped
@@ -504,7 +648,7 @@ export function DockBar({
                     )
                   : [];
 
-                if (isUngrouped && itemWindows.length > 0) {
+                  if (isUngrouped && itemWindows.length > 0) {
                   return itemWindows.map((win) => (
                     <DockIcon
                       key={`${item.id}-win-${win.id}`}
@@ -526,7 +670,13 @@ export function DockBar({
                       onRemove={onRemove}
                       onRename={onRenameItem}
                       onHide={(id) => onSetItemHidden(id, true)}
-                      editMode={false}
+                      onToggleGrouping={onToggleGrouping}
+                      onSetItemIcon={onSetItemIcon}
+                      onSetItemDeviceIcon={onSetItemDeviceIcon}
+                      onSetItemForceGlyph={onSetItemForceGlyph}
+                      onSetItemDisplayType={onSetItemDisplayType}
+                      ungroupedBundleIds={config.ungroupedBundleIds}
+                      isActive={isActiveItem(item)}
                     />
                   ));
                 }
@@ -536,6 +686,7 @@ export function DockBar({
                     key={item.id}
                     item={resolvedIcon ? { ...item, icon: resolvedIcon } : item}
                     isRunning={isRunning(item)}
+                    isActive={isActiveItem(item)}
                     runningPid={findRunningApp(item)?.pid}
                     iconSize={iconSize}
                     showLabel={config.showLabels}
@@ -545,17 +696,23 @@ export function DockBar({
                     onRemove={onRemove}
                     onRename={onRenameItem}
                     onHide={(id) => onSetItemHidden(id, true)}
-                    editMode={false}
+                    onToggleGrouping={onToggleGrouping}
+                    onSetItemIcon={onSetItemIcon}
+                    onSetItemDeviceIcon={onSetItemDeviceIcon}
+                    onSetItemForceGlyph={onSetItemForceGlyph}
+                    onSetItemDisplayType={onSetItemDisplayType}
+                    ungroupedBundleIds={config.ungroupedBundleIds}
                   />
                 );
               })}
             </div>
           </SortableContext>
         </DndContext>
+        )}
 
         {/* Running-but-not-pinned apps. Appended after the pinned section, divided
             by a labeled rail divider. Click focuses the app via `open -b`. */}
-        {config.showRunningApps && runningUnpinned.length > 0 && (
+        {config.showDockArea && config.showRunningApps && runningUnpinned.length > 0 && (
           <>
             <Divider isVertical={isVertical} label="RUN" zoom={config.contentScale} />
             <div
@@ -576,6 +733,10 @@ export function DockBar({
                   grayscaleIdle={config.grayscaleIdle}
                   iconUrl={appIcons[item.app.bundle_id]}
                   isVertical={isVertical}
+                  onPin={onAddItem}
+                  onToggleGrouping={onToggleGrouping}
+                  ungroupedBundleIds={config.ungroupedBundleIds}
+                  activeSetItemCount={activeSet.items.length}
                 />
               ))}
             </div>
@@ -591,22 +752,73 @@ export function DockBar({
         {/* INDICATORS (scaled by contentScale) */}
         <div style={{ zoom: config.contentScale } as any} className={`flex ${isVertical ? "flex-col" : "flex-row"} items-center justify-center`}>
           {/* World clock */}
-          <Divider isVertical={isVertical} label="TIME" />
-          <WorldClock isVertical={isVertical} clocks={config.clocks} />
+          {config.showClocks && (
+            <>
+              <Divider isVertical={isVertical} label="TIME" />
+              <WorldClock isVertical={isVertical} clocks={config.clocks} />
+            </>
+          )}
+
+          {/* Music controls */}
+          {config.showMusic && (
+            <>
+              <Divider isVertical={isVertical} label="MUS" />
+              <MusicIndicator music={music} isVertical={isVertical} />
+            </>
+          )}
 
           {/* Battery */}
-          <Divider isVertical={isVertical} label="PWR" />
-          <BatteryIndicator battery={battery} isVertical={isVertical} />
+          {config.showBattery && (
+            <>
+              <Divider isVertical={isVertical} label="PWR" />
+              <BatteryIndicator battery={battery} isVertical={isVertical} />
+            </>
+          )}
 
           {/* Set dots — quick switcher (full management lives in settings) */}
-          <Divider isVertical={isVertical} label="SET" />
-          <DotsIndicator
-            sets={config.sets}
-            activeSetId={config.activeSetId}
-            isVertical={isVertical}
-            onSwitch={switchToSet}
-            onWheel={handleWheel}
-          />
+          {config.showSetSwitcher && (
+            <>
+              <Divider isVertical={isVertical} label="SET" />
+              <DotsIndicator
+                sets={config.sets}
+                activeSetId={config.activeSetId}
+                isVertical={isVertical}
+                onSwitch={switchToSet}
+                onWheel={handleWheel}
+              />
+            </>
+          )}
+
+          {/* SIMS — simulator quick-launch icons */}
+          {config.showSimIcons && (
+            <>
+              <Divider isVertical={isVertical} label="SIMS" />
+              <div className={`flex ${isVertical ? "flex-col" : "flex-row"} items-stretch ${isVertical ? "w-full gap-px" : "h-full gap-px"}`}>
+                {SIMS_DEVICES.map((d) => (
+                  <SimButton
+                    key={d.type}
+                    label={d.label}
+                    onClick={() => {
+                      console.log("[BB] Launch sim:", d.type);
+                      launchSimulator(d.type).catch((err) => console.error("[BB] sim failed:", err));
+                    }}
+                    barSize={config.barSize}
+                  >
+                    {d.icon}
+                  </SimButton>
+                ))}
+                {config.showSimDropdown && (
+                  <SimButton
+                    label="More…"
+                    onClick={handleSimulatorMenu}
+                    barSize={config.barSize}
+                  >
+                    <span className="text-[10px] font-bold leading-none tracking-wider text-[var(--bb-dim)]">+</span>
+                  </SimButton>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Action buttons */}
           <Divider isVertical={isVertical} />
@@ -650,11 +862,11 @@ export function DockBar({
 }
 
 // ── Running-app icon (running-but-unpinned section) ───────────────────────────
-// Minimal: just a button + icon/glyph. No sortable wrapper, no edit mode, no
-// rename/hide menu. Click focuses the app via `open -b <bundle_id>`.
+// Right-click shows native context menu: Pin to Dock, Group/Ungroup toggle.
 
 function RunningAppIcon({
   app, iconSize, iconStyle, grayscaleIdle, iconUrl, isVertical, windowId, windowTitle, position,
+  onPin, onToggleGrouping, ungroupedBundleIds, activeSetItemCount,
 }: {
   app: RunningApp;
   iconSize: number;
@@ -665,6 +877,10 @@ function RunningAppIcon({
   windowId?: number;
   windowTitle?: string;
   position: DockPosition;
+  onPin?: (item: DockItem) => void;
+  onToggleGrouping?: (bundleId: string) => void;
+  ungroupedBundleIds?: string[];
+  activeSetItemCount?: number;
 }) {
   const [hovered, setHovered] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
@@ -690,6 +906,44 @@ function RunningAppIcon({
     }
   };
 
+  async function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowTooltip(false);
+
+    const items: (MenuItem | CheckMenuItem | PredefinedMenuItem)[] = [];
+
+    if (onPin) {
+      items.push(await MenuItem.new({
+        text: "Pin to Dock",
+        action: () => {
+          const id = `pinned-${app.bundle_id || app.name.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`;
+          onPin({
+            id,
+            name: app.name,
+            path: "",
+            bundleId: app.bundle_id,
+            order: activeSetItemCount ?? 0,
+          });
+        },
+      }));
+    }
+
+    if (app.bundle_id && onToggleGrouping) {
+      const isGrouped = !ungroupedBundleIds?.includes(app.bundle_id);
+      items.push(await PredefinedMenuItem.new({ item: "Separator" }));
+      items.push(await CheckMenuItem.new({
+        text: "Group Windows",
+        checked: isGrouped,
+        action: () => onToggleGrouping(app.bundle_id),
+      }));
+    }
+
+    if (items.length === 0) return;
+    const menu = await Menu.new({ items });
+    await menu.popup();
+  }
+
   return (
     <div
       className={`relative flex flex-col items-center justify-center ${isVertical ? "w-full" : "h-full"}`}
@@ -697,11 +951,14 @@ function RunningAppIcon({
       onMouseLeave={handleMouseLeave}
     >
       {/* Active app gets a chartreuse running stripe on the inner edge */}
-      <div className={`absolute z-10 bg-[var(--bb-accent)] ${
-        isVertical ? "left-0 top-0 bottom-0 w-[2px]" : "top-0 left-0 right-0 h-[2px]"
-      }`} />
+      {app.is_active && (
+        <div className={`absolute z-10 bg-[var(--bb-accent)] ${
+          isVertical ? "left-0 top-0 bottom-0 w-[2px]" : "top-0 left-0 right-0 h-[2px]"
+        }`} />
+      )}
       <button
         onClick={handleClick}
+        onContextMenu={handleContextMenu}
         style={{ width: iconSize + 8, height: iconSize + 8 }}
         className={`
           relative flex items-center justify-center rounded-none focus:outline-none
@@ -969,6 +1226,30 @@ function RailButton({
           : "text-[var(--bb-dim)] hover:text-[var(--bb-accent)] hover:border-[var(--bb-accent)]"}
         transition-colors
       `}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SimButton({
+  label,
+  onClick,
+  barSize,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  barSize: number;
+  children: React.ReactNode;
+}) {
+  const size = Math.max(18, barSize - 10);
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      style={{ width: size, height: size }}
+      className="shrink-0 flex items-center justify-center border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-accent)] hover:border-[var(--bb-accent)] transition-colors"
     >
       {children}
     </button>

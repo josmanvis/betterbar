@@ -5,7 +5,6 @@ import { Terminal } from "@phosphor-icons/react";
 
 interface TerminalInputProps {
   isVertical: boolean;
-  editMode: boolean;
   onExpandedChange: (expanded: boolean) => void;
   barSize: number;
   defaultTerminal?: string;
@@ -27,7 +26,6 @@ const SUGGESTIONS = [
 
 export function TerminalInput({
   isVertical,
-  editMode,
   onExpandedChange,
   defaultTerminal,
   position,
@@ -73,7 +71,6 @@ export function TerminalInput({
       const activeEl = document.activeElement;
       if (
         activeEl &&
-        activeEl !== inputRef.current &&
         (activeEl.tagName === "INPUT" ||
           activeEl.tagName === "TEXTAREA" ||
           (activeEl as HTMLElement).isContentEditable)
@@ -171,16 +168,16 @@ export function TerminalInput({
       <button
         onClick={() => setExpanded(true)}
         className={`
-          shrink-0 flex items-center justify-center cursor-pointer focus:outline-none
-          text-[9px] font-bold uppercase tracking-[0.18em]
-          ${isVertical ? "w-full py-1.5 flex-col gap-0.5" : "h-full px-2 flex-row gap-1"}
-          ${editMode ? "text-black bg-[var(--bb-accent)]" : "text-[var(--bb-accent)] hover:bg-[var(--bb-pane)]"}
+          shrink-0 flex cursor-pointer focus:outline-none
+          ${isVertical
+            ? "w-full py-3 flex-col items-center justify-center"
+            : "h-full px-5 flex-row items-center"}
+          text-[var(--bb-accent)] hover:bg-[var(--bb-pane)]
           border-b border-[var(--bb-line)] transition-colors duration-75
         `}
         title="Run Terminal Command"
       >
-        <span>BB</span>
-        <span className="bb-caret">▍</span>
+        <span className="bb-caret text-[14px] px-4">▍</span>
       </button>
     );
   }

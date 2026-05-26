@@ -7,13 +7,19 @@ export default function App() {
     activeSet,
     reorderItems,
     removeItem,
+    addItem,
     renameItem,
     setItemHidden,
+    setItemIcon,
+    setItemDeviceIcon,
+    setItemForceGlyph,
+    setItemDisplayType,
     setBarSize,
     setBarLength,
     switchSet,
     setFloatPosition,
     setFreeFloat,
+    toggleWindowGrouping,
   } = useConfig();
 
   return (
@@ -22,6 +28,7 @@ export default function App() {
       activeSet={activeSet}
       onReorder={reorderItems}
       onRemove={removeItem}
+      onAddItem={addItem}
       onRenameItem={renameItem}
       onSetItemHidden={setItemHidden}
       onSetBarSize={setBarSize}
@@ -29,6 +36,11 @@ export default function App() {
       onSwitchSet={switchSet}
       onFloatPositionChange={setFloatPosition}
       onSetFreeFloat={setFreeFloat}
+      onToggleGrouping={toggleWindowGrouping}
+      onSetItemIcon={setItemIcon}
+      onSetItemDeviceIcon={setItemDeviceIcon}
+      onSetItemForceGlyph={setItemForceGlyph}
+      onSetItemDisplayType={setItemDisplayType}
     />
   );
 }

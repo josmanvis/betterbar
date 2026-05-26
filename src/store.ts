@@ -1,9 +1,11 @@
 import { useState, useCallback, useEffect } from "react";
 import {
   AppSet, BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
-  BarLengthMode, BetterBarConfig, DEFAULT_CONFIG, DockItem, DockPosition,
+  BarLengthMode, BetterBarConfig, DEFAULT_CONFIG as TYPES_DEFAULT_CONFIG, DockItem, DockPosition,
   IconStyle,
 } from "./types";
+
+export const DEFAULT_CONFIG = TYPES_DEFAULT_CONFIG;
 
 const STORAGE_KEY = "betterbar_config";
 
@@ -41,6 +43,14 @@ function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     preventOverlap: cfg.preventOverlap === undefined ? DEFAULT_CONFIG.preventOverlap : !!cfg.preventOverlap,
     strictOverlap: cfg.strictOverlap === undefined ? DEFAULT_CONFIG.strictOverlap : !!cfg.strictOverlap,
     ungroupedBundleIds: Array.isArray(cfg.ungroupedBundleIds) ? cfg.ungroupedBundleIds : [],
+    showMusic: cfg.showMusic === undefined ? DEFAULT_CONFIG.showMusic : !!cfg.showMusic,
+    showSimIcons: cfg.showSimIcons === undefined ? DEFAULT_CONFIG.showSimIcons : !!cfg.showSimIcons,
+    showClocks: cfg.showClocks === undefined ? DEFAULT_CONFIG.showClocks : !!cfg.showClocks,
+    showBattery: cfg.showBattery === undefined ? DEFAULT_CONFIG.showBattery : !!cfg.showBattery,
+    showSetSwitcher: cfg.showSetSwitcher === undefined ? DEFAULT_CONFIG.showSetSwitcher : !!cfg.showSetSwitcher,
+    showSimDropdown: cfg.showSimDropdown === undefined ? DEFAULT_CONFIG.showSimDropdown : !!cfg.showSimDropdown,
+    showTerminalIcon: cfg.showTerminalIcon === undefined ? DEFAULT_CONFIG.showTerminalIcon : !!cfg.showTerminalIcon,
+    showDockArea: cfg.showDockArea === undefined ? DEFAULT_CONFIG.showDockArea : !!cfg.showDockArea,
   };
 }
 
@@ -154,6 +164,65 @@ export function useConfig() {
       updateActiveSet((s) => ({
         ...s,
         items: s.items.map((i) => (i.id === id ? { ...i, hidden } : i)),
+      }));
+    },
+    [updateActiveSet]
+  );
+
+  const setItemIcon = useCallback(
+    (id: string, icon: string | undefined) => {
+      updateActiveSet((s) => ({
+        ...s,
+        items: s.items.map((i) => (i.id === id ? { ...i, icon, deviceIcon: undefined, forceGlyph: undefined } : i)),
+      }));
+    },
+    [updateActiveSet]
+  );
+
+  const setItemDeviceIcon = useCallback(
+    (id: string, deviceIcon: string | undefined) => {
+      updateActiveSet((s) => ({
+        ...s,
+        items: s.items.map((i) => (i.id === id ? { ...i, deviceIcon, icon: undefined, forceGlyph: undefined } : i)),
+      }));
+    },
+    [updateActiveSet]
+  );
+
+  const setItemForceGlyph = useCallback(
+    (id: string, forceGlyph: boolean | undefined) => {
+      updateActiveSet((s) => ({
+        ...s,
+        items: s.items.map((i) => (i.id === id ? { ...i, forceGlyph, deviceIcon: undefined, icon: undefined } : i)),
+      }));
+    },
+    [updateActiveSet]
+  );
+
+  const setItemShowLabel = useCallback(
+    (id: string, showLabel: boolean | undefined) => {
+      updateActiveSet((s) => ({
+        ...s,
+        items: s.items.map((i) => (i.id === id ? { ...i, showLabel } : i)),
+      }));
+    },
+    [updateActiveSet]
+  );
+
+  const setItemDisplayType = useCallback(
+    (id: string, displayType: DockItem["displayType"]) => {
+      updateActiveSet((s) => ({
+        ...s,
+        items: s.items.map((i) => {
+          if (i.id !== id) return i;
+          return {
+            ...i,
+            displayType,
+            hidden: false,
+            // Keep showLabel in sync for backward compat
+            showLabel: displayType === "icon_label" || displayType === "label" ? true : undefined,
+          };
+        }),
       }));
     },
     [updateActiveSet]
@@ -279,6 +348,39 @@ export function useConfig() {
     [setConfig]
   );
 
+  const toggleMusic = useCallback(
+    () => setConfig((p) => ({ ...p, showMusic: !p.showMusic })),
+    [setConfig]
+  );
+  const toggleSimIcons = useCallback(
+    () => setConfig((p) => ({ ...p, showSimIcons: !p.showSimIcons })),
+    [setConfig]
+  );
+  const toggleClocks = useCallback(
+    () => setConfig((p) => ({ ...p, showClocks: !p.showClocks })),
+    [setConfig]
+  );
+  const toggleBattery = useCallback(
+    () => setConfig((p) => ({ ...p, showBattery: !p.showBattery })),
+    [setConfig]
+  );
+  const toggleSetSwitcher = useCallback(
+    () => setConfig((p) => ({ ...p, showSetSwitcher: !p.showSetSwitcher })),
+    [setConfig]
+  );
+  const toggleSimDropdown = useCallback(
+    () => setConfig((p) => ({ ...p, showSimDropdown: !p.showSimDropdown })),
+    [setConfig]
+  );
+  const toggleTerminalIcon = useCallback(
+    () => setConfig((p) => ({ ...p, showTerminalIcon: !p.showTerminalIcon })),
+    [setConfig]
+  );
+  const toggleDockArea = useCallback(
+    () => setConfig((p) => ({ ...p, showDockArea: !p.showDockArea })),
+    [setConfig]
+  );
+
   return {
     config,
     activeSet,
@@ -288,6 +390,11 @@ export function useConfig() {
     reorderItems,
     renameItem,
     setItemHidden,
+    setItemIcon,
+    setItemDeviceIcon,
+    setItemForceGlyph,
+    setItemShowLabel,
+    setItemDisplayType,
     switchSet,
     addSet,
     renameSet,
@@ -313,5 +420,13 @@ export function useConfig() {
     togglePreventOverlap,
     toggleStrictOverlap,
     toggleWindowGrouping,
+    toggleMusic,
+    toggleSimIcons,
+    toggleClocks,
+    toggleBattery,
+    toggleSetSwitcher,
+    toggleSimDropdown,
+    toggleTerminalIcon,
+    toggleDockArea,
   };
 }

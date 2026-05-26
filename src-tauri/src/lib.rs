@@ -44,6 +44,16 @@ pub struct TerminalApp {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MusicInfo {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub is_playing: bool,
+    pub app_name: String,
+    pub available: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowDetails {
     pub id: u32,
     pub title: String,
@@ -92,6 +102,38 @@ async fn launch_app(path: String) -> Result<(), String> {
     { macos::launch_app(&path) }
     #[cfg(not(target_os = "macos"))]
     { let _ = path; Err("Not supported".to_string()) }
+}
+
+#[tauri::command]
+async fn hide_app(bundle_id: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::hide_app(&bundle_id) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = bundle_id; Err("Not supported".to_string()) }
+}
+
+#[tauri::command]
+async fn quit_app(bundle_id: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::quit_app(&bundle_id) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = bundle_id; Err("Not supported".to_string()) }
+}
+
+#[tauri::command]
+async fn zoom_app_window(bundle_id: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::zoom_app_window(&bundle_id) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = bundle_id; Err("Not supported".to_string()) }
+}
+
+#[tauri::command]
+async fn launch_simulator(simulator_type: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::launch_simulator(&simulator_type) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = simulator_type; Err("Not supported".to_string()) }
 }
 
 #[tauri::command]
@@ -283,6 +325,46 @@ async fn update_bar_geometry(strict_overlap: bool, position: String, bar_size: f
     }
 }
 
+#[tauri::command]
+async fn get_music_info() -> MusicInfo {
+    #[cfg(target_os = "macos")]
+    { macos::get_music_info() }
+    #[cfg(not(target_os = "macos"))]
+    { MusicInfo { title: String::new(), artist: String::new(), album: String::new(), is_playing: false, app_name: String::new(), available: false } }
+}
+
+#[tauri::command]
+async fn focus_music_app(app_name: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::focus_music_app(&app_name) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = app_name; Err("Not supported".to_string()) }
+}
+
+#[tauri::command]
+async fn music_play_pause() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::music_play_pause() }
+    #[cfg(not(target_os = "macos"))]
+    { Err("Not supported".to_string()) }
+}
+
+#[tauri::command]
+async fn music_next() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::music_next() }
+    #[cfg(not(target_os = "macos"))]
+    { Err("Not supported".to_string()) }
+}
+
+#[tauri::command]
+async fn music_previous() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::music_previous() }
+    #[cfg(not(target_os = "macos"))]
+    { Err("Not supported".to_string()) }
+}
+
 /// Show + focus the settings window. Implemented in Rust so it bypasses any
 /// `core:window:allow-show` / `allow-set-focus` capability requirements.
 #[tauri::command]
@@ -369,7 +451,7 @@ async fn clear_screen_insets<R: Runtime>(app: AppHandle<R>) -> Result<(), String
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use super::{BatteryInfo, RunningApp, ScreenInfo, WindowDetails};
+    use super::{BatteryInfo, MusicInfo, RunningApp, ScreenInfo, WindowDetails};
     use core_foundation::base::TCFType;
     use std::process::Command;
     use tauri::WebviewWindow;
@@ -615,6 +697,157 @@ return appList"#,
             Ok(())
         } else {
             Err(format!("open failed for bundle_id: {}", bundle_id))
+        }
+    }
+
+    pub fn hide_app(bundle_id: &str) -> Result<(), String> {
+        let script = format!(
+            r#"tell application "System Events"
+    try
+        set visible of (first process whose bundle identifier is "{}") to false
+    end try
+end tell"#,
+            bundle_id
+        );
+        let output = Command::new("osascript")
+            .args(["-e", &script])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("hide_app failed: {}", stderr))
+        }
+    }
+
+    pub fn quit_app(bundle_id: &str) -> Result<(), String> {
+        let script = format!(
+            r#"tell application id "{}" to quit"#,
+            bundle_id
+        );
+        let output = Command::new("osascript")
+            .args(["-e", &script])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("quit_app failed: {}", stderr))
+        }
+    }
+
+    pub fn zoom_app_window(bundle_id: &str) -> Result<(), String> {
+        let script = format!(
+            r#"tell application "System Events"
+    try
+        tell (first process whose bundle identifier is "{}")
+            try
+                click (button 1 of window 1)
+            end try
+        end tell
+    end try
+end tell"#,
+            bundle_id
+        );
+        let output = Command::new("osascript")
+            .args(["-e", &script])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("zoom_app_window failed: {}", stderr))
+        }
+    }
+
+    pub fn launch_simulator(simulator_type: &str) -> Result<(), String> {
+        // Non-iOS simulators (VMs etc.)
+        match simulator_type {
+            "windows11" => {
+                return Command::new("VBoxManage")
+                    .args(["startvm", "Windows 11", "--type", "gui"])
+                    .status()
+                    .map_err(|e| format!("VBoxManage failed: {}", e))
+                    .map(|_| ());
+            }
+            "macos" => {
+                return Command::new("open")
+                    .args(["-a", "UTM"])
+                    .status()
+                    .map_err(|e| format!("UTM failed: {}", e))
+                    .map(|_| ());
+            }
+            "androidphone" | "androidtablet" => {
+                let script = r#"
+EMULATOR=""
+for p in "$HOME/Library/Android/sdk/emulator/emulator" "/usr/local/share/android-sdk/emulator/emulator"; do
+    if [ -x "$p" ]; then EMULATOR="$p"; break; fi
+done
+if [ -n "$EMULATOR" ]; then
+    AVD=$("$EMULATOR" -list-avds 2>/dev/null | head -1)
+    if [ -n "$AVD" ]; then
+        "$EMULATOR" -avd "$AVD" &
+    fi
+fi
+open -a "Android Studio" 2>/dev/null
+"#;
+                let output = Command::new("bash")
+                    .args(["-c", script])
+                    .output()
+                    .map_err(|e| e.to_string())?;
+                if output.status.success() {
+                    return Ok(());
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(format!("Android launch failed: {}", stderr));
+                }
+            }
+            _ => {}
+        }
+
+        let device_name = match simulator_type {
+            "iphone"      => "iPhone 17",
+            "iphonepro"   => "iPhone 17 Pro",
+            "iphonepromax"=> "iPhone 17 Pro Max",
+            "iphoneair"   => "iPhone Air",
+            "iphonee"     => "iPhone 17e",
+            "ipad"        => "iPad (A16)",
+            "ipadpro"     => "iPad Pro 13-inch (M5)",
+            "ipadpro11"   => "iPad Pro 11-inch (M5)",
+            "ipadmini"    => "iPad mini (A17 Pro)",
+            "ipadair"     => "iPad Air 13-inch (M4)",
+            "ipadair11"   => "iPad Air 11-inch (M4)",
+            _ => return Err(format!("Unknown simulator type: {}", simulator_type)),
+        };
+        let script = format!(
+            r#"set deviceName to "{}"
+set deviceInfo to do shell script "xcrun simctl list devices available | grep -F \\"" & deviceName & " (\\" | head -1"
+if deviceInfo is "" then error "Device not found: " & deviceName
+set AppleScript's text item delimiters to "-"
+set udid to ""
+try
+    set AppleScript's text item delimiters to ""
+    set udid to do shell script "echo " & quoted form of deviceInfo & " | grep -oE '[0-9A-F]{{8}}-[0-9A-F]{{4}}-[0-9A-F]{{4}}-[0-9A-F]{{4}}-[0-9A-F]{{12}}'"
+end try
+if udid is "" then error "Could not parse UDID"
+if deviceInfo does not contain "(Booted)" then
+    do shell script "xcrun simctl boot " & udid
+end if
+do shell script "open -a Simulator""#,
+            device_name
+        );
+        let output = Command::new("osascript")
+            .args(["-e", &script])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("launch_simulator failed: {}", stderr))
         }
     }
 
@@ -1380,6 +1613,151 @@ end tell"#,
         );
         let _ = Command::new("osascript").args(["-e", &script]).status();
     }
+
+    pub fn get_music_info() -> super::MusicInfo {
+        // Try Spotify first, then Music.app
+        let apps = ["Spotify", "Music"];
+        for app_name in &apps {
+            let script = format!(
+                r#"tell application "System Events"
+    set isRunning to (count of (every process whose name is "{}")) > 0
+end tell
+if isRunning then
+    tell application "{}"
+        set trackName to current track's name
+        set artistName to current track's artist
+        set albumName to current track's album
+        set playerState to player state as string
+        return trackName & "|" & artistName & "|" & albumName & "|" & playerState
+    end tell
+end if"#,
+                app_name, app_name
+            );
+
+            if let Ok(output) = Command::new("osascript").args(["-e", &script]).output() {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !stdout.is_empty() && stdout.contains('|') {
+                        let parts: Vec<&str> = stdout.split('|').collect();
+                        let title = parts.first().unwrap_or(&"").to_string();
+                        let artist = parts.get(1).unwrap_or(&"").to_string();
+                        let album = parts.get(2).unwrap_or(&"").to_string();
+                        let state = parts.get(3).unwrap_or(&"").trim().to_lowercase();
+                        return super::MusicInfo {
+                            title,
+                            artist,
+                            album,
+                            is_playing: state == "playing",
+                            app_name: app_name.to_string(),
+                            available: true,
+                        };
+                    }
+                }
+            }
+        }
+
+        super::MusicInfo {
+            title: String::new(),
+            artist: String::new(),
+            album: String::new(),
+            is_playing: false,
+            app_name: String::new(),
+            available: false,
+        }
+    }
+
+    pub fn music_play_pause() -> Result<(), String> {
+        for app in &["Spotify", "Music"] {
+            let script = format!(
+                r#"tell application "System Events"
+    set isRunning to (count of (every process whose name is "{}")) > 0
+end tell
+if isRunning then
+    tell application "{}" to playpause
+    return "ok"
+end if
+return "skip""#,
+                app, app
+            );
+            if let Ok(output) = Command::new("osascript").args(["-e", &script]).output() {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if stdout == "ok" {
+                    return Ok(());
+                }
+            }
+        }
+        Err("No music app found".to_string())
+    }
+
+    pub fn music_next() -> Result<(), String> {
+        for app in &["Spotify", "Music"] {
+            let script = format!(
+                r#"tell application "System Events"
+    set isRunning to (count of (every process whose name is "{}")) > 0
+end tell
+if isRunning then
+    tell application "{}" to next track
+    return "ok"
+end if
+return "skip""#,
+                app, app
+            );
+            if let Ok(output) = Command::new("osascript").args(["-e", &script]).output() {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if stdout == "ok" {
+                    return Ok(());
+                }
+            }
+        }
+        Err("No music app found".to_string())
+    }
+
+    pub fn music_previous() -> Result<(), String> {
+        for app in &["Spotify", "Music"] {
+            let script = format!(
+                r#"tell application "System Events"
+    set isRunning to (count of (every process whose name is "{}")) > 0
+end tell
+if isRunning then
+    tell application "{}" to previous track
+    return "ok"
+end if
+return "skip""#,
+                app, app
+            );
+            if let Ok(output) = Command::new("osascript").args(["-e", &script]).output() {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if stdout == "ok" {
+                    return Ok(());
+                }
+            }
+        }
+        Err("No music app found".to_string())
+    }
+
+    pub fn focus_music_app(app_name: &str) -> Result<(), String> {
+        let script = format!(
+            r#"tell application "System Events"
+    set isRunning to (count of (every process whose name is "{}")) > 0
+end tell
+if isRunning then
+    tell application "{}" to activate
+    return "ok"
+end if
+return "skip""#,
+            app_name, app_name
+        );
+        let output = Command::new("osascript")
+            .args(["-e", &script])
+            .output()
+            .map_err(|e| e.to_string())?;
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if stdout == "ok" {
+            Ok(())
+        } else {
+            Err(format!("Music app \"{}\" not running", app_name))
+        }
+    }
 }
 
 // --- App entry ---
@@ -1412,6 +1790,11 @@ pub fn run() {
             open_settings_window,
             get_window_outer_position,
             update_bar_geometry,
+            get_music_info,
+            focus_music_app,
+            music_play_pause,
+            music_next,
+            music_previous,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

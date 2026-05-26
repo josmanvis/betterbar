@@ -1,5 +1,15 @@
 # BetterBar — Changelog
 
+## 0.7.0
+- **Now-playing music indicator** — new `MusicIndicator` component and `useMusic` polling hook (2s) show the current track with play/pause and prev/next controls; click opens the player, right-click opens settings (`src/components/MusicIndicator.tsx`, `src/hooks/useMusic.ts`). Backed by new Rust commands `get_music_info`, `focus_music_app`, `music_play_pause`, `music_next`, `music_previous` and a `MusicInfo` type (`src-tauri/src/lib.rs`, `src/types.ts`, `src/tauri-bridge.ts`).
+- **Per-icon customization** — right-click an app icon → `Change Icon` to pick the native macOS icon (`Default (native)`), a 2-letter glyph, a built-in device icon (iPad/iPhone/Watch/Windows/macOS/Linux), or a custom image. New `DockItem` fields `deviceIcon`, `forceGlyph`, `displayType`, plus `setItemDeviceIcon` / `setItemForceGlyph` / `setItemDisplayType` operations (`src/components/DockIcon.tsx`, `src/store.ts`, `src/types.ts`).
+- **Display Type submenu** — choose App Icon / App Icon + Label / Label per item, replacing the per-item `showLabel` toggle (`src/components/DockIcon.tsx`).
+- **Running-app actions** — icon context menu gains Show All Windows, Maximize, Hide, and Quit for running apps, backed by new Rust commands `hide_app`, `quit_app`, `zoom_app_window` (`src-tauri/src/lib.rs`, `src/tauri-bridge.ts`).
+- **Simulator quick-launch** — new `launch_simulator` Rust command and `launchSimulator` bridge for the simulator icons row.
+- **Bar section toggles** — settings now lets you show/hide each bar region independently: `showMusic`, `showSimIcons`, `showClocks`, `showBattery`, `showSetSwitcher`, `showSimDropdown`, `showTerminalIcon`, `showDockArea` (`src/types.ts`, `src/SettingsApp.tsx`, `src/components/DockBar.tsx`).
+- **Accra clock** — added GHA (Africa/Accra) to the default world-clock set (`src/types.ts`).
+- Bumped `@tauri-apps/api` to `^2.10.1` and `@tauri-apps/cli` to `^2.11.2`.
+
 ## 0.6.0
 - **Always-on edge drag handles** — the 10px hover bands on all four bar edges now work regardless of `FREE_FLOAT`. Left-click drag repositions the bar via `getCurrentWindow().startDragging()`; if the bar was docked, dragging auto-engages free-float mode at the new position (`src/components/DockBar.tsx`, new `setFreeFloat` setter in `src/store.ts`). The window-move listener is now always active and writes back to `floatPosition` on every native drag.
 - **Right-click drag = resize** — the dedicated inner-edge `ResizeHandle` is gone. Right-click + drag on any edge stripe now resizes the bar: perpendicular edges adjust thickness (`barSize`), parallel edges adjust length (`barLength`, only in free-float + custom mode). Direction follows the grabbed edge's outward normal. Implementation uses pointer capture for smooth tracking.

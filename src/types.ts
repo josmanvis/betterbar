@@ -5,7 +5,11 @@ export interface DockItem {
   name: string;
   path: string;
   bundleId?: string;
-  icon?: string; // base64 data URL or emoji fallback
+  icon?: string; // base64 data URL — user-set custom image
+  deviceIcon?: string; // key into built-in device icon set: "ipad" | "iphone" | "watch" | "windows" | "macos" | "linux"
+  forceGlyph?: boolean; // when true, always render the 2-letter fallback glyph (overrides deviceIcon & native icon)
+  showLabel?: boolean; // per-item override for showLabels (deprecated — use displayType)
+  displayType?: "icon" | "icon_label" | "label"; // unified display mode; overrides showLabel
   order: number;
   /** Hidden items are kept in the set but not rendered in the bar.
    *  Toggleable from the settings window. */
@@ -51,6 +55,15 @@ export interface TerminalApp {
   name: string;
   bundle_id: string;
   icon: string | null;
+}
+
+export interface MusicInfo {
+  title: string;
+  artist: string;
+  album: string;
+  is_playing: boolean;
+  app_name: string;
+  available: boolean;
 }
 
 export interface AppSet {
@@ -112,6 +125,14 @@ export interface BetterBarConfig {
   preventOverlap: boolean;
   strictOverlap: boolean;
   ungroupedBundleIds: string[];
+  showMusic: boolean;
+  showSimIcons: boolean;
+  showClocks: boolean;
+  showBattery: boolean;
+  showSetSwitcher: boolean;
+  showSimDropdown: boolean;
+  showTerminalIcon: boolean;
+  showDockArea: boolean;
 }
 
 export const BAR_SIZE_MIN = 48;
@@ -136,6 +157,7 @@ const DEFAULT_CLOCKS: ClockConfig[] = [
   { id: "nyc", code: "NYC", tz: "America/New_York" },
   { id: "esp", code: "ESP", tz: "Europe/Madrid" },
   { id: "ind", code: "IND", tz: "Asia/Kolkata" },
+  { id: "gha", code: "GHA", tz: "Africa/Accra" },
 ];
 
 export const DEFAULT_CONFIG: BetterBarConfig = {
@@ -164,4 +186,12 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   preventOverlap: true,
   strictOverlap: false,
   ungroupedBundleIds: [],
+  showMusic: true,
+  showSimIcons: true,
+  showClocks: true,
+  showBattery: true,
+  showSetSwitcher: true,
+  showSimDropdown: true,
+  showTerminalIcon: true,
+  showDockArea: true,
 };
