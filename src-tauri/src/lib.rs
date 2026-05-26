@@ -36,6 +36,22 @@ pub struct WindowThumbnail {
     pub title: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TerminalApp {
+    pub name: String,
+    pub bundle_id: String,
+    pub icon: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowDetails {
+    pub id: u32,
+    pub title: String,
+    pub pid: i32,
+    pub owner_name: String,
+    pub bundle_id: String,
+}
+
 // --- Commands ---
 
 #[tauri::command]
@@ -44,6 +60,22 @@ async fn get_running_apps() -> Vec<RunningApp> {
     { macos::get_running_apps() }
     #[cfg(not(target_os = "macos"))]
     { vec![] }
+}
+
+#[tauri::command]
+async fn get_installed_terminals() -> Vec<TerminalApp> {
+    #[cfg(target_os = "macos")]
+    { macos::get_installed_terminals() }
+    #[cfg(not(target_os = "macos"))]
+    { vec![] }
+}
+
+#[tauri::command]
+async fn execute_terminal_command(bundle_id: String, command: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::execute_terminal_command(&bundle_id, &command) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = (bundle_id, command); Err("Not supported".to_string()) }
 }
 
 #[tauri::command]
@@ -178,6 +210,30 @@ async fn get_window_thumbnail(pid: i32) -> Option<WindowThumbnail> {
 }
 
 #[tauri::command]
+async fn get_on_screen_windows() -> Vec<WindowDetails> {
+    #[cfg(target_os = "macos")]
+    { macos::get_on_screen_windows() }
+    #[cfg(not(target_os = "macos"))]
+    { vec![] }
+}
+
+#[tauri::command]
+async fn focus_window(pid: i32, title: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::focus_window(pid, &title) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = (pid, title); Ok(()) }
+}
+
+#[tauri::command]
+async fn get_window_id_thumbnail(window_id: u32) -> Option<WindowThumbnail> {
+    #[cfg(target_os = "macos")]
+    { macos::get_window_id_thumbnail(window_id) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = window_id; None }
+}
+
+#[tauri::command]
 async fn set_screen_inset<R: Runtime>(
     app:             AppHandle<R>,
     position:        String,
@@ -200,16 +256,86 @@ async fn set_screen_inset<R: Runtime>(
     Ok(())
 }
 
+#[derive(Copy, Clone, Debug)]
+struct BarGeometry {
+    strict_overlap: bool,
+    position: [u8; 16],
+    position_len: usize,
+    bar_size: f64,
+}
+
+static BAR_GEOMETRY: std::sync::Mutex<BarGeometry> = std::sync::Mutex::new(BarGeometry {
+    strict_overlap: false,
+    position: [0; 16],
+    position_len: 0,
+    bar_size: 68.0,
+});
+
+#[tauri::command]
+async fn update_bar_geometry(strict_overlap: bool, position: String, bar_size: f64) {
+    if let Ok(mut geom) = BAR_GEOMETRY.lock() {
+        geom.strict_overlap = strict_overlap;
+        geom.bar_size = bar_size;
+        let bytes = position.as_bytes();
+        let len = bytes.len().min(15);
+        geom.position[..len].copy_from_slice(&bytes[..len]);
+        geom.position_len = len;
+    }
+}
+
 /// Show + focus the settings window. Implemented in Rust so it bypasses any
 /// `core:window:allow-show` / `allow-set-focus` capability requirements.
 #[tauri::command]
 async fn open_settings_window<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    println!("[BetterBar] open_settings_window command invoked!");
     if let Some(window) = app.get_webview_window("settings") {
-        window.show().map_err(|e| e.to_string())?;
+        println!("[BetterBar] settings window found, calling show()...");
+        window.show().map_err(|e| {
+            println!("[BetterBar] failed to show settings window: {}", e);
+            e.to_string()
+        })?;
         let _ = window.unminimize();
-        window.set_focus().map_err(|e| e.to_string())?;
+        println!("[BetterBar] settings window unminimized, focusing...");
+        window.set_focus().map_err(|e| {
+            println!("[BetterBar] failed to focus settings window: {}", e);
+            e.to_string()
+        })?;
+        println!("[BetterBar] settings window opened and focused successfully!");
     } else {
-        return Err("settings window not found".to_string());
+        println!("[BetterBar] settings window NOT found, creating dynamically...");
+        let win = tauri::WebviewWindowBuilder::new(
+            &app,
+            "settings",
+            tauri::WebviewUrl::App("index.html#settings".into()),
+        )
+        .title("BetterBar Settings")
+        .inner_size(480.0, 600.0)
+        .min_inner_size(420.0, 480.0)
+        .decorations(true)
+        .transparent(false)
+        .always_on_top(false)
+        .skip_taskbar(false)
+        .resizable(true)
+        .center()
+        .shadow(true)
+        .build()
+        .map_err(|e| {
+            println!("[BetterBar] failed to build settings window: {}", e);
+            e.to_string()
+        })?;
+        
+        let win_clone = win.clone();
+        win.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = win_clone.hide();
+            }
+        });
+        
+        win.show().map_err(|e| e.to_string())?;
+        let _ = win.unminimize();
+        win.set_focus().map_err(|e| e.to_string())?;
+        println!("[BetterBar] settings window created dynamically and focused!");
     }
     Ok(())
 }
@@ -243,7 +369,8 @@ async fn clear_screen_insets<R: Runtime>(app: AppHandle<R>) -> Result<(), String
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use super::{BatteryInfo, RunningApp, ScreenInfo};
+    use super::{BatteryInfo, RunningApp, ScreenInfo, WindowDetails};
+    use core_foundation::base::TCFType;
     use std::process::Command;
     use tauri::WebviewWindow;
 
@@ -316,22 +443,21 @@ mod macos {
         ) -> *mut std::os::raw::c_void;
     }
 
-    /// Must be called from the main thread — CGS connection is main-thread bound.
-    pub fn cgs_set_screen_insets(insets: NSEdgeInsets) {
-        use cocoa::base::{id, nil};
-        use objc::{msg_send, sel, sel_impl};
+    use std::sync::Mutex;
+    static ACTIVE_INSETS: Mutex<NSEdgeInsets> = Mutex::new(NSEdgeInsets {
+        top: 0.0,
+        left: 0.0,
+        bottom: 0.0,
+        right: 0.0,
+    });
 
-        // RTLD_DEFAULT on macOS = (void *) -2
+    /// Low-level CGS Set Screen Insets call that bypasses state tracking.
+    fn cgs_set_screen_insets_raw(insets: NSEdgeInsets) {
         let rtld_default = -2_isize as *mut std::os::raw::c_void;
         unsafe {
             let sym_cid = dlsym(rtld_default, b"CGSMainConnectionID\0".as_ptr().cast());
             let sym_set = dlsym(rtld_default, b"CGSSetScreenInsets\0".as_ptr().cast());
-            if sym_cid.is_null() {
-                eprintln!("[BetterBar] CGSMainConnectionID not found via dlsym");
-                return;
-            }
-            if sym_set.is_null() {
-                eprintln!("[BetterBar] CGSSetScreenInsets not found via dlsym");
+            if sym_cid.is_null() || sym_set.is_null() {
                 return;
             }
             let get_cid: unsafe extern "C" fn() -> CGSConnectionID = std::mem::transmute(sym_cid);
@@ -339,10 +465,20 @@ mod macos {
                 std::mem::transmute(sym_set);
             let cid     = get_cid();
             let display = CGMainDisplayID();
-            eprintln!("[BetterBar] calling CGSSetScreenInsets cid={cid} display={display} insets={insets:?}");
             set_insets(cid, display, insets);
+        }
+    }
 
-            // Verify visibleFrame changed
+    /// Must be called from the main thread — CGS connection is main-thread bound.
+    pub fn cgs_set_screen_insets(insets: NSEdgeInsets) {
+        if let Ok(mut active) = ACTIVE_INSETS.lock() {
+            *active = insets;
+        }
+        cgs_set_screen_insets_raw(insets);
+
+        use cocoa::base::{id, nil};
+        use objc::{msg_send, sel, sel_impl};
+        unsafe {
             let screen: id = msg_send![objc::class!(NSScreen), mainScreen];
             if screen != nil {
                 let v: CgRect = msg_send![screen, visibleFrame];
@@ -357,8 +493,15 @@ mod macos {
         use objc::{msg_send, sel, sel_impl};
 
         unsafe {
+            // 1. Temporarily clear screen insets raw to measure standard system visibleFrame (Dock + Menu Bar)
+            cgs_set_screen_insets_raw(NSEdgeInsets::default());
+
             let screen: id = msg_send![objc::class!(NSScreen), mainScreen];
             if screen == nil {
+                // Restore active insets before returning
+                if let Ok(active) = ACTIVE_INSETS.lock() {
+                    cgs_set_screen_insets_raw(*active);
+                }
                 return ScreenInfo { width: 1920.0, height: 1080.0, scale_factor: scale, menu_bar_height: 0.0, dock_height: 0.0 };
             }
 
@@ -368,12 +511,15 @@ mod macos {
             let full_h = frame.size.height;
 
             // Menu bar is at the top in macOS (origin at bottom-left)
-            // visibleFrame top = visible.origin.y + visible.size.height
-            // menu_bar_height = full_h - (visible.origin.y + visible.size.height)
             let menu_bar_height = (full_h - (visible.origin.y + visible.size.height)).max(0.0);
 
             // Dock height is the bottom gap (visibleFrame.origin.y) when dock is at bottom
             let dock_height = visible.origin.y.max(0.0);
+
+            // 2. Restore active insets
+            if let Ok(active) = ACTIVE_INSETS.lock() {
+                cgs_set_screen_insets_raw(*active);
+            }
 
             ScreenInfo {
                 width: frame.size.width,
@@ -395,7 +541,15 @@ tell application "System Events"
     repeat with anApp in runningApps
         set appName to name of anApp
         set appPID to unix id of anApp
-        set appList to appList & appName & "|" & appPID & "\n"
+        try
+            set appBundle to bundle identifier of anApp
+            if appBundle is missing value then
+                set appBundle to ""
+            end if
+        on error
+            set appBundle to ""
+        end try
+        set appList to appList & appName & "|" & appPID & "|" & appBundle & "\n"
     end repeat
 end tell
 return appList"#,
@@ -412,8 +566,12 @@ return appList"#,
                         let parts: Vec<&str> = line.split('|').collect();
                         let name = parts.first().unwrap_or(&"").trim().to_string();
                         let pid: i32 = parts.get(1).unwrap_or(&"0").trim().parse().unwrap_or(0);
+                        let mut parsed_bundle = parts.get(2).unwrap_or(&"").trim().to_string();
+                        if parsed_bundle.is_empty() {
+                            parsed_bundle = name.to_lowercase().replace(' ', ".");
+                        }
                         RunningApp {
-                            bundle_id: name.to_lowercase().replace(' ', "."),
+                            bundle_id: parsed_bundle,
                             name,
                             pid,
                             is_active: false,
@@ -449,99 +607,158 @@ return appList"#,
         }
     }
 
-    pub fn get_app_icon_base64(bundle_id: &str) -> Option<String> {
-        let mut app_path = String::new();
+    pub fn get_installed_terminals() -> Vec<super::TerminalApp> {
+        let known_terminals = vec![
+            ("Terminal", "com.apple.Terminal"),
+            ("iTerm2", "com.googlecode.iterm2"),
+            ("Warp", "dev.warp.Warp-Official"),
+            ("Ghostty", "com.mitchellh.ghostty"),
+            ("Kitty", "net.kovidgoyal.kitty"),
+            ("Alacritty", "io.alacritty"),
+            ("WezTerm", "com.github.wez.wezterm"),
+            ("Hyper", "co.zeit.hyper"),
+        ];
 
-        // 1. Try mdfind
-        if let Ok(find_output) = Command::new("mdfind")
-            .arg(format!("kMDItemCFBundleIdentifier == '{}'", bundle_id))
-            .output()
-        {
-            app_path = String::from_utf8_lossy(&find_output.stdout)
-                .lines()
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_string();
+        let mut installed = Vec::new();
+        for (name, bundle_id) in known_terminals {
+            if let Some(icon) = get_app_icon_base64(bundle_id) {
+                installed.push(super::TerminalApp {
+                    name: name.to_string(),
+                    bundle_id: bundle_id.to_string(),
+                    icon: Some(icon),
+                });
+            }
         }
+        installed
+    }
 
-        // 2. Fallback to osascript if mdfind fails
-        if app_path.is_empty() {
+    pub fn execute_terminal_command(bundle_id: &str, command: &str) -> Result<(), String> {
+        if bundle_id == "com.apple.Terminal" {
             let script = format!(
-                r#"tell application "Finder" to POSIX path of (application file id "{}" as alias)"#,
-                bundle_id
+                r#"tell application id "com.apple.Terminal"
+    do script "{}"
+    activate
+end tell"#,
+                command.replace('"', "\\\"")
             );
-            if let Ok(osa_output) = Command::new("osascript").args(["-e", &script]).output() {
-                app_path = String::from_utf8_lossy(&osa_output.stdout)
-                    .trim()
-                    .to_string();
-            }
+            let status = Command::new("osascript").args(["-e", &script]).status().map_err(|e| e.to_string())?;
+            if status.success() { return Ok(()); }
+        } else if bundle_id == "com.googlecode.iterm2" {
+            let script = format!(
+                r#"tell application id "com.googlecode.iterm2"
+    create window with default profile command "{}"
+    activate
+end tell"#,
+                command.replace('"', "\\\"")
+            );
+            let status = Command::new("osascript").args(["-e", &script]).status().map_err(|e| e.to_string())?;
+            if status.success() { return Ok(()); }
+        }
+        
+        // Fallback using temporary .command file
+        let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_micros();
+        let tmp_path = format!("/tmp/bb_exec_{}.command", timestamp);
+        let script_content = format!(
+            "#!/bin/bash\n{}\nrm -- \"$0\"\n",
+            command
+        );
+        std::fs::write(&tmp_path, script_content).map_err(|e| e.to_string())?;
+        
+        let status = Command::new("chmod").args(["+x", &tmp_path]).status().map_err(|e| e.to_string())?;
+        if !status.success() {
+            return Err("Failed to make script executable".to_string());
         }
 
-        if app_path.is_empty() {
-            return None;
-        }
-
-        // Determine icon name from Info.plist
-        let plist_path = format!("{}/Contents/Info.plist", app_path);
-        let mut icon_name = String::new();
-        if let Ok(defaults_output) = Command::new("defaults")
-            .args(["read", &plist_path, "CFBundleIconFile"])
-            .output()
-        {
-            icon_name = String::from_utf8_lossy(&defaults_output.stdout)
-                .trim()
-                .to_string();
-        }
-
-        let mut icns_path = String::new();
-        if !icon_name.is_empty() {
-            if !icon_name.ends_with(".icns") {
-                icon_name.push_str(".icns");
-            }
-            let candidate = format!("{}/Contents/Resources/{}", app_path, icon_name);
-            if std::path::Path::new(&candidate).exists() {
-                icns_path = candidate;
-            }
-        }
-
-        // Fallback to searching for the first .icns file
-        if icns_path.is_empty() {
-            let resources_path = format!("{}/Contents/Resources/", app_path);
-            if let Ok(find_icns) = Command::new("find")
-                .args([&resources_path, "-name", "*.icns", "-maxdepth", "1"])
-                .output()
-            {
-                icns_path = String::from_utf8_lossy(&find_icns.stdout)
-                    .lines()
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .to_string();
-            }
-        }
-
-        if icns_path.is_empty() {
-            return None;
-        }
-
-        let tmp = format!("/tmp/betterbar_icon_{}.png", bundle_id.replace('.', "_"));
-        let sips_result = Command::new("sips")
-            .args(["-s", "format", "png", "--resampleWidth", "64", &icns_path, "--out", &tmp])
-            .output();
-
-        if sips_result.is_err() {
-            return None;
-        }
-
-        let b64_output = Command::new("base64").arg(&tmp).output();
-        let _ = std::fs::remove_file(&tmp); // cleanup
-
-        let b64 = b64_output.ok()?;
-        let encoded = String::from_utf8_lossy(&b64.stdout).replace('\n', "");
-        if encoded.is_empty() {
-            None
+        let status = Command::new("open").args(["-b", bundle_id, &tmp_path]).status().map_err(|e| e.to_string())?;
+        if status.success() {
+            Ok(())
         } else {
+            Err(format!("open failed for bundle_id: {}", bundle_id))
+        }
+    }
+
+    /// Resolve a bundle id to its app icon via NSWorkspace, render at 128×128,
+    /// PNG-encode it, and return a `data:image/png;base64,…` URL.
+    ///
+    /// Direct Cocoa replaces the previous shell pipeline (mdfind → find → sips
+    /// → base64) which was fragile (PATH issues under Tauri, missing/binary
+    /// Info.plists, ambiguous .icns selection).
+    pub fn get_app_icon_base64(bundle_id: &str) -> Option<String> {
+        use base64::Engine;
+        use cocoa::base::{id, nil};
+        use cocoa::foundation::NSString;
+        use objc::{class, msg_send, sel, sel_impl};
+
+        unsafe {
+            let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
+            if workspace == nil {
+                eprintln!("[BetterBar] NSWorkspace sharedWorkspace returned nil");
+                return None;
+            }
+
+            let bundle_ns: id = NSString::alloc(nil).init_str(bundle_id);
+            let app_url: id = msg_send![workspace, URLForApplicationWithBundleIdentifier: bundle_ns];
+            if app_url == nil {
+                eprintln!("[BetterBar] No app URL for bundle id: {}", bundle_id);
+                return None;
+            }
+
+            let app_path_ns: id = msg_send![app_url, path];
+            if app_path_ns == nil {
+                eprintln!("[BetterBar] No POSIX path for {}", bundle_id);
+                return None;
+            }
+
+            let icon: id = msg_send![workspace, iconForFile: app_path_ns];
+            if icon == nil {
+                eprintln!("[BetterBar] No icon for {}", bundle_id);
+                return None;
+            }
+
+            // Render at a comfortable @2x size — 128 logical px covers up to 128
+            // CSS pixels in the bar without blur.
+            let size = CgSize { width: 128.0, height: 128.0 };
+            let _: () = msg_send![icon, setSize: size];
+
+            let mut proposed = CgRect {
+                origin: CgPoint { x: 0.0, y: 0.0 },
+                size,
+            };
+            let cg_image: *mut std::ffi::c_void = msg_send![
+                icon,
+                CGImageForProposedRect: &mut proposed as *mut CgRect
+                context: nil
+                hints: nil
+            ];
+            if cg_image.is_null() {
+                eprintln!("[BetterBar] CGImageForProposedRect returned null for {}", bundle_id);
+                return None;
+            }
+
+            let bitmap: id = msg_send![class!(NSBitmapImageRep), alloc];
+            let bitmap: id = msg_send![bitmap, initWithCGImage: cg_image];
+            if bitmap == nil {
+                eprintln!("[BetterBar] initWithCGImage failed for {}", bundle_id);
+                return None;
+            }
+
+            // NSBitmapImageFileType: PNG = 4
+            let png_type: u64 = 4;
+            let png_data: id = msg_send![bitmap, representationUsingType: png_type properties: nil];
+            if png_data == nil {
+                eprintln!("[BetterBar] PNG representation failed for {}", bundle_id);
+                return None;
+            }
+
+            let len: usize = msg_send![png_data, length];
+            let bytes_ptr: *const u8 = msg_send![png_data, bytes];
+            if bytes_ptr.is_null() || len == 0 {
+                eprintln!("[BetterBar] PNG buffer empty for {}", bundle_id);
+                return None;
+            }
+            let slice = std::slice::from_raw_parts(bytes_ptr, len);
+
+            let encoded = base64::engine::general_purpose::STANDARD.encode(slice);
             Some(format!("data:image/png;base64,{}", encoded))
         }
     }
@@ -619,15 +836,74 @@ return appList"#,
 
     /// Call only from the main thread.
     pub fn set_screen_inset(position: &str, bar_size: f64, menu_bar_height: f64) {
-        let insets = match position {
-            "left"   => NSEdgeInsets { left: bar_size, ..Default::default() },
-            "right"  => NSEdgeInsets { right: bar_size, ..Default::default() },
-            "bottom" => NSEdgeInsets { bottom: bar_size, ..Default::default() },
-            // Bar sits at y=menuH and extends bar_size pts down, so reserve menuH+bar_size from top
-            "top"    => NSEdgeInsets { top: menu_bar_height + bar_size, ..Default::default() },
-            _        => return,
-        };
-        cgs_set_screen_insets(insets);
+        use cocoa::base::{id, nil};
+        use objc::{msg_send, sel, sel_impl};
+
+        unsafe {
+            // 1. Temporarily clear screen insets raw to measure standard system visibleFrame (Dock + Menu Bar)
+            cgs_set_screen_insets_raw(NSEdgeInsets::default());
+
+            let screen: id = msg_send![objc::class!(NSScreen), mainScreen];
+            if screen == nil {
+                // If screen is nil, restore fallback behavior
+                let fallback = match position {
+                    "left"   => NSEdgeInsets { left: bar_size, ..Default::default() },
+                    "right"  => NSEdgeInsets { right: bar_size, ..Default::default() },
+                    "bottom" => NSEdgeInsets { bottom: bar_size, ..Default::default() },
+                    "top"    => NSEdgeInsets { top: menu_bar_height + bar_size, ..Default::default() },
+                    _        => return,
+                };
+                cgs_set_screen_insets(fallback);
+                return;
+            }
+
+            let frame: CgRect = msg_send![screen, frame];
+            let visible: CgRect = msg_send![screen, visibleFrame];
+
+            let sys_left = visible.origin.x.max(0.0);
+            let sys_bottom = visible.origin.y.max(0.0);
+            let sys_right = (frame.size.width - (visible.origin.x + visible.size.width)).max(0.0);
+            let sys_top = (frame.size.height - (visible.origin.y + visible.size.height)).max(0.0);
+
+            // 2. Combine the default system margins with BetterBar's size on the appropriate edge
+            let insets = match position {
+                "left"   => NSEdgeInsets {
+                    left: sys_left + bar_size,
+                    right: sys_right,
+                    bottom: sys_bottom,
+                    top: sys_top,
+                },
+                "right"  => NSEdgeInsets {
+                    left: sys_left,
+                    right: sys_right + bar_size,
+                    bottom: sys_bottom,
+                    top: sys_top,
+                },
+                "bottom" => NSEdgeInsets {
+                    left: sys_left,
+                    right: sys_right,
+                    bottom: sys_bottom + bar_size,
+                    top: sys_top,
+                },
+                "top"    => NSEdgeInsets {
+                    left: sys_left,
+                    right: sys_right,
+                    bottom: sys_bottom,
+                    top: sys_top + bar_size,
+                },
+                _        => {
+                    NSEdgeInsets {
+                        left: sys_left,
+                        right: sys_right,
+                        bottom: sys_bottom,
+                        top: sys_top,
+                    }
+                }
+            };
+
+            // 3. Apply combined insets (this will also update ACTIVE_INSETS and restore state)
+            cgs_set_screen_insets(insets);
+        }
     }
 
     /// Call only from the main thread.
@@ -643,6 +919,218 @@ return appList"#,
         let _ = Command::new("open")
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
             .spawn();
+    }
+
+    pub fn get_bundle_id_for_pid(pid: i32) -> Option<String> {
+        use cocoa::base::{id, nil};
+        use objc::{class, msg_send, sel, sel_impl};
+
+        unsafe {
+            let app: id = msg_send![class!(NSRunningApplication), runningApplicationWithProcessIdentifier: pid];
+            if app == nil {
+                return None;
+            }
+            let bundle_id_ns: id = msg_send![app, bundleIdentifier];
+            if bundle_id_ns == nil {
+                return None;
+            }
+            let cf_str = core_foundation::string::CFString::wrap_under_get_rule(bundle_id_ns as _);
+            Some(cf_str.to_string())
+        }
+    }
+
+    pub fn get_on_screen_windows() -> Vec<WindowDetails> {
+        let option = CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY | CG_WINDOW_LIST_EXCLUDE_DESKTOP_ELEMENTS;
+        unsafe {
+            let raw_array = CGWindowListCopyWindowInfo(option, CG_NULL_WINDOW_ID);
+            if raw_array.is_null() {
+                return vec![];
+            }
+
+            let pid_key = CFStringCreateWithCString(
+                std::ptr::null(),
+                b"kCGWindowOwnerPID\0".as_ptr() as _,
+                CF_STRING_ENCODING_UTF8,
+            );
+            let num_key = CFStringCreateWithCString(
+                std::ptr::null(),
+                b"kCGWindowNumber\0".as_ptr() as _,
+                CF_STRING_ENCODING_UTF8,
+            );
+            let name_key = CFStringCreateWithCString(
+                std::ptr::null(),
+                b"kCGWindowName\0".as_ptr() as _,
+                CF_STRING_ENCODING_UTF8,
+            );
+            let owner_key = CFStringCreateWithCString(
+                std::ptr::null(),
+                b"kCGWindowOwnerName\0".as_ptr() as _,
+                CF_STRING_ENCODING_UTF8,
+            );
+            let layer_key = CFStringCreateWithCString(
+                std::ptr::null(),
+                b"kCGWindowLayer\0".as_ptr() as _,
+                CF_STRING_ENCODING_UTF8,
+            );
+
+            if pid_key.is_null() || num_key.is_null() || name_key.is_null() || owner_key.is_null() || layer_key.is_null() {
+                if !pid_key.is_null() { CFRelease(pid_key); }
+                if !num_key.is_null() { CFRelease(num_key); }
+                if !name_key.is_null() { CFRelease(name_key); }
+                if !owner_key.is_null() { CFRelease(owner_key); }
+                if !layer_key.is_null() { CFRelease(layer_key); }
+                CFRelease(raw_array);
+                return vec![];
+            }
+
+            let count = CFArrayGetCount(raw_array);
+            let mut result = Vec::new();
+
+            for i in 0..count {
+                let dict = CFArrayGetValueAtIndex(raw_array, i);
+                if dict.is_null() {
+                    continue;
+                }
+
+                // Check layer is 0
+                let layer_val = CFDictionaryGetValue(dict, layer_key);
+                if !layer_val.is_null() {
+                    let mut layer: i32 = 0;
+                    if CFNumberGetValue(layer_val, CF_NUMBER_SINT32_TYPE, &mut layer as *mut _ as _) {
+                        if layer != 0 {
+                            continue;
+                        }
+                    }
+                }
+
+                let pid_val = CFDictionaryGetValue(dict, pid_key);
+                if pid_val.is_null() {
+                    continue;
+                }
+                let mut pid: i32 = 0;
+                if !CFNumberGetValue(pid_val, CF_NUMBER_SINT32_TYPE, &mut pid as *mut _ as _) {
+                    continue;
+                }
+
+                let wid_val = CFDictionaryGetValue(dict, num_key);
+                if wid_val.is_null() {
+                    continue;
+                }
+                let mut window_id: i64 = 0;
+                if !CFNumberGetValue(wid_val, 4 /* kCFNumberSInt64Type */, &mut window_id as *mut _ as _) {
+                    continue;
+                }
+
+                let mut title = String::new();
+                let name_val = CFDictionaryGetValue(dict, name_key);
+                if !name_val.is_null() {
+                    let cf_str = core_foundation::string::CFString::wrap_under_get_rule(name_val as _);
+                    title = cf_str.to_string();
+                }
+
+                // Filter out empty titles to avoid helper/invisible windows
+                if title.trim().is_empty() {
+                    continue;
+                }
+
+                let mut owner_name = String::new();
+                let owner_val = CFDictionaryGetValue(dict, owner_key);
+                if !owner_val.is_null() {
+                    let cf_str = core_foundation::string::CFString::wrap_under_get_rule(owner_val as _);
+                    owner_name = cf_str.to_string();
+                }
+
+                let bundle_id = get_bundle_id_for_pid(pid).unwrap_or_else(|| {
+                    owner_name.to_lowercase().replace(' ', ".")
+                });
+
+                result.push(WindowDetails {
+                    id: window_id as u32,
+                    title,
+                    pid,
+                    owner_name,
+                    bundle_id,
+                });
+            }
+
+            CFRelease(pid_key);
+            CFRelease(num_key);
+            CFRelease(name_key);
+            CFRelease(owner_key);
+            CFRelease(layer_key);
+            CFRelease(raw_array);
+
+            result
+        }
+    }
+
+    pub fn focus_window(pid: i32, title: &str) -> Result<(), String> {
+        let escaped_title = title.replace('"', "\\\"");
+        let script = format!(
+            r#"tell application "System Events"
+    tell (first process whose unix id is {})
+        set frontmost to true
+        try
+            perform action "AXRaise" of (first window whose name is "{}")
+        end try
+    end tell
+end tell"#,
+            pid, escaped_title
+        );
+
+        let status = Command::new("osascript")
+            .args(["-e", &script])
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err("Failed to focus window".to_string())
+        }
+    }
+
+    pub fn get_window_id_thumbnail(window_id: u32) -> Option<super::WindowThumbnail> {
+        if !check_screen_recording() {
+            return None;
+        }
+
+        let tmp_path = format!("/tmp/betterbar_thumb_win_{}.png", window_id);
+
+        let captured = Command::new("screencapture")
+            .args(["-l", &window_id.to_string(), "-x", &tmp_path])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+        if !captured {
+            return None;
+        }
+
+        // Resize to max 280px wide (in-place)
+        let sips_ok = Command::new("sips")
+            .args(["--resampleWidth", "280", &tmp_path])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+        // Encode as base64 — clean up temp file regardless of outcome
+        let b64_out = Command::new("base64").arg(&tmp_path).output();
+        let _ = std::fs::remove_file(&tmp_path);
+
+        if !sips_ok {
+            return None;
+        }
+
+        let encoded = String::from_utf8_lossy(&b64_out.ok()?.stdout).replace('\n', "");
+        if encoded.is_empty() {
+            return None;
+        }
+
+        Some(super::WindowThumbnail {
+            image: format!("data:image/png;base64,{}", encoded),
+            title: None,
+        })
     }
 
     fn get_window_ids_for_pid(target_pid: i32) -> Vec<u32> {
@@ -759,6 +1247,67 @@ return appList"#,
             title: None,
         })
     }
+
+    #[derive(Debug, Clone)]
+    pub struct WindowBounds {
+        pub app_name: String,
+        pub x: f64,
+        pub y: f64,
+        pub width: f64,
+        pub height: f64,
+    }
+
+    pub fn get_front_window_bounds() -> Option<WindowBounds> {
+        let script = r#"
+    tell application "System Events"
+        try
+            set frontApp to first application process whose frontmost is true
+            set frontAppName to name of frontApp
+            if exists (window 1 of frontApp) then
+                set {wX, wY} to position of window 1 of frontApp
+                set {wW, wH} to size of window 1 of frontApp
+                return frontAppName & "|" & wX & "|" & wY & "|" & wW & "|" & wH
+            end if
+        end try
+    end tell
+    "#;
+        let output = Command::new("osascript")
+            .args(["-e", script])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if stdout.is_empty() {
+            return None;
+        }
+        let parts: Vec<&str> = stdout.split('|').collect();
+        if parts.len() < 5 {
+            return None;
+        }
+        let app_name = parts[0].to_string();
+        let x: f64 = parts[1].parse().ok()?;
+        let y: f64 = parts[2].parse().ok()?;
+        let width: f64 = parts[3].parse().ok()?;
+        let height: f64 = parts[4].parse().ok()?;
+        Some(WindowBounds { app_name, x, y, width, height })
+    }
+
+    pub fn resize_and_position_front_window(app_name: &str, x: f64, y: f64, w: f64, h: f64) {
+        let script = format!(
+            r#"tell application "System Events"
+        tell process "{}"
+            try
+                set position of window 1 to {{{}, {}}}
+                set size of window 1 to {{{}, {}}}
+            end try
+        end tell
+    end tell"#,
+            app_name, x, y, w, h
+        );
+        let _ = Command::new("osascript").args(["-e", &script]).status();
+    }
 }
 
 // --- App entry ---
@@ -769,6 +1318,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_running_apps,
+            get_installed_terminals,
+            execute_terminal_command,
             launch_app,
             focus_app,
             get_screen_info,
@@ -781,10 +1332,14 @@ pub fn run() {
             check_screen_recording_permission,
             request_screen_recording_permission,
             get_window_thumbnail,
+            get_on_screen_windows,
+            focus_window,
+            get_window_id_thumbnail,
             set_screen_inset,
             clear_screen_insets,
             open_settings_window,
             get_window_outer_position,
+            update_bar_geometry,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -799,6 +1354,97 @@ pub fn run() {
                         }
                     });
                 }
+                if let Some(settings_win) = app.get_webview_window("settings") {
+                    let settings_clone = settings_win.clone();
+                    settings_win.on_window_event(move |event| {
+                        if let WindowEvent::CloseRequested { api, .. } = event {
+                            api.prevent_close();
+                            let _ = settings_clone.hide();
+                        }
+                    });
+                }
+
+                // Spawn background strict overlap prevention thread
+                std::thread::spawn(move || {
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_millis(1200));
+
+                        let geom = match BAR_GEOMETRY.lock() {
+                            Ok(g) => *g,
+                            Err(_) => continue,
+                        };
+
+                        if !geom.strict_overlap {
+                            continue;
+                        }
+
+                        let position_str = match std::str::from_utf8(&geom.position[..geom.position_len]) {
+                            Ok(s) => s,
+                            Err(_) => "left",
+                        };
+
+                        if !macos::check_accessibility() {
+                            continue;
+                        }
+
+                        if let Some(wnd) = macos::get_front_window_bounds() {
+                            if wnd.app_name.to_lowercase().contains("betterbar") {
+                                continue;
+                            }
+
+                            let screen = macos::get_screen_info(1.0);
+                            let sw = screen.width;
+                            let sh = screen.height;
+                            let menu_bar_height = screen.menu_bar_height;
+                            let dock_height = screen.dock_height;
+                            let bar_size = geom.bar_size;
+
+                            let mut new_x = wnd.x;
+                            let mut new_y = wnd.y;
+                            let mut new_w = wnd.width;
+                            let mut new_h = wnd.height;
+                            let mut changed = false;
+
+                            match position_str {
+                                "left" => {
+                                    let limit = 0.0 + bar_size;
+                                    if wnd.x < limit {
+                                        new_x = limit;
+                                        new_w = (wnd.x + wnd.width - limit).max(200.0);
+                                        changed = true;
+                                    }
+                                }
+                                "right" => {
+                                    let limit = sw - bar_size;
+                                    if wnd.x + wnd.width > limit {
+                                        new_w = (limit - wnd.x).max(200.0);
+                                        changed = true;
+                                    }
+                                }
+                                "bottom" => {
+                                    let limit = sh - bar_size - dock_height;
+                                    if wnd.y + wnd.height > limit {
+                                        new_h = (limit - wnd.y).max(200.0);
+                                        changed = true;
+                                    }
+                                }
+                                "top" => {
+                                    let limit = menu_bar_height + bar_size;
+                                    if wnd.y < limit {
+                                        new_y = limit;
+                                        new_h = (wnd.y + wnd.height - limit).max(200.0);
+                                        changed = true;
+                                    }
+                                }
+                                _ => {}
+                            }
+
+                            if changed {
+                                macos::resize_and_position_front_window(&wnd.app_name, new_x, new_y, new_w, new_h);
+                            }
+                        }
+                    }
+                });
             }
             Ok(())
         })

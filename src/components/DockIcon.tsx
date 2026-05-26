@@ -4,13 +4,15 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { EyeSlash, PencilSimple, X } from "@phosphor-icons/react";
 import { DockItem, DockPosition, IconStyle } from "../types";
-import { launchApp, focusApp } from "../tauri-bridge";
+import { launchApp, focusApp, focusWindow } from "../tauri-bridge";
 import { WindowPreview } from "./WindowPreview";
 
 interface DockIconProps {
   item: DockItem;
   isRunning: boolean;
   runningPid?: number;
+  windowId?: number;
+  windowTitle?: string;
   iconSize: number;
   showLabel: boolean;
   position: DockPosition;
@@ -49,6 +51,8 @@ export function DockIcon({
   item,
   isRunning,
   runningPid,
+  windowId,
+  windowTitle,
   iconSize,
   showLabel,
   position,
@@ -133,7 +137,15 @@ export function DockIcon({
     setPressed(true);
     setTimeout(() => setPressed(false), 120);
     try {
-      if (item.bundleId) {
+      if (runningPid !== undefined && windowTitle) {
+        await focusWindow(runningPid, windowTitle).catch(() => {
+          if (item.bundleId) {
+            focusApp(item.bundleId).catch(() => launchApp(item.path));
+          } else {
+            launchApp(item.path);
+          }
+        });
+      } else if (item.bundleId) {
         // focusApp uses `open -b <bundleId>` which is more reliable than paths
         await focusApp(item.bundleId).catch(() => launchApp(item.path));
       } else {
@@ -313,7 +325,7 @@ export function DockIcon({
             }`}
           >
             {isRunning && runningPid !== undefined ? (
-              <WindowPreview appName={item.name} pid={runningPid} position={position} />
+              <WindowPreview appName={item.name} pid={runningPid} windowId={windowId} position={position} />
             ) : (
               <span className="text-[11px] text-[var(--bb-text)]">
                 <span className="text-[var(--bb-accent)]">&gt;</span> {item.name}

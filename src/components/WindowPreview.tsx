@@ -4,15 +4,17 @@ import {
   checkScreenRecordingPermission,
   requestScreenRecordingPermission,
   getWindowThumbnail,
+  getWindowIdThumbnail,
 } from "../tauri-bridge";
 
 interface WindowPreviewProps {
   appName: string;
   pid: number;
   position: DockPosition;
+  windowId?: number;
 }
 
-export function WindowPreview({ appName, pid }: WindowPreviewProps) {
+export function WindowPreview({ appName, pid, windowId }: WindowPreviewProps) {
   const [thumbnail, setThumbnail] = useState<string | null>(null);
   const [permitted, setPermitted] = useState<boolean | null>(null);
 
@@ -25,7 +27,9 @@ export function WindowPreview({ appName, pid }: WindowPreviewProps) {
       setPermitted(ok);
       if (!ok) return;
 
-      const result = await getWindowThumbnail(pid);
+      const result = windowId !== undefined
+        ? await getWindowIdThumbnail(windowId)
+        : await getWindowThumbnail(pid);
       if (cancelled) return;
       setThumbnail(result?.image ?? null);
     })();

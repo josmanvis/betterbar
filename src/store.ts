@@ -32,6 +32,15 @@ function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     iconStyle,
     grayscaleIdle: cfg.grayscaleIdle === undefined ? DEFAULT_CONFIG.grayscaleIdle : !!cfg.grayscaleIdle,
     showRunningApps: !!cfg.showRunningApps,
+    hideSelf: cfg.hideSelf === undefined ? DEFAULT_CONFIG.hideSelf : !!cfg.hideSelf,
+    contentScale: Number.isFinite(cfg.contentScale) ? cfg.contentScale : DEFAULT_CONFIG.contentScale,
+    defaultTerminal: cfg.defaultTerminal,
+    clocks: Array.isArray(cfg.clocks) ? cfg.clocks : DEFAULT_CONFIG.clocks,
+    transparentBg: cfg.transparentBg === undefined ? DEFAULT_CONFIG.transparentBg : !!cfg.transparentBg,
+    accentColor: typeof cfg.accentColor === "string" ? cfg.accentColor : DEFAULT_CONFIG.accentColor,
+    preventOverlap: cfg.preventOverlap === undefined ? DEFAULT_CONFIG.preventOverlap : !!cfg.preventOverlap,
+    strictOverlap: cfg.strictOverlap === undefined ? DEFAULT_CONFIG.strictOverlap : !!cfg.strictOverlap,
+    ungroupedBundleIds: Array.isArray(cfg.ungroupedBundleIds) ? cfg.ungroupedBundleIds : [],
   };
 }
 
@@ -214,6 +223,10 @@ export function useConfig() {
     () => setConfig((p) => ({ ...p, showRunningApps: !p.showRunningApps })),
     [setConfig]
   );
+  const toggleHideSelf = useCallback(
+    () => setConfig((p) => ({ ...p, hideSelf: !p.hideSelf })),
+    [setConfig]
+  );
   const toggleAutoHide = useCallback(() => setConfig((p) => ({ ...p, autoHide: !p.autoHide })), [setConfig]);
   const toggleLabels = useCallback(() => setConfig((p) => ({ ...p, showLabels: !p.showLabels })), [setConfig]);
   const toggleFreeFloat = useCallback(
@@ -226,6 +239,43 @@ export function useConfig() {
   );
   const setFloatPosition = useCallback(
     (floatPosition: { x: number; y: number } | null) => setConfig({ floatPosition }),
+    [setConfig]
+  );
+  const setContentScale = useCallback(
+    (contentScale: number) => setConfig({ contentScale }),
+    [setConfig]
+  );
+  const setDefaultTerminal = useCallback(
+    (defaultTerminal: string | undefined) => setConfig({ defaultTerminal }),
+    [setConfig]
+  );
+  const toggleTransparentBg = useCallback(
+    () => setConfig((p) => ({ ...p, transparentBg: !p.transparentBg })),
+    [setConfig]
+  );
+  const setAccentColor = useCallback(
+    (accentColor: string) => setConfig({ accentColor }),
+    [setConfig]
+  );
+  const togglePreventOverlap = useCallback(
+    () => setConfig((p) => ({ ...p, preventOverlap: !p.preventOverlap })),
+    [setConfig]
+  );
+  const toggleStrictOverlap = useCallback(
+    () => setConfig((p) => ({ ...p, strictOverlap: !p.strictOverlap })),
+    [setConfig]
+  );
+  const toggleWindowGrouping = useCallback(
+    (bundleId: string) => {
+      if (!bundleId) return;
+      setConfig((prev) => {
+        const ungrouped = prev.ungroupedBundleIds || [];
+        const nextUngrouped = ungrouped.includes(bundleId)
+          ? ungrouped.filter((id) => id !== bundleId)
+          : [...ungrouped, bundleId];
+        return { ...prev, ungroupedBundleIds: nextUngrouped };
+      });
+    },
     [setConfig]
   );
 
@@ -250,10 +300,18 @@ export function useConfig() {
     setIconStyle,
     toggleGrayscaleIdle,
     toggleShowRunningApps,
+    toggleHideSelf,
     toggleAutoHide,
     toggleLabels,
     toggleFreeFloat,
     setFreeFloat,
     setFloatPosition,
+    setContentScale,
+    setDefaultTerminal,
+    toggleTransparentBg,
+    setAccentColor,
+    togglePreventOverlap,
+    toggleStrictOverlap,
+    toggleWindowGrouping,
   };
 }

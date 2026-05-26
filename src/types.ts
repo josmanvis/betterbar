@@ -39,6 +39,20 @@ export interface WindowThumbnail {
   title: string | null;
 }
 
+export interface WindowDetails {
+  id: number;
+  title: string;
+  pid: number;
+  owner_name: string;
+  bundle_id: string;
+}
+
+export interface TerminalApp {
+  name: string;
+  bundle_id: string;
+  icon: string | null;
+}
+
 export interface AppSet {
   id: string;
   name: string;
@@ -51,6 +65,12 @@ export type BarLengthMode = "edge" | "auto" | "custom";
  * - "auto": real macOS app icon when resolvable, fallback to a 2-letter glyph.
  * - "glyph": always render the 2-letter glyph (no icon fetch). */
 export type IconStyle = "auto" | "glyph";
+
+export interface ClockConfig {
+  id: string;
+  code: string;
+  tz: string;
+}
 
 export interface BetterBarConfig {
   position: DockPosition;
@@ -80,6 +100,18 @@ export interface BetterBarConfig {
   grayscaleIdle: boolean;
   /** Append a section showing currently-running apps that aren't already pinned. */
   showRunningApps: boolean;
+  /** Hide BetterBar itself from the dock list */
+  hideSelf: boolean;
+  /** Scale factor for UI content text and indicator icons */
+  contentScale: number;
+  /** Bundle ID of the default terminal to use. If undefined, prompts user. */
+  defaultTerminal?: string;
+  clocks: ClockConfig[];
+  transparentBg: boolean;
+  accentColor: string;
+  preventOverlap: boolean;
+  strictOverlap: boolean;
+  ungroupedBundleIds: string[];
 }
 
 export const BAR_SIZE_MIN = 48;
@@ -96,6 +128,14 @@ const DEFAULT_ITEMS: DockItem[] = [
   { id: "mail",     name: "Mail",     path: "/System/Applications/Mail.app",            bundleId: "com.apple.mail",         order: 3 },
   { id: "calendar", name: "Calendar", path: "/System/Applications/Calendar.app",        bundleId: "com.apple.iCal",         order: 4 },
   { id: "terminal", name: "Terminal", path: "/System/Applications/Utilities/Terminal.app", bundleId: "com.apple.Terminal",  order: 5 },
+];
+
+const DEFAULT_CLOCKS: ClockConfig[] = [
+  { id: "sf",  code: "SF",  tz: "America/Los_Angeles" },
+  { id: "bz",  code: "BZ",  tz: "America/Belize" },
+  { id: "nyc", code: "NYC", tz: "America/New_York" },
+  { id: "esp", code: "ESP", tz: "Europe/Madrid" },
+  { id: "ind", code: "IND", tz: "Asia/Kolkata" },
 ];
 
 export const DEFAULT_CONFIG: BetterBarConfig = {
@@ -116,4 +156,12 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   iconStyle: "auto",
   grayscaleIdle: true,
   showRunningApps: false,
+  hideSelf: true,
+  contentScale: 1.0,
+  clocks: DEFAULT_CLOCKS,
+  transparentBg: false,
+  accentColor: "#c5f500",
+  preventOverlap: true,
+  strictOverlap: false,
+  ungroupedBundleIds: [],
 };

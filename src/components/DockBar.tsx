@@ -12,16 +12,19 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import {
-  PencilSimple, Check, GearSix, Warning,
+  GearSix, Warning,
 } from "@phosphor-icons/react";
 import { DockIcon } from "./DockIcon";
+import { TerminalInput } from "./TerminalInput";
 import { WorldClock } from "./WorldClock";
 import { BatteryIndicator } from "./BatteryIndicator";
+import { WindowPreview } from "./WindowPreview";
 import {
   AppSet, BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
-  BetterBarConfig, DockItem, FLOAT_DRAG_EDGE, IconStyle, RunningApp,
+  BetterBarConfig, DockItem, FLOAT_DRAG_EDGE, IconStyle, RunningApp, DockPosition,
 } from "../types";
 import { useRunningApps } from "../hooks/useRunningApps";
+import { useRunningWindows } from "../hooks/useRunningWindows";
 import { useWindowPosition } from "../hooks/useWindowPosition";
 import { useBattery } from "../hooks/useBattery";
 import { useAppIcons } from "../hooks/useAppIcons";
@@ -32,6 +35,7 @@ import {
   getWindowOuterPosition,
   getScreenInfo,
   focusApp,
+  focusWindow,
 } from "../tauri-bridge";
 
 // Stable empty array so passing "no items" to useAppIcons doesn't re-fire the
@@ -67,20 +71,22 @@ export function DockBar({
   onFloatPositionChange, onSetFreeFloat,
   onRenameItem, onSetItemHidden,
 }: DockBarProps) {
-  const [editMode, setEditMode] = useState(false);
+
   const [axGranted, setAxGranted] = useState<boolean | null>(null);
   const [swipeLabel, setSwipeLabel] = useState<string | null>(null);
   const [hoverEdge, setHoverEdge] = useState<BarEdge | null>(null);
   const [resizing, setResizing] = useState<ResizeState | null>(null);
   const [autoLength, setAutoLength] = useState<number | null>(null);
+  const [terminalExpanded, setTerminalExpanded] = useState(false);
   const swipeLabelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
   const battery = useBattery();
   const runningApps = useRunningApps();
-  useWindowPosition(config, onFloatPositionChange, autoLength);
-
+  const runningWindows = useRunningWindows();
   const isVertical = config.position === "left" || config.position === "right";
+  useWindowPosition(config, onFloatPositionChange, autoLength, terminalExpanded && isVertical ? 320 : undefined);
+
   const sortedItems = [...activeSet.items]
     .filter((i) => !i.hidden)
     .sort((a, b) => a.order - b.order);
@@ -94,12 +100,56 @@ export function DockBar({
   const pinnedBundleIds = new Set(activeSet.items.map((i) => i.bundleId).filter(Boolean));
   const pinnedNames = new Set(activeSet.items.map((i) => i.name.toLowerCase()));
   const runningUnpinned = config.showRunningApps
-    ? runningApps.filter(
-        (app) =>
+    ? runningApps.filter((app) => {
+        if (
+          config.hideSelf &&
+          (app.bundle_id === "com.betterbar.app" ||
+            app.bundle_id === "com.google.antigravity" ||
+            app.name.toLowerCase() === "betterbar" ||
+            app.name.toLowerCase() === "antigravity")
+        ) {
+          return false;
+        }
+        return (
           !pinnedBundleIds.has(app.bundle_id) &&
           !pinnedNames.has(app.name.toLowerCase())
-      )
+        );
+      })
     : [];
+
+  const displayRunningUnpinned: Array<{
+    app: RunningApp;
+    windowId?: number;
+    windowTitle?: string;
+    key: string;
+  }> = [];
+
+  runningUnpinned.forEach((app) => {
+    const isUngrouped = app.bundle_id && config.ungroupedBundleIds?.includes(app.bundle_id);
+    const appWindows = isUngrouped
+      ? runningWindows.filter(
+          (w) =>
+            w.bundle_id === app.bundle_id ||
+            w.owner_name.toLowerCase() === app.name.toLowerCase()
+        )
+      : [];
+
+    if (isUngrouped && appWindows.length > 0) {
+      appWindows.forEach((win) => {
+        displayRunningUnpinned.push({
+          app,
+          windowId: win.id,
+          windowTitle: win.title,
+          key: `${app.pid}-win-${win.id}`,
+        });
+      });
+    } else {
+      displayRunningUnpinned.push({
+        app,
+        key: `${app.pid}`,
+      });
+    }
+  });
 
   // Combined list of items + running apps whose icons we want resolved.
   const iconLookupItems: DockItem[] =
@@ -373,20 +423,21 @@ export function DockBar({
     <>
       <div
         ref={barRef}
-        onWheel={handleWheel}
         onMouseMove={handleBarMouseMove}
         onMouseLeave={() => { if (!resizing) setHoverEdge(null); }}
         className={`
           fixed ${edgeClass} z-50 flex
           ${isVertical ? "flex-col items-stretch" : "flex-row items-stretch"}
-          bg-black ${panelBorder}
+          ${config.transparentBg ? "bg-black/35 backdrop-blur-md" : "bg-black"} ${panelBorder}
           border-[var(--bb-line)]
           select-none overflow-hidden bb-scanlines
         `}
         style={{
           width: config.freeFloat ? undefined : (isVertical ? config.barSize : undefined),
           height: config.freeFloat ? undefined : (isVertical ? undefined : config.barSize),
-        }}
+          "--bb-accent": config.accentColor || "#c5f500",
+          "--bb-accent-d": config.accentColor || "#c5f500",
+        } as any}
       >
         {displayEdge && (
           <EdgeDragStrip
@@ -400,8 +451,15 @@ export function DockBar({
           />
         )}
 
-        {/* Top-of-rail terminal stamp */}
-        <RailStamp isVertical={isVertical} editMode={editMode} />
+        {/* Top-of-rail terminal stamp / input */}
+        <TerminalInput
+          isVertical={isVertical}
+          editMode={false}
+          onExpandedChange={setTerminalExpanded}
+          barSize={config.barSize}
+          defaultTerminal={config.defaultTerminal}
+          position={config.position}
+        />
 
         {/* Accessibility banner */}
         {axGranted === false && (
@@ -436,6 +494,43 @@ export function DockBar({
               {sortedItems.map((item) => {
                 const resolvedIcon =
                   item.icon ?? (item.bundleId ? appIcons[item.bundleId] : undefined);
+                
+                const isUngrouped = item.bundleId && config.ungroupedBundleIds?.includes(item.bundleId);
+                const itemWindows = isUngrouped
+                  ? runningWindows.filter(
+                      (w) =>
+                        (item.bundleId && w.bundle_id === item.bundleId) ||
+                        w.owner_name.toLowerCase() === item.name.toLowerCase()
+                    )
+                  : [];
+
+                if (isUngrouped && itemWindows.length > 0) {
+                  return itemWindows.map((win) => (
+                    <DockIcon
+                      key={`${item.id}-win-${win.id}`}
+                      item={{
+                        ...item,
+                        id: `${item.id}-win-${win.id}`,
+                        name: win.title || item.name,
+                        icon: resolvedIcon,
+                      }}
+                      isRunning={true}
+                      runningPid={win.pid}
+                      windowId={win.id}
+                      windowTitle={win.title}
+                      iconSize={iconSize}
+                      showLabel={config.showLabels}
+                      position={config.position}
+                      iconStyle={config.iconStyle}
+                      grayscaleIdle={config.grayscaleIdle}
+                      onRemove={onRemove}
+                      onRename={onRenameItem}
+                      onHide={(id) => onSetItemHidden(id, true)}
+                      editMode={false}
+                    />
+                  ));
+                }
+
                 return (
                   <DockIcon
                     key={item.id}
@@ -450,7 +545,7 @@ export function DockBar({
                     onRemove={onRemove}
                     onRename={onRenameItem}
                     onHide={(id) => onSetItemHidden(id, true)}
-                    editMode={editMode}
+                    editMode={false}
                   />
                 );
               })}
@@ -462,21 +557,24 @@ export function DockBar({
             by a labeled rail divider. Click focuses the app via `open -b`. */}
         {config.showRunningApps && runningUnpinned.length > 0 && (
           <>
-            <Divider isVertical={isVertical} label="RUN" />
+            <Divider isVertical={isVertical} label="RUN" zoom={config.contentScale} />
             <div
               className={`
                 flex ${isVertical ? "flex-col" : "flex-row"} items-stretch
                 ${isVertical ? "w-full gap-px" : "h-full gap-px"}
               `}
             >
-              {runningUnpinned.map((app) => (
+              {displayRunningUnpinned.map((item) => (
                 <RunningAppIcon
-                  key={app.pid}
-                  app={app}
+                  key={item.key}
+                  app={item.app}
+                  windowId={item.windowId}
+                  windowTitle={item.windowTitle}
+                  position={config.position}
                   iconSize={iconSize}
                   iconStyle={config.iconStyle}
                   grayscaleIdle={config.grayscaleIdle}
-                  iconUrl={appIcons[app.bundle_id]}
+                  iconUrl={appIcons[item.app.bundle_id]}
                   isVertical={isVertical}
                 />
               ))}
@@ -490,46 +588,39 @@ export function DockBar({
           <div className="flex-1" />
         )}
 
-        {/* World clock */}
-        <Divider isVertical={isVertical} label="TIME" />
-        <WorldClock isVertical={isVertical} />
+        {/* INDICATORS (scaled by contentScale) */}
+        <div style={{ zoom: config.contentScale } as any} className={`flex ${isVertical ? "flex-col" : "flex-row"} items-center justify-center`}>
+          {/* World clock */}
+          <Divider isVertical={isVertical} label="TIME" />
+          <WorldClock isVertical={isVertical} clocks={config.clocks} />
 
-        {/* Battery */}
-        <Divider isVertical={isVertical} label="PWR" />
-        <BatteryIndicator battery={battery} isVertical={isVertical} />
+          {/* Battery */}
+          <Divider isVertical={isVertical} label="PWR" />
+          <BatteryIndicator battery={battery} isVertical={isVertical} />
 
-        {/* Set dots — quick switcher (full management lives in settings) */}
-        <Divider isVertical={isVertical} label="SET" />
-        <DotsIndicator
-          sets={config.sets}
-          activeSetId={config.activeSetId}
-          isVertical={isVertical}
-          onSwitch={switchToSet}
-        />
-
-        {/* Action buttons */}
-        <Divider isVertical={isVertical} />
-        <div className={`flex ${isVertical ? "flex-col pb-1 gap-px" : "flex-row pr-1 gap-px"} items-center justify-center`}>
-          <RailButton
-            label={editMode ? "DONE" : "EDIT"}
-            active={editMode}
-            onClick={() => setEditMode((e) => !e)}
+          {/* Set dots — quick switcher (full management lives in settings) */}
+          <Divider isVertical={isVertical} label="SET" />
+          <DotsIndicator
+            sets={config.sets}
+            activeSetId={config.activeSetId}
             isVertical={isVertical}
-            barSize={config.barSize}
-          >
-            {editMode
-              ? <Check size={13} weight="bold" />
-              : <PencilSimple size={13} weight="bold" />}
-          </RailButton>
-          <RailButton
-            label="COG"
-            active={false}
-            onClick={handleOpenSettings}
-            isVertical={isVertical}
-            barSize={config.barSize}
-          >
-            <GearSix size={13} weight="bold" />
-          </RailButton>
+            onSwitch={switchToSet}
+            onWheel={handleWheel}
+          />
+
+          {/* Action buttons */}
+          <Divider isVertical={isVertical} />
+          <div className={`flex ${isVertical ? "flex-col pb-1 gap-px" : "flex-row pr-1 gap-px"} items-center justify-center`}>
+            <RailButton
+              label="COG"
+              active={false}
+              onClick={handleOpenSettings}
+              isVertical={isVertical}
+              barSize={config.barSize}
+            >
+              <GearSix size={13} weight="bold" />
+            </RailButton>
+          </div>
         </div>
 
         {/* Swipe label toast */}
@@ -563,7 +654,7 @@ export function DockBar({
 // rename/hide menu. Click focuses the app via `open -b <bundle_id>`.
 
 function RunningAppIcon({
-  app, iconSize, iconStyle, grayscaleIdle, iconUrl, isVertical,
+  app, iconSize, iconStyle, grayscaleIdle, iconUrl, isVertical, windowId, windowTitle, position,
 }: {
   app: RunningApp;
   iconSize: number;
@@ -571,23 +662,46 @@ function RunningAppIcon({
   grayscaleIdle: boolean;
   iconUrl?: string;
   isVertical: boolean;
+  windowId?: number;
+  windowTitle?: string;
+  position: DockPosition;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initials = app.name.slice(0, 2).toUpperCase();
+
+  const handleMouseEnter = () => {
+    setHovered(true);
+    tooltipTimer.current = setTimeout(() => setShowTooltip(true), 500);
+  };
+
+  const handleMouseLeave = () => {
+    setHovered(false);
+    setShowTooltip(false);
+    if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
+  };
+
+  const handleClick = async () => {
+    if (windowId && windowTitle) {
+      await focusWindow(app.pid, windowTitle).catch(() => focusApp(app.bundle_id));
+    } else {
+      await focusApp(app.bundle_id).catch((e) => console.error(e));
+    }
+  };
 
   return (
     <div
       className={`relative flex flex-col items-center justify-center ${isVertical ? "w-full" : "h-full"}`}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      title={app.name}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {/* Active app gets a chartreuse running stripe on the inner edge */}
       <div className={`absolute z-10 bg-[var(--bb-accent)] ${
         isVertical ? "left-0 top-0 bottom-0 w-[2px]" : "top-0 left-0 right-0 h-[2px]"
       }`} />
       <button
-        onClick={() => focusApp(app.bundle_id).catch((e) => console.error(e))}
+        onClick={handleClick}
         style={{ width: iconSize + 8, height: iconSize + 8 }}
         className={`
           relative flex items-center justify-center rounded-none focus:outline-none
@@ -622,32 +736,45 @@ function RunningAppIcon({
           )}
         </div>
       </button>
+
+      {/* Tooltip / Window Preview */}
+      <AnimatePresence>
+        {showTooltip && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.08 }}
+            className={`absolute z-50 bg-black border border-[var(--bb-line-2)] shadow-[3px_3px_0_0_rgba(0,0,0,1)] ${tooltipClass(position)} ${
+              windowId !== undefined ? "p-1.5" : "px-2 py-1 pointer-events-none whitespace-nowrap"
+            }`}
+          >
+            {windowId !== undefined ? (
+              <WindowPreview appName={windowTitle || app.name} pid={app.pid} windowId={windowId} position={position} />
+            ) : (
+              <span className="text-[11px] text-[var(--bb-text)]">
+                <span className="text-[var(--bb-accent)]">&gt;</span> {app.name}
+              </span>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-// ── Rail stamp at the top: tiny terminal heading "BB·" + caret ─────────────────
-
-function RailStamp({ isVertical, editMode }: { isVertical: boolean; editMode: boolean }) {
-  return (
-    <div
-      className={`
-        shrink-0 flex items-center justify-center
-        text-[9px] font-bold uppercase tracking-[0.18em]
-        ${isVertical ? "w-full py-1.5 flex-col gap-0.5" : "h-full px-2 flex-row gap-1"}
-        ${editMode ? "text-black bg-[var(--bb-accent)]" : "text-[var(--bb-accent)]"}
-        border-b border-[var(--bb-line)]
-      `}
-    >
-      <span>BB</span>
-      <span className="bb-caret">▍</span>
-    </div>
-  );
+function tooltipClass(position: DockPosition) {
+  switch (position) {
+    case "left":   return "left-full ml-2 top-1/2 -translate-y-1/2";
+    case "right":  return "right-full mr-2 top-1/2 -translate-y-1/2";
+    case "top":    return "top-full mt-2 left-1/2 -translate-x-1/2";
+    case "bottom": return "bottom-full mb-2 left-1/2 -translate-x-1/2";
+  }
 }
 
 // ── Divider with optional micro-label ──────────────────────────────────────────
 
-function Divider({ isVertical, label }: { isVertical: boolean; label?: string }) {
+function Divider({ isVertical, label, zoom }: { isVertical: boolean; label?: string; zoom?: number }) {
   if (!label) {
     return (
       <div
@@ -663,6 +790,7 @@ function Divider({ isVertical, label }: { isVertical: boolean; label?: string })
       className={`shrink-0 flex items-center ${
         isVertical ? "w-full justify-center" : "h-full"
       }`}
+      style={zoom ? { zoom } : undefined}
     >
       <div className={`bg-[var(--bb-line)] ${isVertical ? "h-px flex-1" : "w-px h-full"}`} />
       <span
@@ -766,11 +894,13 @@ interface DotsIndicatorProps {
   activeSetId: string;
   isVertical: boolean;
   onSwitch: (id: string, name: string) => void;
+  onWheel?: (e: React.WheelEvent) => void;
 }
 
-function DotsIndicator({ sets, activeSetId, isVertical, onSwitch }: DotsIndicatorProps) {
+function DotsIndicator({ sets, activeSetId, isVertical, onSwitch, onWheel }: DotsIndicatorProps) {
   return (
     <div
+      onWheel={onWheel}
       className={`
         relative flex items-center justify-center
         ${isVertical ? "w-full py-1.5 px-1" : "h-full px-1.5 py-1"}
