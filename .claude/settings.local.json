@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(npx tsc *)",
+      "mcp__chrome-devtools__new_page",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__list_pages",
+      "Bash(sleep 3; ls -la /tmp/bb-icons.png 2>&1)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(python3 -)",
+      "Bash(npm run *)"
+    ]
+  }
+}

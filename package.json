@@ -1,19 +1,22 @@
 {
   "name": "betterbar",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build-and-install": "tauri build && cp -R src-tauri/target/release/bundle/macos/BetterBar.app /Applications/ && xattr -d com.apple.quarantine /Applications/BetterBar.app || true"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@tauri-apps/api": "^2",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@phosphor-icons/react": "^2.1.10",
+    "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-opener": "^2",
     "framer-motion": "^12.38.0",
     "react": "^19.1.0",
@@ -21,7 +24,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",
-    "@tauri-apps/cli": "^2",
+    "@tauri-apps/cli": "^2.11.2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",

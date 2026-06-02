@@ -7,14 +7,20 @@ export default function App() {
     activeSet,
     reorderItems,
     removeItem,
-    setPosition,
-    setIconSize,
-    toggleAutoHide,
-    toggleLabels,
+    addItem,
+    renameItem,
+    setItemHidden,
+    setItemIcon,
+    setItemDeviceIcon,
+    setItemForceGlyph,
+    setItemForceNative,
+    setItemDisplayType,
+    setBarSize,
+    setBarLength,
     switchSet,
-    addSet,
-    renameSet,
-    deleteSet,
+    setFloatPosition,
+    setFreeFloat,
+    toggleWindowGrouping,
   } = useConfig();
 
   return (
@@ -23,14 +29,20 @@ export default function App() {
       activeSet={activeSet}
       onReorder={reorderItems}
       onRemove={removeItem}
-      onSetPosition={setPosition}
-      onSetIconSize={setIconSize}
-      onToggleAutoHide={toggleAutoHide}
-      onToggleLabels={toggleLabels}
+      onAddItem={addItem}
+      onRenameItem={renameItem}
+      onSetItemHidden={setItemHidden}
+      onSetBarSize={setBarSize}
+      onSetBarLength={setBarLength}
       onSwitchSet={switchSet}
-      onAddSet={addSet}
-      onRenameSet={renameSet}
-      onDeleteSet={deleteSet}
+      onFloatPositionChange={setFloatPosition}
+      onSetFreeFloat={setFreeFloat}
+      onToggleGrouping={toggleWindowGrouping}
+      onSetItemIcon={setItemIcon}
+      onSetItemDeviceIcon={setItemDeviceIcon}
+      onSetItemForceGlyph={setItemForceGlyph}
+      onSetItemForceNative={setItemForceNative}
+      onSetItemDisplayType={setItemDisplayType}
     />
   );
 }

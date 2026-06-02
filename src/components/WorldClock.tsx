@@ -1,31 +1,38 @@
 import { useState, useEffect } from "react";
-
-const CITIES = [
-  { code: "NYC", tz: "America/New_York" },
-  { code: "SF",  tz: "America/Los_Angeles" },
-  { code: "IND", tz: "Asia/Kolkata" },
-  { code: "ESP", tz: "Europe/Madrid" },
-  { code: "BZ",  tz: "America/Belize" },
-] as const;
-
-function formatTime(tz: string, now: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(now);
-}
+import { ClockConfig } from "../types";
 
 interface WorldClockProps {
   isVertical: boolean;
+  clocks?: ClockConfig[];
 }
 
-export function WorldClock({ isVertical }: WorldClockProps) {
+const DEFAULT_CLOCKS: ClockConfig[] = [
+  { id: "sf",  code: "SF",  tz: "America/Los_Angeles" },
+  { id: "bz",  code: "BZ",  tz: "America/Belize" },
+  { id: "nyc", code: "NYC", tz: "America/New_York" },
+  { id: "esp", code: "ESP", tz: "Europe/Madrid" },
+  { id: "ind", code: "IND", tz: "Asia/Kolkata" },
+  { id: "gha", code: "GHA", tz: "Africa/Accra" },
+];
+
+function formatTime(tz: string, now: Date): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(now);
+  } catch (e) {
+    // Handle invalid timezone smoothly
+    return "--:--";
+  }
+}
+
+export function WorldClock({ isVertical, clocks = DEFAULT_CLOCKS }: WorldClockProps) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    // Sync to the next minute boundary, then tick every minute
     const msToNext = 60_000 - (Date.now() % 60_000);
     const initial = setTimeout(() => {
       setNow(new Date());
@@ -35,21 +42,23 @@ export function WorldClock({ isVertical }: WorldClockProps) {
     return () => clearTimeout(initial);
   }, []);
 
+  const activeClocks = clocks.length > 0 ? clocks : DEFAULT_CLOCKS;
+
   if (isVertical) {
     return (
-      <div className="w-full px-1.5 py-2 flex flex-col gap-[3px]">
-        {CITIES.map(({ code, tz }) => {
+      <div className="w-full px-1.5 py-1.5 flex flex-col gap-px">
+        {activeClocks.map(({ id, code, tz }) => {
           const time = formatTime(tz, now);
-          // Split "3:24 PM" → ["3:24", "PM"]
-          const [hm, ampm] = time.split(" ");
           return (
-            <div key={code} className="flex items-baseline justify-between px-1">
-              <span className="text-[9px] font-semibold tracking-wide text-zinc-500 uppercase leading-none w-7">
+            <div
+              key={id}
+              className="flex items-baseline justify-between leading-none"
+            >
+              <span className="text-[10px] font-semibold tracking-[0.15em] text-[var(--bb-accent)] uppercase">
                 {code}
               </span>
-              <span className="text-[10px] font-medium text-zinc-300 leading-none tabular-nums">
-                {hm}
-                <span className="text-[8px] text-zinc-500 ml-[2px]">{ampm}</span>
+              <span className="text-[10px] text-[var(--bb-text)] tabular-nums">
+                {time}
               </span>
             </div>
           );
@@ -58,19 +67,17 @@ export function WorldClock({ isVertical }: WorldClockProps) {
     );
   }
 
-  // Horizontal layout — show as a horizontal row with less info
   return (
     <div className="h-full flex items-center gap-3 px-2">
-      {CITIES.map(({ code, tz }) => {
+      {activeClocks.map(({ id, code, tz }) => {
         const time = formatTime(tz, now);
-        const [hm, ampm] = time.split(" ");
         return (
-          <div key={code} className="flex flex-col items-center leading-none">
-            <span className="text-[8px] font-semibold tracking-wide text-zinc-500 uppercase mb-[2px]">
+          <div key={id} className="flex flex-col items-center leading-none gap-px">
+            <span className="text-[9px] font-semibold tracking-[0.15em] text-[var(--bb-accent)] uppercase">
               {code}
             </span>
-            <span className="text-[10px] font-medium text-zinc-300 tabular-nums">
-              {hm}<span className="text-[8px] text-zinc-500 ml-[1px]">{ampm}</span>
+            <span className="text-[10px] text-[var(--bb-text)] tabular-nums">
+              {time}
             </span>
           </div>
         );
