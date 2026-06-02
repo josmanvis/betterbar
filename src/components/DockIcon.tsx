@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Menu, MenuItem, CheckMenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
-import { DockItem, DockPosition, IconStyle } from "../types";
+import { DockItem, DockPosition, IconStyle, WindowDetails } from "../types";
 import { launchApp, focusApp, focusWindow, hideApp, quitApp, zoomAppWindow } from "../tauri-bridge";
 import { WindowPreview } from "./WindowPreview";
 import { DEVICE_GLYPHS } from "./deviceIcons";
@@ -15,6 +15,7 @@ interface DockIconProps {
   runningPid?: number;
   windowId?: number;
   windowTitle?: string;
+  windows?: WindowDetails[];
   iconSize: number;
   showLabel: boolean;
   position: DockPosition;
@@ -64,6 +65,7 @@ export function DockIcon({
   runningPid,
   windowId,
   windowTitle,
+  windows,
   iconSize,
   showLabel,
   position,
@@ -132,6 +134,19 @@ export function DockIcon({
           focusApp(bid).catch((e) => console.error("[BB] focusApp failed:", e));
         },
       }));
+
+      if (windows && windows.length > 1) {
+        const windowItems: MenuItem[] = [];
+        for (const win of windows) {
+          windowItems.push(await MenuItem.new({
+            text: win.title?.trim() || "Untitled Window",
+            action: () => {
+              focusWindow(win.pid, win.title).catch((e) => console.error("[BB] focusWindow failed:", e));
+            },
+          }));
+        }
+        items.push(await Submenu.new({ text: "Windows", items: windowItems }));
+      }
 
       items.push(await MenuItem.new({
         text: "Maximize",

@@ -2,15 +2,16 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   GearSix, Lightning, Eye, EyeSlash, ArrowsOut, ArrowsOutCardinal, PencilSimple,
-  Plus, Trash, MagnifyingGlass, ArrowCounterClockwise, Warning,
+  Plus, Trash, MagnifyingGlass, ArrowCounterClockwise, Warning, CaretUp, CaretDown,
 } from "@phosphor-icons/react";
 import {
    BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
-   AppSet, BarLengthMode, DockItem, DockPosition, IconStyle, TerminalApp, ClockConfig, RunningApp,
+   AppSet, BarLengthMode, DockItem, DockPosition, IconStyle, TerminalApp, ClockConfig, RunningApp, SectionId,
  } from "./types";
  import { useConfig, DEFAULT_CONFIG } from "./store";
  import { getInstalledTerminals, getRunningApps, checkAccessibilityPermissions, requestAccessibilityPermissions, checkScreenRecordingPermission, requestScreenRecordingPermission } from "./tauri-bridge";
  import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getExtensionRegistry } from "./extensions-runtime";
 
 const LENGTH_MODES: { value: BarLengthMode; label: string }[] = [
   { value: "edge",   label: "EDGE" },
@@ -22,6 +23,20 @@ const ICON_STYLES: { value: IconStyle; label: string; hint: string }[] = [
   { value: "auto",  label: "APP_ICON", hint: "Real macOS app icon, with glyph fallback" },
   { value: "glyph", label: "GLYPH",    hint: "Always the 2-letter shorthand" },
 ];
+
+const SECTION_LABELS: Record<SectionId, string> = {
+  terminal: "TERMINAL",
+  pin: "PINNED APPS",
+  run: "RUNNING APPS",
+  spacer: "SPACER / GAP",
+  time: "CLOCKS",
+  music: "MUSIC",
+  battery: "BATTERY",
+  sets: "SET SWITCHER",
+  sims: "SIMULATORS",
+  cog: "SETTINGS COG",
+  extensions: "EXTENSIONS",
+};
 
 const POSITIONS: { value: DockPosition; label: string }[] = [
   { value: "bottom", label: "BOTTOM" },
@@ -88,6 +103,9 @@ export default function SettingsApp() {
     toggleSimDropdown,
     toggleTerminalIcon,
     toggleDockArea,
+    toggleShowExtensions,
+    toggleExtension,
+    setSectionOrder,
   } = useConfig();
 
   const [activeTab, setActiveTab] = useState<TabId>("layout");
@@ -98,6 +116,8 @@ export default function SettingsApp() {
     message: string;
     onConfirm: () => void;
   } | null>(null);
+
+  const [extensionsList] = useState(() => getExtensionRegistry());
 
   const [axGranted, setAxGranted] = useState<boolean | null>(null);
   const [srGranted, setSrGranted] = useState<boolean | null>(null);
@@ -173,7 +193,7 @@ export default function SettingsApp() {
         "--bb-accent": config.accentColor || "#c5f500",
         "--bb-accent-d": config.accentColor || "#c5f500",
       } as any}
-      className="min-h-screen bg-black text-[var(--bb-text)] flex flex-col"
+      className="h-screen bg-black text-[var(--bb-text)] flex flex-col"
     >
       <Header />
 
@@ -206,7 +226,7 @@ export default function SettingsApp() {
         })}
       </div>
 
-      <main className="flex-1 overflow-y-auto bb-scroll">
+      <main className="flex-1 min-h-0 overflow-y-auto bb-scroll">
         <div className="px-8 py-6 space-y-6 max-w-[680px]">
           <AnimatePresence mode="wait">
             {activeTab === "layout" && (
@@ -593,6 +613,93 @@ export default function SettingsApp() {
                       enabled={config.showSimDropdown}
                       onToggle={toggleSimDropdown}
                     />
+                    <Toggle
+                      label="EXTENSIONS"
+                      description="Show third-party extensions registered on the bar"
+                      enabled={config.showExtensions}
+                      onToggle={toggleShowExtensions}
+                    />
+                  </div>
+                </Section>
+
+                {extensionsList.length > 0 && (
+                  <Section
+                    number="14b"
+                    title="EXTENSIONS"
+                    hint={`${config.enabledExtensions.length}/${extensionsList.length} ENABLED`}
+                  >
+                    <div className="flex flex-col">
+                      {extensionsList.map((ext) => {
+                        const enabled = config.enabledExtensions.includes(ext.name);
+                        return (
+                          <div
+                            key={ext.name}
+                            className="flex items-center justify-between py-2 px-1 border-b border-[var(--bb-line)]/60 last:border-b-0"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[12px] tabular-nums tracking-[0.15em] ${enabled ? "text-[var(--bb-accent)]" : "text-[var(--bb-mute)]"}`}>
+                                {enabled ? "[X]" : "[ ]"}
+                              </span>
+                              <span className={`text-[11px] tracking-[0.15em] ${enabled ? "text-[var(--bb-text)]" : "text-[var(--bb-dim)]"}`}>
+                                {ext.displayName}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => toggleExtension(ext.name)}
+                              className={`px-2.5 py-0.5 text-[9px] tracking-[0.12em] uppercase border transition-colors cursor-pointer font-bold shrink-0 ml-2 ${
+                                enabled
+                                  ? "border-[var(--bb-accent)] text-[var(--bb-accent)] hover:bg-[var(--bb-accent)]/10"
+                                  : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"
+                              }`}
+                            >
+                              {enabled ? "ENABLED" : "DISABLED"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Section>
+                )}
+
+                <Section number="15" title="SECTION_ORDER" hint="DRAG-FREE">
+                  <p className="text-[10px] text-[var(--bb-mute)] mb-2 leading-relaxed">
+                    Order of regions along the bar. Use the arrows to move a section toward the start or end.
+                  </p>
+                  <div className="flex flex-col divide-y divide-[var(--bb-line)] border border-[var(--bb-line)]">
+                    {config.sectionOrder.map((id, idx) => (
+                      <div key={id} className="flex items-center justify-between px-2 py-1.5">
+                        <span className="text-[11px] tracking-wider text-[var(--bb-text)] tabular-nums">
+                          <span className="text-[var(--bb-mute)] mr-2">{String(idx + 1).padStart(2, "0")}</span>
+                          {SECTION_LABELS[id]}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            disabled={idx === 0}
+                            onClick={() => {
+                              const next = [...config.sectionOrder];
+                              [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                              setSectionOrder(next);
+                            }}
+                            title="Move toward start"
+                            className="p-1 border border-[var(--bb-line)] text-[var(--bb-dim)] enabled:hover:text-[var(--bb-accent)] enabled:hover:border-[var(--bb-accent)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <CaretUp size={11} weight="bold" />
+                          </button>
+                          <button
+                            disabled={idx === config.sectionOrder.length - 1}
+                            onClick={() => {
+                              const next = [...config.sectionOrder];
+                              [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+                              setSectionOrder(next);
+                            }}
+                            title="Move toward end"
+                            className="p-1 border border-[var(--bb-line)] text-[var(--bb-dim)] enabled:hover:text-[var(--bb-accent)] enabled:hover:border-[var(--bb-accent)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <CaretDown size={11} weight="bold" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </Section>
               </motion.div>

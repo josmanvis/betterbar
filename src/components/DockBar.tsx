@@ -26,7 +26,7 @@ import { WindowPreview } from "./WindowPreview";
 import { DEVICE_GLYPHS } from "./deviceIcons";
 import {
   AppSet, BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
-  BetterBarConfig, DockItem, FLOAT_DRAG_EDGE, IconStyle, RunningApp, DockPosition,
+  BetterBarConfig, DockItem, FLOAT_DRAG_EDGE, IconStyle, RunningApp, DockPosition, SectionId,
 } from "../types";
 import { useRunningApps } from "../hooks/useRunningApps";
 import { useRunningWindows } from "../hooks/useRunningWindows";
@@ -46,6 +46,7 @@ import {
   focusWindow,
   launchSimulator,
 } from "../tauri-bridge";
+import { useExtensions } from "../extensions-runtime";
 
 async function handleOpenSettings() {
   try {
@@ -54,6 +55,7 @@ async function handleOpenSettings() {
     console.error("[BetterBar] Failed to open settings window:", e);
   }
 }
+
 
 const SIM_GROUPS: ({ type: string; label: string } | "sep")[] = [
   { type: "iphone",      label: "iPhone 17" },
@@ -144,6 +146,7 @@ export function DockBar({
   const music = useMusic();
   const runningApps = useRunningApps();
   const runningWindows = useRunningWindows();
+  const extensions = useExtensions(config.showExtensions ? config.enabledExtensions : []);
   const isVertical = config.position === "left" || config.position === "right";
   useWindowPosition(config, onFloatPositionChange, autoLength, terminalExpanded && isVertical ? 320 : undefined);
 
@@ -508,51 +511,29 @@ export function DockBar({
     setResizing(null);
   }
 
-  return (
-    <>
-      <div
-        ref={barRef}
-        onMouseMove={handleBarMouseMove}
-        onMouseLeave={() => { if (!resizing) setHoverEdge(null); }}
-        className={`
-          fixed ${edgeClass} z-50 flex
-          ${isVertical ? "flex-col items-stretch" : "flex-row items-stretch pl-3"}
-          ${config.transparentBg ? "bg-black/35 backdrop-blur-md" : "bg-black"} ${panelBorder}
-          border-[var(--bb-line)]
-          select-none overflow-hidden bb-scanlines
-        `}
-        style={{
-          width: config.freeFloat ? undefined : (isVertical ? config.barSize : undefined),
-          height: config.freeFloat ? undefined : (isVertical ? undefined : config.barSize),
-          "--bb-accent": config.accentColor || "#c5f500",
-          "--bb-accent-d": config.accentColor || "#c5f500",
-        } as any}
-      >
-        {displayEdge && (
-          <EdgeDragStrip
-            edge={displayEdge}
-            showStripe={config.freeFloat || !!resizing}
-            allowReposition={config.freeFloat}
-            onReposition={startReposition}
-            onResizeStart={(e) => startResize(e, displayEdge)}
-            onResizeMove={trackResize}
-            onResizeEnd={endResize}
-          />
-        )}
+  // ── Reorderable sections ────────────────────────────────────────────────
+  // Each visible region of the bar is a node here; they render in
+  // `config.sectionOrder` and can be reordered by ⌘-dragging on the bar.
+  const sectionNodes: Partial<Record<SectionId, React.ReactNode>> = {};
 
-        {/* Top-of-rail terminal stamp / input */}
-        {config.showTerminalIcon && (
-          <TerminalInput
-            isVertical={isVertical}
-            onExpandedChange={setTerminalExpanded}
-            barSize={config.barSize}
-            defaultTerminal={config.defaultTerminal}
-            position={config.position}
-          />
-        )}
+  if (config.showTerminalIcon) {
+    sectionNodes.terminal = (
+      <TerminalInput
+        isVertical={isVertical}
+        onExpandedChange={setTerminalExpanded}
+        barSize={config.barSize}
+        defaultTerminal={config.defaultTerminal}
+        position={config.position}
+      />
+    );
+  }
 
-        {/* App icons */}
-        {config.showDockArea && (
+  if (config.showDockArea) {
+    sectionNodes.pin = (
+      <>
+        {sortedItems.length > 0 && (
+          <Divider isVertical={isVertical} label="PIN" zoom={config.contentScale} />
+        )}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
             items={sortedItems.map((i) => i.id)}
@@ -594,17 +575,16 @@ export function DockBar({
                   item.deviceIcon || item.forceGlyph
                     ? undefined
                     : (item.icon ?? (wantsNative && item.bundleId ? appIcons[item.bundleId] : undefined));
-                
-                const isUngrouped = item.bundleId && config.ungroupedBundleIds?.includes(item.bundleId);
-                const itemWindows = isUngrouped
-                  ? runningWindows.filter(
-                      (w) =>
-                        (item.bundleId && w.bundle_id === item.bundleId) ||
-                        w.owner_name.toLowerCase() === item.name.toLowerCase()
-                    )
-                  : [];
 
-                  if (isUngrouped && itemWindows.length > 0) {
+                const appWindows = runningWindows.filter(
+                  (w) =>
+                    (item.bundleId && w.bundle_id === item.bundleId) ||
+                    w.owner_name.toLowerCase() === item.name.toLowerCase()
+                );
+                const isUngrouped = item.bundleId && config.ungroupedBundleIds?.includes(item.bundleId);
+                const itemWindows = isUngrouped ? appWindows : [];
+
+                if (isUngrouped && itemWindows.length > 0) {
                   return itemWindows.map((win) => (
                     <DockIcon
                       key={`${item.id}-win-${win.id}`}
@@ -645,6 +625,7 @@ export function DockBar({
                     isRunning={isRunning(item)}
                     isActive={isActiveItem(item)}
                     runningPid={findRunningApp(item)?.pid}
+                    windows={appWindows}
                     iconSize={iconSize}
                     showLabel={config.showLabels}
                     position={config.position}
@@ -666,134 +647,213 @@ export function DockBar({
             </div>
           </SortableContext>
         </DndContext>
-        )}
+      </>
+    );
+  }
 
-        {/* Running-but-not-pinned apps. Appended after the pinned section, divided
-            by a labeled rail divider. Click focuses the app via `open -b`. */}
-        {config.showDockArea && config.showRunningApps && runningUnpinned.length > 0 && (
-          <>
-            <Divider isVertical={isVertical} label="RUN" zoom={config.contentScale} />
-            <div
-              className={`
-                flex ${isVertical ? "flex-col" : "flex-row"} items-stretch
-                ${isVertical ? "w-full gap-px" : "h-full gap-px"}
-              `}
-            >
-              {displayRunningUnpinned.map((item) => (
-                <RunningAppIcon
-                  key={item.key}
-                  app={item.app}
-                  windowId={item.windowId}
-                  windowTitle={item.windowTitle}
-                  position={config.position}
-                  iconSize={iconSize}
-                  iconStyle={config.iconStyle}
-                  grayscaleIdle={config.grayscaleIdle}
-                  iconUrl={appIcons[item.app.bundle_id]}
-                  isVertical={isVertical}
-                  onPin={onAddItem}
-                  onToggleGrouping={onToggleGrouping}
-                  ungroupedBundleIds={config.ungroupedBundleIds}
-                  activeSetItemCount={activeSet.items.length}
-                />
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* In free-float + auto mode the bar shrink-wraps to content, so we omit
-            the spacer that would otherwise push the trailing widgets to the end. */}
-        {!(config.freeFloat && config.barLengthMode === "auto") && (
-          <div className="flex-1" />
-        )}
-
-        {/* INDICATORS (scaled by contentScale) */}
-        <div style={{ zoom: config.contentScale } as any} className={`flex ${isVertical ? "flex-col" : "flex-row"} items-center justify-center`}>
-          {/* World clock */}
-          {config.showClocks && (
-            <>
-              <Divider isVertical={isVertical} label="TIME" />
-              <WorldClock isVertical={isVertical} clocks={config.clocks} />
-            </>
-          )}
-
-          {/* Music controls */}
-          {config.showMusic && (
-            <>
-              <Divider isVertical={isVertical} label="MUS" />
-              <MusicIndicator music={music} isVertical={isVertical} />
-            </>
-          )}
-
-          {/* Battery */}
-          {config.showBattery && (
-            <>
-              <Divider isVertical={isVertical} label="PWR" />
-              <BatteryIndicator battery={battery} isVertical={isVertical} />
-            </>
-          )}
-
-          {/* Set dots — quick switcher (full management lives in settings) */}
-          {config.showSetSwitcher && (
-            <>
-              <Divider isVertical={isVertical} label="SET" />
-              <DotsIndicator
-                sets={config.sets}
-                activeSetId={config.activeSetId}
-                isVertical={isVertical}
-                onSwitch={switchToSet}
-                onWheel={handleWheel}
-              />
-            </>
-          )}
-
-          {/* SIMS — simulator quick-launch icons */}
-          {config.showSimIcons && (
-            <>
-              <Divider isVertical={isVertical} label="SIMS" />
-              <div className={`flex ${isVertical ? "flex-col" : "flex-row"} items-stretch ${isVertical ? "w-full gap-px" : "h-full gap-px"}`}>
-                {SIMS_DEVICES.map((d) => (
-                  <SimButton
-                    key={d.type}
-                    label={d.label}
-                    onClick={() => {
-                      console.log("[BB] Launch sim:", d.type);
-                      launchSimulator(d.type).catch((err) => console.error("[BB] sim failed:", err));
-                    }}
-                    barSize={config.barSize}
-                  >
-                    <span className="w-[14px] h-[14px] flex items-center justify-center">
-                      {DEVICE_GLYPHS[d.glyph]}
-                    </span>
-                  </SimButton>
-                ))}
-                {config.showSimDropdown && (
-                  <SimButton
-                    label="More…"
-                    onClick={handleSimulatorMenu}
-                    barSize={config.barSize}
-                  >
-                    <span className="text-[10px] font-bold leading-none tracking-wider text-[var(--bb-dim)]">+</span>
-                  </SimButton>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* Action buttons */}
-          <Divider isVertical={isVertical} />
-          <div className={`flex ${isVertical ? "flex-col pb-1 gap-px" : "flex-row pr-1 gap-px"} items-center justify-center`}>
-            <RailButton
-              label="COG"
-              active={false}
-              onClick={handleOpenSettings}
+  if (config.showDockArea && config.showRunningApps && runningUnpinned.length > 0) {
+    sectionNodes.run = (
+      <>
+        <Divider isVertical={isVertical} label="RUN" zoom={config.contentScale} />
+        <div
+          className={`
+            flex ${isVertical ? "flex-col" : "flex-row"} items-stretch
+            ${isVertical ? "w-full gap-px" : "h-full gap-px"}
+          `}
+        >
+          {displayRunningUnpinned.map((item) => (
+            <RunningAppIcon
+              key={item.key}
+              app={item.app}
+              windowId={item.windowId}
+              windowTitle={item.windowTitle}
+              position={config.position}
+              iconSize={iconSize}
+              iconStyle={config.iconStyle}
+              grayscaleIdle={config.grayscaleIdle}
+              iconUrl={appIcons[item.app.bundle_id]}
               isVertical={isVertical}
+              onPin={onAddItem}
+              onToggleGrouping={onToggleGrouping}
+              ungroupedBundleIds={config.ungroupedBundleIds}
+              activeSetItemCount={activeSet.items.length}
+            />
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  // The spacer pushes trailing widgets to the far end. Omitted when the bar
+  // shrink-wraps to content (free-float + auto length).
+  if (!(config.freeFloat && config.barLengthMode === "auto")) {
+    sectionNodes.spacer = <></>;
+  }
+
+  if (config.showClocks) {
+    sectionNodes.time = (
+      <>
+        <Divider isVertical={isVertical} label="TIME" />
+        <WorldClock isVertical={isVertical} clocks={config.clocks} />
+      </>
+    );
+  }
+
+  if (config.showMusic) {
+    sectionNodes.music = (
+      <>
+        <Divider isVertical={isVertical} label="MUS" />
+        <MusicIndicator music={music} isVertical={isVertical} />
+      </>
+    );
+  }
+
+  if (config.showBattery) {
+    sectionNodes.battery = (
+      <>
+        <Divider isVertical={isVertical} label="PWR" />
+        <BatteryIndicator battery={battery} isVertical={isVertical} />
+      </>
+    );
+  }
+
+  if (config.showSetSwitcher) {
+    sectionNodes.sets = (
+      <>
+        <Divider isVertical={isVertical} label="SET" />
+        <DotsIndicator
+          sets={config.sets}
+          activeSetId={config.activeSetId}
+          isVertical={isVertical}
+          onSwitch={switchToSet}
+          onWheel={handleWheel}
+        />
+      </>
+    );
+  }
+
+  if (config.showSimIcons) {
+    sectionNodes.sims = (
+      <>
+        <Divider isVertical={isVertical} label="SIMS" />
+        <div className={`flex ${isVertical ? "flex-col" : "flex-row"} items-stretch ${isVertical ? "w-full gap-px" : "h-full gap-px"}`}>
+          {SIMS_DEVICES.map((d) => (
+            <SimButton
+              key={d.type}
+              label={d.label}
+              onClick={() => {
+                console.log("[BB] Launch sim:", d.type);
+                launchSimulator(d.type).catch((err) => console.error("[BB] sim failed:", err));
+              }}
               barSize={config.barSize}
             >
-              <GearSix size={13} weight="bold" />
-            </RailButton>
-          </div>
+              <span className="w-[14px] h-[14px] flex items-center justify-center">
+                {DEVICE_GLYPHS[d.glyph]}
+              </span>
+            </SimButton>
+          ))}
+          {config.showSimDropdown && (
+            <SimButton
+              label="More…"
+              onClick={handleSimulatorMenu}
+              barSize={config.barSize}
+            >
+              <span className="text-[10px] font-bold leading-none tracking-wider text-[var(--bb-dim)]">+</span>
+            </SimButton>
+          )}
         </div>
+      </>
+    );
+  }
+
+  if (config.showExtensions && extensions.length > 0) {
+    sectionNodes.extensions = (
+      <>
+        <Divider isVertical={isVertical} label="EXT" />
+        <div
+          className={`flex ${isVertical ? "flex-col" : "flex-row"} items-stretch ${isVertical ? "w-full gap-px" : "h-full gap-px"}`}
+        >
+          {extensions.map((ext) => (
+            <ExtensionIcon
+              key={ext.name}
+              name={ext.displayName}
+              barSize={config.barSize}
+            >
+              <ext.Component />
+            </ExtensionIcon>
+          ))}
+        </div>
+        <Divider isVertical={isVertical} />
+      </>
+    );
+  }
+
+  sectionNodes.cog = (
+    <>
+      <Divider isVertical={isVertical} />
+      <div className={`flex ${isVertical ? "flex-col pb-1 gap-px" : "flex-row pr-1 gap-px"} items-center justify-center`}>
+        <RailButton
+          label="COG"
+          active={false}
+          onClick={handleOpenSettings}
+          isVertical={isVertical}
+          barSize={config.barSize}
+        >
+          <GearSix size={13} weight="bold" />
+        </RailButton>
+      </div>
+    </>
+  );
+
+  const scaledSections = new Set<SectionId>(["time", "music", "battery", "sets", "sims", "cog", "extensions"]);
+  const orderedSections = config.sectionOrder.filter((id) => sectionNodes[id] !== undefined);
+
+  return (
+    <>
+      <div
+        ref={barRef}
+        onMouseMove={handleBarMouseMove}
+        onMouseLeave={() => { if (!resizing) setHoverEdge(null); }}
+        className={`
+          fixed ${edgeClass} z-50 flex
+          ${isVertical ? "flex-col items-stretch" : "flex-row items-stretch pl-3"}
+          ${config.transparentBg ? "bg-black/35 backdrop-blur-md" : "bg-black"} ${panelBorder}
+          border-[var(--bb-line)]
+          select-none overflow-hidden bb-scanlines
+        `}
+        style={{
+          width: config.freeFloat ? undefined : (isVertical ? config.barSize : undefined),
+          height: config.freeFloat ? undefined : (isVertical ? undefined : config.barSize),
+          "--bb-accent": config.accentColor || "#c5f500",
+          "--bb-accent-d": config.accentColor || "#c5f500",
+        } as any}
+      >
+        {displayEdge && (
+          <EdgeDragStrip
+            edge={displayEdge}
+            showStripe={config.freeFloat || !!resizing}
+            allowReposition={config.freeFloat}
+            onReposition={startReposition}
+            onResizeStart={(e) => startResize(e, displayEdge)}
+            onResizeMove={trackResize}
+            onResizeEnd={endResize}
+          />
+        )}
+
+        {/* Bar sections, rendered in config.sectionOrder (reordered in Settings) */}
+        {orderedSections.map((id) => {
+          if (id === "spacer") return <div key={id} className="flex-1" />;
+          const scaled = scaledSections.has(id);
+          return (
+            <div
+              key={id}
+              style={scaled ? ({ zoom: config.contentScale } as any) : undefined}
+              className={`flex ${isVertical ? "flex-col" : "flex-row"} ${scaled ? "items-center justify-center" : "items-stretch"}`}
+            >
+              {sectionNodes[id]}
+            </div>
+          );
+        })}
 
         {/* Swipe label toast */}
         <AnimatePresence>
@@ -1213,6 +1273,27 @@ function SimButton({
     >
       {children}
     </button>
+  );
+}
+
+function ExtensionIcon({
+  name,
+  barSize,
+  children,
+}: {
+  name: string;
+  barSize: number;
+  children: React.ReactNode;
+}) {
+  const size = Math.max(20, barSize - 8);
+  return (
+    <div
+      title={name}
+      style={{ width: size, height: size }}
+      className="shrink-0 flex items-center justify-center border border-[var(--bb-line)] text-[var(--bb-dim)] overflow-hidden"
+    >
+      {children}
+    </div>
   );
 }
 

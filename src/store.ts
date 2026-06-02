@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import {
   AppSet, BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
-  BarLengthMode, BetterBarConfig, DEFAULT_CONFIG as TYPES_DEFAULT_CONFIG, DockItem, DockPosition,
-  IconStyle,
+  BarLengthMode, BetterBarConfig, DEFAULT_CONFIG as TYPES_DEFAULT_CONFIG, DEFAULT_SECTION_ORDER, DockItem, DockPosition,
+  IconStyle, SectionId,
 } from "./types";
 
 export const DEFAULT_CONFIG = TYPES_DEFAULT_CONFIG;
@@ -51,7 +51,24 @@ function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     showSimDropdown: cfg.showSimDropdown === undefined ? DEFAULT_CONFIG.showSimDropdown : !!cfg.showSimDropdown,
     showTerminalIcon: cfg.showTerminalIcon === undefined ? DEFAULT_CONFIG.showTerminalIcon : !!cfg.showTerminalIcon,
     showDockArea: cfg.showDockArea === undefined ? DEFAULT_CONFIG.showDockArea : !!cfg.showDockArea,
+    showExtensions: cfg.showExtensions === undefined ? DEFAULT_CONFIG.showExtensions : !!cfg.showExtensions,
+    enabledExtensions: Array.isArray(cfg.enabledExtensions) ? cfg.enabledExtensions : [],
+    sectionOrder: normalizeSectionOrder(cfg.sectionOrder),
   };
+}
+
+/** Keep only known section ids (dropping unknowns/dupes) and append any known
+ *  ids missing from the stored order, so new sections appear without a reset. */
+function normalizeSectionOrder(stored: unknown): SectionId[] {
+  const known = DEFAULT_SECTION_ORDER;
+  const arr = Array.isArray(stored) ? (stored as SectionId[]) : [];
+  const seen = new Set<SectionId>();
+  const out: SectionId[] = [];
+  for (const id of arr) {
+    if (known.includes(id) && !seen.has(id)) { seen.add(id); out.push(id); }
+  }
+  for (const id of known) if (!seen.has(id)) out.push(id);
+  return out;
 }
 
 function loadConfig(): BetterBarConfig {
@@ -286,6 +303,7 @@ export function useConfig() {
   const setIconSize = useCallback((iconSize: number) => setConfig({ iconSize }), [setConfig]);
   const setBarSize = useCallback((barSize: number) => setConfig({ barSize }), [setConfig]);
   const setBarLength = useCallback((barLength: number) => setConfig({ barLength }), [setConfig]);
+  const setSectionOrder = useCallback((sectionOrder: SectionId[]) => setConfig({ sectionOrder }), [setConfig]);
   const setBarLengthMode = useCallback(
     (barLengthMode: BarLengthMode) => setConfig({ barLengthMode }),
     [setConfig]
@@ -391,6 +409,24 @@ export function useConfig() {
     [setConfig]
   );
 
+  const toggleShowExtensions = useCallback(
+    () => setConfig((p) => ({ ...p, showExtensions: !p.showExtensions })),
+    [setConfig]
+  );
+
+  const toggleExtension = useCallback(
+    (name: string) => {
+      setConfig((prev) => {
+        const enabled = prev.enabledExtensions || [];
+        const next = enabled.includes(name)
+          ? enabled.filter((n) => n !== name)
+          : [...enabled, name];
+        return { ...prev, enabledExtensions: next };
+      });
+    },
+    [setConfig]
+  );
+
   return {
     config,
     activeSet,
@@ -404,6 +440,7 @@ export function useConfig() {
     setItemDeviceIcon,
     setItemForceGlyph,
     setItemForceNative,
+    setSectionOrder,
     setItemShowLabel,
     setItemDisplayType,
     switchSet,
@@ -439,5 +476,7 @@ export function useConfig() {
     toggleSimDropdown,
     toggleTerminalIcon,
     toggleDockArea,
+    toggleShowExtensions,
+    toggleExtension,
   };
 }

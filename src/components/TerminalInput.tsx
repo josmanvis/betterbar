@@ -171,7 +171,7 @@ export function TerminalInput({
           shrink-0 flex cursor-pointer focus:outline-none
           ${isVertical
             ? "w-full py-3 flex-col items-center justify-center"
-            : "h-full px-5 flex-row items-center"}
+            : "h-full px-5 ml-2 flex-row items-center"}
           text-[var(--bb-accent)] hover:bg-[var(--bb-pane)]
           border-b border-[var(--bb-line)] transition-colors duration-75
         `}

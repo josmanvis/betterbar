@@ -134,7 +134,30 @@ export interface BetterBarConfig {
   showSimDropdown: boolean;
   showTerminalIcon: boolean;
   showDockArea: boolean;
+  showExtensions: boolean;
+  enabledExtensions: string[];
+  /** Left-to-right (or top-to-bottom) order of bar sections. ⌘-drag a section
+   *  on the bar to reorder. Unknown ids are ignored and missing ones appended. */
+  sectionOrder: SectionId[];
 }
+
+/** Identifiers for the reorderable regions of the bar. */
+export type SectionId =
+  | "terminal"
+  | "pin"
+  | "run"
+  | "spacer"
+  | "time"
+  | "music"
+  | "battery"
+  | "sets"
+  | "sims"
+  | "cog"
+  | "extensions";
+
+export const DEFAULT_SECTION_ORDER: SectionId[] = [
+  "terminal", "pin", "run", "extensions", "spacer", "time", "music", "battery", "sets", "sims", "cog",
+];
 
 export const BAR_SIZE_MIN = 48;
 export const BAR_SIZE_MAX = 200;
@@ -195,4 +218,7 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   showSimDropdown: true,
   showTerminalIcon: true,
   showDockArea: true,
+  showExtensions: true,
+  enabledExtensions: [],
+  sectionOrder: DEFAULT_SECTION_ORDER,
 };
