@@ -53,6 +53,7 @@ function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     showDockArea: cfg.showDockArea === undefined ? DEFAULT_CONFIG.showDockArea : !!cfg.showDockArea,
     showExtensions: cfg.showExtensions === undefined ? DEFAULT_CONFIG.showExtensions : !!cfg.showExtensions,
     enabledExtensions: Array.isArray(cfg.enabledExtensions) ? cfg.enabledExtensions : [],
+    showSpaces: cfg.showSpaces === undefined ? DEFAULT_CONFIG.showSpaces : !!cfg.showSpaces,
     sectionOrder: normalizeSectionOrder(cfg.sectionOrder),
   };
 }
@@ -414,6 +415,11 @@ export function useConfig() {
     [setConfig]
   );
 
+  const toggleSpaces = useCallback(
+    () => setConfig((p) => ({ ...p, showSpaces: !p.showSpaces })),
+    [setConfig]
+  );
+
   const toggleExtension = useCallback(
     (name: string) => {
       setConfig((prev) => {
@@ -477,6 +483,7 @@ export function useConfig() {
     toggleTerminalIcon,
     toggleDockArea,
     toggleShowExtensions,
+    toggleSpaces,
     toggleExtension,
   };
 }

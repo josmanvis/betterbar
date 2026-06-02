@@ -1,5 +1,13 @@
 # BetterBar — Changelog
 
+## 0.8.0
+- **Extension API** — third-party React components as bar sections; Vite plugin scans `~/.betterbar/extensions/<name>/main.tsx`, transpiles with esbuild, and serves via virtual module (`EXTENSIONS.md`, `vite.config.ts`, `src/extensions-runtime.ts`).
+- **macOS Spaces integration** — `SpacesIndicator` with landscape-thumbnail rectangles; polls via `get_spaces` (uses `CGSCopyManagedDisplaySpaces` for reliable enumeration with actual workspace IDs); switching via `CGSGoToSpace`/`CGSSetWorkspace`/AppleScript fallback (`src/components/SpacesIndicator.tsx`, `src-tauri/src/lib.rs`).
+- **Bar right-click context menu** — right-click anywhere on the bar to open *BetterBar Settings…* (`src/components/DockBar.tsx`).
+- **Settings tab panels scroll fix** — `h-screen` on root + `min-h-0 overflow-y-auto` on `<main>` so tall content scrolls instead of overflowing (`src/SettingsApp.tsx`).
+- **Bug fix: `isVertical` scope** — moved `isVertical` from `useEffect`-local to component top level so all render branches can reference it (`src/components/DockBar.tsx`).
+- **Bug fix: `useWindowPosition` hook missing** — restored accidentally dropped hook call that was preventing the OS window from being resized in docked mode (`src/components/DockBar.tsx`).
+
 ## 0.7.0
 - **Now-playing music indicator** — new `MusicIndicator` component and `useMusic` polling hook (2s) show the current track with play/pause and prev/next controls; click opens the player, right-click opens settings (`src/components/MusicIndicator.tsx`, `src/hooks/useMusic.ts`). Backed by new Rust commands `get_music_info`, `focus_music_app`, `music_play_pause`, `music_next`, `music_previous` and a `MusicInfo` type (`src-tauri/src/lib.rs`, `src/types.ts`, `src/tauri-bridge.ts`).
 - **Per-icon customization** — right-click an app icon → `Change Icon` to pick the native macOS icon (`Default (native)`), a 2-letter glyph, a built-in device icon (iPad/iPhone/Watch/Windows/macOS/Linux), or a custom image. New `DockItem` fields `deviceIcon`, `forceGlyph`, `displayType`, plus `setItemDeviceIcon` / `setItemForceGlyph` / `setItemDisplayType` operations (`src/components/DockIcon.tsx`, `src/store.ts`, `src/types.ts`).

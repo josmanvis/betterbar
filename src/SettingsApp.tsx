@@ -36,6 +36,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   sims: "SIMULATORS",
   cog: "SETTINGS COG",
   extensions: "EXTENSIONS",
+  spaces: "SPACES",
 };
 
 const POSITIONS: { value: DockPosition; label: string }[] = [
@@ -104,6 +105,7 @@ export default function SettingsApp() {
     toggleTerminalIcon,
     toggleDockArea,
     toggleShowExtensions,
+    toggleSpaces,
     toggleExtension,
     setSectionOrder,
   } = useConfig();
@@ -618,6 +620,12 @@ export default function SettingsApp() {
                       description="Show third-party extensions registered on the bar"
                       enabled={config.showExtensions}
                       onToggle={toggleShowExtensions}
+                    />
+                    <Toggle
+                      label="SPACES"
+                      description="Show macOS workspace switcher rectangles"
+                      enabled={config.showSpaces}
+                      onToggle={toggleSpaces}
                     />
                   </div>
                 </Section>

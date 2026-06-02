@@ -47,6 +47,7 @@ import {
   launchSimulator,
 } from "../tauri-bridge";
 import { useExtensions } from "../extensions-runtime";
+import { useSpaces, SpacesIndicator } from "./SpacesIndicator";
 
 async function handleOpenSettings() {
   try {
@@ -56,6 +57,15 @@ async function handleOpenSettings() {
   }
 }
 
+async function handleBarContextMenu(e: React.MouseEvent) {
+  e.preventDefault();
+  const item = await MenuItem.new({
+    text: "BetterBar Settings…",
+    action: handleOpenSettings,
+  });
+  const menu = await Menu.new({ items: [item] });
+  await menu.popup();
+}
 
 const SIM_GROUPS: ({ type: string; label: string } | "sep")[] = [
   { type: "iphone",      label: "iPhone 17" },
@@ -142,12 +152,14 @@ export function DockBar({
   const swipeLabelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
+  const isVertical = config.position === "left" || config.position === "right";
+
   const battery = useBattery();
   const music = useMusic();
   const runningApps = useRunningApps();
   const runningWindows = useRunningWindows();
   const extensions = useExtensions(config.showExtensions ? config.enabledExtensions : []);
-  const isVertical = config.position === "left" || config.position === "right";
+  const spaces = useSpaces();
   useWindowPosition(config, onFloatPositionChange, autoLength, terminalExpanded && isVertical ? 320 : undefined);
 
   const sortedItems = [...activeSet.items]
@@ -788,6 +800,16 @@ export function DockBar({
     );
   }
 
+  if (config.showSpaces && spaces.length > 0) {
+    sectionNodes.spaces = (
+      <>
+        <Divider isVertical={isVertical} label="SPC" />
+        <SpacesIndicator spaces={spaces} isVertical={isVertical} />
+        <Divider isVertical={isVertical} />
+      </>
+    );
+  }
+
   sectionNodes.cog = (
     <>
       <Divider isVertical={isVertical} />
@@ -805,7 +827,7 @@ export function DockBar({
     </>
   );
 
-  const scaledSections = new Set<SectionId>(["time", "music", "battery", "sets", "sims", "cog", "extensions"]);
+  const scaledSections = new Set<SectionId>(["time", "music", "battery", "sets", "sims", "cog", "extensions", "spaces"]);
   const orderedSections = config.sectionOrder.filter((id) => sectionNodes[id] !== undefined);
 
   return (
@@ -814,6 +836,7 @@ export function DockBar({
         ref={barRef}
         onMouseMove={handleBarMouseMove}
         onMouseLeave={() => { if (!resizing) setHoverEdge(null); }}
+        onContextMenu={handleBarContextMenu}
         className={`
           fixed ${edgeClass} z-50 flex
           ${isVertical ? "flex-col items-stretch" : "flex-row items-stretch pl-3"}
@@ -1290,7 +1313,7 @@ function ExtensionIcon({
     <div
       title={name}
       style={{ width: size, height: size }}
-      className="shrink-0 flex items-center justify-center border border-[var(--bb-line)] text-[var(--bb-dim)] overflow-hidden"
+      className="shrink-0 flex items-center justify-center border border-[var(--bb-line)] text-[var(--bb-dim)] overflow-hidden hover:border-[var(--bb-accent)] hover:text-[var(--bb-accent)] cursor-pointer transition-colors"
     >
       {children}
     </div>

@@ -62,6 +62,13 @@ pub struct WindowDetails {
     pub bundle_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpaceInfo {
+    pub id: u32,
+    pub name: String,
+    pub is_current: bool,
+}
+
 // --- Commands ---
 
 #[tauri::command]
@@ -363,6 +370,22 @@ async fn music_previous() -> Result<(), String> {
     { macos::music_previous() }
     #[cfg(not(target_os = "macos"))]
     { Err("Not supported".to_string()) }
+}
+
+#[tauri::command]
+async fn get_spaces() -> Vec<SpaceInfo> {
+    #[cfg(target_os = "macos")]
+    { macos::get_spaces() }
+    #[cfg(not(target_os = "macos"))]
+    { vec![] }
+}
+
+#[tauri::command]
+async fn switch_to_space(space_id: u32) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::switch_to_space(space_id) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = space_id; Err("Not supported".to_string()) }
 }
 
 /// Show + focus the settings window. Implemented in Rust so it bypasses any
@@ -1735,6 +1758,155 @@ return "skip""#,
         Err("No music app found".to_string())
     }
 
+    pub fn get_spaces() -> Vec<super::SpaceInfo> {
+        unsafe {
+            let rtld_default = -2_isize as *mut std::os::raw::c_void;
+
+            let sym_conn = dlsym(rtld_default, b"CGSMainConnectionID\0".as_ptr().cast());
+            if sym_conn.is_null() {
+                return vec![];
+            }
+            let get_conn: unsafe extern "C" fn() -> u32 = std::mem::transmute(sym_conn);
+            let cid = get_conn();
+
+            // Try CGSCopyManagedDisplaySpaces first — returns actual space IDs
+            let sym_copy = dlsym(rtld_default, b"CGSCopyManagedDisplaySpaces\0".as_ptr().cast());
+            if !sym_copy.is_null() {
+                let copy_spaces: unsafe extern "C" fn(u32) -> CFArrayRef = std::mem::transmute(sym_copy);
+                let displays = copy_spaces(cid);
+                if !displays.is_null() {
+                    let mut spaces: Vec<super::SpaceInfo> = Vec::new();
+                    let disp_count = CFArrayGetCount(displays);
+                    let sp_key = CFStringCreateWithCString(std::ptr::null(), b"Spaces\0".as_ptr() as _, CF_STRING_ENCODING_UTF8);
+                    let cur_key = CFStringCreateWithCString(std::ptr::null(), b"Current Space\0".as_ptr() as _, CF_STRING_ENCODING_UTF8);
+                    let id64_key = CFStringCreateWithCString(std::ptr::null(), b"id64\0".as_ptr() as _, CF_STRING_ENCODING_UTF8);
+                    let name_key = CFStringCreateWithCString(std::ptr::null(), b"name\0".as_ptr() as _, CF_STRING_ENCODING_UTF8);
+
+                    let mut current_space_id: u64 = 0;
+                    for i in 0..disp_count {
+                        let display = CFArrayGetValueAtIndex(displays, i);
+                        if display.is_null() { continue; }
+
+                        // Get current space ID for this display
+                        let cur = CFDictionaryGetValue(display, cur_key);
+                        if !cur.is_null() {
+                            let id_val = CFDictionaryGetValue(cur, id64_key);
+                            if !id_val.is_null() {
+                                CFNumberGetValue(id_val, 4 /* kCFNumberSInt64Type */, &mut current_space_id as *mut _ as _);
+                            }
+                        }
+
+                        // Get spaces array
+                        let arr = CFDictionaryGetValue(display, sp_key);
+                        if arr.is_null() { continue; }
+                        let count = CFArrayGetCount(arr);
+                        for j in 0..count {
+                            let dict = CFArrayGetValueAtIndex(arr, j);
+                            if dict.is_null() { continue; }
+
+                            let mut sid: u64 = 0;
+                            let id_val = CFDictionaryGetValue(dict, id64_key);
+                            if !id_val.is_null() {
+                                CFNumberGetValue(id_val, 4 /* kCFNumberSInt64Type */, &mut sid as *mut _ as _);
+                            }
+
+                            let name = {
+                                let name_val = CFDictionaryGetValue(dict, name_key);
+                                if !name_val.is_null() {
+                                    let cf_str = core_foundation::string::CFString::wrap_under_get_rule(name_val as _);
+                                    cf_str.to_string()
+                                } else {
+                                    format!("Space {}", spaces.len() + 1)
+                                }
+                            };
+
+                            spaces.push(super::SpaceInfo {
+                                id: sid as u32,
+                                name,
+                                is_current: sid == current_space_id,
+                            });
+                        }
+                    }
+
+                    CFRelease(sp_key);
+                    CFRelease(cur_key);
+                    CFRelease(id64_key);
+                    CFRelease(name_key);
+                    CFRelease(displays);
+
+                    if !spaces.is_empty() {
+                        return spaces;
+                    }
+                }
+            }
+
+            // Fallback: old CGS workspace API
+            let sym_count = dlsym(rtld_default, b"CGSGetWorkspaceCount\0".as_ptr().cast());
+            let sym_current = dlsym(rtld_default, b"CGSGetWorkspace\0".as_ptr().cast());
+
+            let mut total: u32 = 1;
+            if !sym_count.is_null() {
+                let get_count: unsafe extern "C" fn(u32, *mut u32) -> i32 = std::mem::transmute(sym_count);
+                if get_count(cid, &mut total) != 0 || total == 0 {
+                    total = 1;
+                }
+            }
+
+            let mut current: u32 = 1;
+            if !sym_current.is_null() {
+                let get_current: unsafe extern "C" fn(u32, *mut u32) -> i32 = std::mem::transmute(sym_current);
+                let _ = get_current(cid, &mut current);
+            }
+
+            let mut spaces = Vec::new();
+            for i in 1..=total {
+                spaces.push(super::SpaceInfo {
+                    id: i,
+                    name: format!("Space {}", i),
+                    is_current: i == current,
+                });
+            }
+            spaces
+        }
+    }
+
+    pub fn switch_to_space(space_id: u32) -> Result<(), String> {
+        unsafe {
+            let rtld_default = -2_isize as *mut std::os::raw::c_void;
+            let sym_conn = dlsym(rtld_default, b"CGSMainConnectionID\0".as_ptr().cast());
+            if sym_conn.is_null() {
+                return Err("CGS not available".to_string());
+            }
+            let get_conn: unsafe extern "C" fn() -> u32 = std::mem::transmute(sym_conn);
+            let cid = get_conn();
+
+            // Try CGSGoToSpace first (64-bit workspace IDs)
+            let sym_go = dlsym(rtld_default, b"CGSGoToSpace\0".as_ptr().cast());
+            if !sym_go.is_null() {
+                let go_space: unsafe extern "C" fn(u32, u64) -> i32 = std::mem::transmute(sym_go);
+                if go_space(cid, space_id as u64) == 0 {
+                    return Ok(());
+                }
+            }
+
+            // Fallback to CGSSetWorkspace (32-bit workspace numbers)
+            let sym_set = dlsym(rtld_default, b"CGSSetWorkspace\0".as_ptr().cast());
+            if !sym_set.is_null() {
+                let set_ws: unsafe extern "C" fn(u32, u32) -> i32 = std::mem::transmute(sym_set);
+                let _ = set_ws(cid, space_id);
+            }
+
+            // AppleScript fallback: use keyboard shortcut to navigate
+            let script = format!(
+                r#"tell application "System Events"
+                    key code 124 using control down
+                end tell"#
+            );
+            let _ = Command::new("osascript").args(["-e", &script]).output();
+            Ok(())
+        }
+    }
+
     pub fn focus_music_app(app_name: &str) -> Result<(), String> {
         let script = format!(
             r#"tell application "System Events"
@@ -1795,6 +1967,8 @@ pub fn run() {
             music_play_pause,
             music_next,
             music_previous,
+            get_spaces,
+            switch_to_space,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

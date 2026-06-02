@@ -136,6 +136,7 @@ export interface BetterBarConfig {
   showDockArea: boolean;
   showExtensions: boolean;
   enabledExtensions: string[];
+  showSpaces: boolean;
   /** Left-to-right (or top-to-bottom) order of bar sections. ⌘-drag a section
    *  on the bar to reorder. Unknown ids are ignored and missing ones appended. */
   sectionOrder: SectionId[];
@@ -153,10 +154,11 @@ export type SectionId =
   | "sets"
   | "sims"
   | "cog"
-  | "extensions";
+  | "extensions"
+  | "spaces";
 
 export const DEFAULT_SECTION_ORDER: SectionId[] = [
-  "terminal", "pin", "run", "extensions", "spacer", "time", "music", "battery", "sets", "sims", "cog",
+  "terminal", "pin", "run", "extensions", "spacer", "spaces", "time", "music", "battery", "sets", "sims", "cog",
 ];
 
 export const BAR_SIZE_MIN = 48;
@@ -183,6 +185,12 @@ const DEFAULT_CLOCKS: ClockConfig[] = [
   { id: "ind", code: "IND", tz: "Asia/Kolkata" },
   { id: "gha", code: "GHA", tz: "Africa/Accra" },
 ];
+
+export interface SpaceInfo {
+  id: number;
+  name: string;
+  is_current: boolean;
+}
 
 export const DEFAULT_CONFIG: BetterBarConfig = {
   position: "left",
@@ -220,5 +228,6 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   showDockArea: true,
   showExtensions: true,
   enabledExtensions: [],
+  showSpaces: true,
   sectionOrder: DEFAULT_SECTION_ORDER,
 };

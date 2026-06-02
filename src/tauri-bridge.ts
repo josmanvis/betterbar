@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { BatteryInfo, MusicInfo, RunningApp, ScreenInfo, WindowThumbnail, WindowDetails } from "./types";
+import { BatteryInfo, MusicInfo, RunningApp, ScreenInfo, WindowThumbnail, WindowDetails, SpaceInfo } from "./types";
 
 export async function getRunningApps(): Promise<RunningApp[]> {
   return invoke<RunningApp[]>("get_running_apps");
@@ -136,4 +136,12 @@ export async function musicPrevious(): Promise<void> {
 
 export async function launchSimulator(simulatorType: string): Promise<void> {
   return invoke("launch_simulator", { simulatorType });
+}
+
+export async function getSpaces(): Promise<SpaceInfo[]> {
+  return invoke<SpaceInfo[]>("get_spaces");
+}
+
+export async function switchToSpace(spaceId: number): Promise<void> {
+  return invoke("switch_to_space", { spaceId });
 }
