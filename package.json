@@ -8,7 +8,11 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "build:universal": "tauri build --target universal-apple-darwin",
+    "build:x86": "tauri build --target x86_64-apple-darwin",
+    "build:arm": "tauri build --target aarch64-apple-darwin",
     "build-and-install": "tauri build && cp -R src-tauri/target/release/bundle/macos/BetterBar.app /Applications/ && xattr -d com.apple.quarantine /Applications/BetterBar.app || true",
+    "build-and-install:universal": "tauri build --target universal-apple-darwin && cp -R src-tauri/target/universal-apple-darwin/release/bundle/macos/BetterBar.app /Applications/ && xattr -d com.apple.quarantine /Applications/BetterBar.app || true",
     "devtop": "p tauri dev"
   },
   "dependencies": {
@@ -17,7 +21,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@phosphor-icons/react": "^2.1.10",
-    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-opener": "^2",
     "framer-motion": "^12.38.0",
     "react": "^19.1.0",
