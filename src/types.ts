@@ -137,6 +137,8 @@ export interface BetterBarConfig {
   showExtensions: boolean;
   enabledExtensions: string[];
   showSpaces: boolean;
+  /** Automatically launch BetterBar on macOS login. */
+  openOnLogin: boolean;
   /** Left-to-right (or top-to-bottom) order of bar sections. ⌘-drag a section
    *  on the bar to reorder. Unknown ids are ignored and missing ones appended. */
   sectionOrder: SectionId[];
@@ -192,6 +194,17 @@ export interface SpaceInfo {
   is_current: boolean;
 }
 
+export interface ReleaseInfo {
+  version: string;
+  name: string;
+  published_at: string;
+  body: string;
+  html_url: string;
+  download_url?: string;
+  has_update: boolean;
+  current_version: string;
+}
+
 export const DEFAULT_CONFIG: BetterBarConfig = {
   position: "left",
   iconSize: 48,
@@ -229,5 +242,6 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   showExtensions: true,
   enabledExtensions: [],
   showSpaces: true,
+  openOnLogin: false,
   sectionOrder: DEFAULT_SECTION_ORDER,
 };

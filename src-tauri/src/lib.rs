@@ -69,6 +69,18 @@ pub struct SpaceInfo {
     pub is_current: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReleaseInfo {
+    pub version: String,
+    pub name: String,
+    pub published_at: String,
+    pub body: String,
+    pub html_url: String,
+    pub download_url: Option<String>,
+    pub has_update: bool,
+    pub current_version: String,
+}
+
 // --- Commands ---
 
 #[tauri::command]
@@ -386,6 +398,38 @@ async fn switch_to_space(space_id: u32) -> Result<(), String> {
     { macos::switch_to_space(space_id) }
     #[cfg(not(target_os = "macos"))]
     { let _ = space_id; Err("Not supported".to_string()) }
+}
+
+#[tauri::command]
+async fn get_open_on_login() -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    { macos::get_open_on_login() }
+    #[cfg(not(target_os = "macos"))]
+    { Ok(false) }
+}
+
+#[tauri::command]
+async fn set_open_on_login(enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::set_open_on_login(enabled) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = enabled; Ok(()) }
+}
+
+#[tauri::command]
+async fn check_for_updates() -> Result<ReleaseInfo, String> {
+    #[cfg(target_os = "macos")]
+    { macos::check_for_updates() }
+    #[cfg(not(target_os = "macos"))]
+    { Err("Not supported".to_string()) }
+}
+
+#[tauri::command]
+async fn install_update(download_url: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::install_update(&download_url) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = download_url; Err("Not supported".to_string()) }
 }
 
 /// Show + focus the settings window. Implemented in Rust so it bypasses any
@@ -1930,6 +1974,222 @@ return "skip""#,
             Err(format!("Music app \"{}\" not running", app_name))
         }
     }
+
+    pub fn get_app_bundle_path() -> String {
+        if let Ok(exe) = std::env::current_exe() {
+            let mut path = exe.as_path();
+            while let Some(parent) = path.parent() {
+                if parent.extension().and_then(|e| e.to_str()) == Some("app") {
+                    return parent.to_string_lossy().to_string();
+                }
+                path = parent;
+            }
+        }
+        "/Applications/BetterBar.app".to_string()
+    }
+
+    pub fn get_open_on_login() -> Result<bool, String> {
+        let script = r#"tell application "System Events" to get name of every login item"#;
+        let output = Command::new("osascript")
+            .args(["-e", script])
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        if output.status.success() {
+            let names = String::from_utf8_lossy(&output.stdout);
+            let is_member = names
+                .split(',')
+                .any(|item| item.trim().eq_ignore_ascii_case("BetterBar"));
+            Ok(is_member)
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).to_string())
+        }
+    }
+
+    pub fn set_open_on_login(enabled: bool) -> Result<(), String> {
+        if enabled {
+            let app_path = get_app_bundle_path();
+            let script = format!(
+                r#"tell application "System Events"
+                    if not (exists login item "BetterBar") then
+                        make login item at end with properties {{path:"{}", hidden:false, name:"BetterBar"}}
+                    end if
+                end tell"#,
+                app_path
+            );
+            let status = Command::new("osascript")
+                .args(["-e", &script])
+                .status()
+                .map_err(|e| e.to_string())?;
+            if !status.success() {
+                return Err("Failed to create login item".to_string());
+            }
+        } else {
+            let script = r#"tell application "System Events"
+                if exists login item "BetterBar" then
+                    delete (every login item whose name is "BetterBar")
+                end if
+            end tell"#;
+            let status = Command::new("osascript")
+                .args(["-e", script])
+                .status()
+                .map_err(|e| e.to_string())?;
+            if !status.success() {
+                return Err("Failed to delete login item".to_string());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn check_for_updates() -> Result<super::ReleaseInfo, String> {
+        let current_version = env!("CARGO_PKG_VERSION").to_string();
+        let url = "https://api.github.com/repos/josmanvis/betterbar/releases/latest";
+        let output = Command::new("curl")
+            .args(["-s", "-H", "User-Agent: BetterBar-App", url])
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        if !output.status.success() {
+            return Err("Failed to query GitHub API".to_string());
+        }
+
+        let json_str = String::from_utf8_lossy(&output.stdout);
+        let val: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+
+        if let Some(msg) = val.get("message").and_then(|m| m.as_str()) {
+            if msg.contains("API rate limit") {
+                return Err("GitHub API rate limit reached. Please check back later.".to_string());
+            }
+        }
+
+        let tag_name = val.get("tag_name").and_then(|t| t.as_str()).unwrap_or("").to_string();
+        let name = val.get("name").and_then(|t| t.as_str()).unwrap_or(&tag_name).to_string();
+        let published_at = val.get("published_at").and_then(|t| t.as_str()).unwrap_or("").to_string();
+        let body = val.get("body").and_then(|t| t.as_str()).unwrap_or("").to_string();
+        let html_url = val.get("html_url").and_then(|t| t.as_str()).unwrap_or("https://github.com/josmanvis/betterbar/releases").to_string();
+
+        let remote_ver = tag_name.trim_start_matches('v').trim();
+        let curr_ver = current_version.trim_start_matches('v').trim();
+        let has_update = is_newer_version(remote_ver, curr_ver);
+
+        let mut download_url = None;
+        if let Some(assets) = val.get("assets").and_then(|a| a.as_array()) {
+            for asset in assets {
+                if let Some(aname) = asset.get("name").and_then(|n| n.as_str()) {
+                    if aname.ends_with(".tar.gz") {
+                        download_url = asset.get("browser_download_url").and_then(|u| u.as_str()).map(|s| s.to_string());
+                        break;
+                    }
+                }
+            }
+            if download_url.is_none() {
+                for asset in assets {
+                    if let Some(aname) = asset.get("name").and_then(|n| n.as_str()) {
+                        if aname.ends_with(".dmg") {
+                            download_url = asset.get("browser_download_url").and_then(|u| u.as_str()).map(|s| s.to_string());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(super::ReleaseInfo {
+            version: tag_name,
+            name,
+            published_at,
+            body,
+            html_url,
+            download_url,
+            has_update,
+            current_version: format!("v{}", current_version),
+        })
+    }
+
+    fn is_newer_version(remote: &str, current: &str) -> bool {
+        let r_parts: Vec<u32> = remote.split('.').filter_map(|s| s.parse::<u32>().ok()).collect();
+        let c_parts: Vec<u32> = current.split('.').filter_map(|s| s.parse::<u32>().ok()).collect();
+        for (r, c) in r_parts.iter().zip(c_parts.iter()) {
+            if r > c { return true; }
+            if r < c { return false; }
+        }
+        r_parts.len() > c_parts.len()
+    }
+
+    pub fn install_update(download_url: &str) -> Result<(), String> {
+        let app_target = get_app_bundle_path();
+        let tmp_dir = "/tmp/betterbar_update";
+        let _ = std::fs::remove_dir_all(tmp_dir);
+        std::fs::create_dir_all(tmp_dir).map_err(|e| e.to_string())?;
+
+        let archive_path = format!("{}/update_pkg", tmp_dir);
+        let output = Command::new("curl")
+            .args(["-L", "-f", "-o", &archive_path, download_url])
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        if !output.status.success() {
+            return Err("Failed to download update file".to_string());
+        }
+
+        // Check if tar.gz or dmg
+        if download_url.ends_with(".tar.gz") {
+            let untar = Command::new("tar")
+                .args(["-xzf", &archive_path, "-C", tmp_dir])
+                .output()
+                .map_err(|e| e.to_string())?;
+
+            if !untar.status.success() {
+                return Err("Failed to extract update archive".to_string());
+            }
+        } else if download_url.ends_with(".dmg") {
+            let mount_point = format!("{}/mount", tmp_dir);
+            let _ = std::fs::create_dir_all(&mount_point);
+            let attach = Command::new("hdiutil")
+                .args(["attach", &archive_path, "-nobrowse", "-mountpoint", &mount_point])
+                .output()
+                .map_err(|e| e.to_string())?;
+
+            if !attach.status.success() {
+                return Err("Failed to mount update DMG".to_string());
+            }
+
+            let _ = Command::new("cp")
+                .args(["-R", &format!("{}/BetterBar.app", mount_point), tmp_dir])
+                .status();
+
+            let _ = Command::new("hdiutil")
+                .args(["detach", &mount_point])
+                .status();
+        }
+
+        let new_app = format!("{}/BetterBar.app", tmp_dir);
+        if !std::path::Path::new(&new_app).exists() {
+            return Err("Extracted update does not contain BetterBar.app".to_string());
+        }
+
+        let _ = Command::new("xattr")
+            .args(["-dr", "com.apple.quarantine", &new_app])
+            .status();
+
+        // Copy over target
+        let cp_res = Command::new("cp")
+            .args(["-R", &new_app, &app_target])
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if !cp_res.success() {
+            return Err("Failed to replace application bundle with update".to_string());
+        }
+
+        // Spawn detached relaunch script and exit
+        let restart_script = format!("sleep 1 && open -n \"{}\"", app_target);
+        let _ = Command::new("sh")
+            .args(["-c", &restart_script])
+            .spawn();
+
+        std::process::exit(0);
+    }
 }
 
 // --- App entry ---
@@ -1969,6 +2229,10 @@ pub fn run() {
             music_previous,
             get_spaces,
             switch_to_space,
+            get_open_on_login,
+            set_open_on_login,
+            check_for_updates,
+            install_update,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
