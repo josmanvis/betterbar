@@ -144,6 +144,20 @@ export interface BetterBarConfig {
   /** Left-to-right (or top-to-bottom) order of bar sections. ⌘-drag a section
    *  on the bar to reorder. Unknown ids are ignored and missing ones appended. */
   sectionOrder: SectionId[];
+  /** Per-section styling overrides (padding T/R/B/L and content scale) */
+  sectionStyles?: Partial<Record<SectionId, SectionStyleConfig>>;
+}
+
+export interface SectionPadding {
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+}
+
+export interface SectionStyleConfig {
+  padding?: SectionPadding;
+  contentScale?: number;
 }
 
 /** Identifiers for the reorderable regions of the bar. */
@@ -253,4 +267,5 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   showCaffeine: true,
   openOnLogin: false,
   sectionOrder: DEFAULT_SECTION_ORDER,
+  sectionStyles: {},
 };
