@@ -62,7 +62,7 @@
     ],
     "macOS": {
       "signingIdentity": null,
-      "minimumSystemVersion": "13.0"
+      "minimumSystemVersion": "12.0"
     }
   }
 }
