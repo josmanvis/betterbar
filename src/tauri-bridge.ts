@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { BatteryInfo, MusicInfo, RunningApp, ScreenInfo, WindowThumbnail, WindowDetails, SpaceInfo } from "./types";
+import { BatteryInfo, MusicInfo, RunningApp, ScreenInfo, WindowThumbnail, WindowDetails, SpaceInfo, ReleaseInfo } from "./types";
 
 export async function getRunningApps(): Promise<RunningApp[]> {
   return invoke<RunningApp[]>("get_running_apps");
@@ -145,3 +145,21 @@ export async function getSpaces(): Promise<SpaceInfo[]> {
 export async function switchToSpace(spaceId: number): Promise<void> {
   return invoke("switch_to_space", { spaceId });
 }
+
+export async function getOpenOnLogin(): Promise<boolean> {
+  return invoke<boolean>("get_open_on_login");
+}
+
+export async function setOpenOnLogin(enabled: boolean): Promise<void> {
+  return invoke("set_open_on_login", { enabled });
+}
+
+export async function checkForUpdates(): Promise<ReleaseInfo> {
+  return invoke<ReleaseInfo>("check_for_updates");
+}
+
+export async function installUpdate(downloadUrl: string): Promise<void> {
+  return invoke("install_update", { downloadUrl });
+}
+
+

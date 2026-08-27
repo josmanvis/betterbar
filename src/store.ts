@@ -4,12 +4,13 @@ import {
   BarLengthMode, BetterBarConfig, DEFAULT_CONFIG as TYPES_DEFAULT_CONFIG, DEFAULT_SECTION_ORDER, DockItem, DockPosition,
   IconStyle, SectionId,
 } from "./types";
+import { setOpenOnLogin as tauriSetOpenOnLogin } from "./tauri-bridge";
 
 export const DEFAULT_CONFIG = TYPES_DEFAULT_CONFIG;
 
 const STORAGE_KEY = "betterbar_config";
 
-function sanitize(cfg: BetterBarConfig): BetterBarConfig {
+export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
   const barSize = Number.isFinite(cfg.barSize) ? cfg.barSize : DEFAULT_CONFIG.barSize;
   const barLength = Number.isFinite(cfg.barLength) ? cfg.barLength : DEFAULT_CONFIG.barLength;
   const fp = cfg.floatPosition;
@@ -54,6 +55,7 @@ function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     showExtensions: cfg.showExtensions === undefined ? DEFAULT_CONFIG.showExtensions : !!cfg.showExtensions,
     enabledExtensions: Array.isArray(cfg.enabledExtensions) ? cfg.enabledExtensions : [],
     showSpaces: cfg.showSpaces === undefined ? DEFAULT_CONFIG.showSpaces : !!cfg.showSpaces,
+    openOnLogin: cfg.openOnLogin === undefined ? DEFAULT_CONFIG.openOnLogin : !!cfg.openOnLogin,
     sectionOrder: normalizeSectionOrder(cfg.sectionOrder),
   };
 }
@@ -325,6 +327,20 @@ export function useConfig() {
     () => setConfig((p) => ({ ...p, hideSelf: !p.hideSelf })),
     [setConfig]
   );
+  const toggleOpenOnLogin = useCallback(() => {
+    setConfig((p) => {
+      const next = !p.openOnLogin;
+      tauriSetOpenOnLogin(next).catch(console.error);
+      return { ...p, openOnLogin: next };
+    });
+  }, [setConfig]);
+  const setOpenOnLogin = useCallback(
+    (openOnLogin: boolean) => {
+      tauriSetOpenOnLogin(openOnLogin).catch(console.error);
+      setConfig({ openOnLogin });
+    },
+    [setConfig]
+  );
   const toggleAutoHide = useCallback(() => setConfig((p) => ({ ...p, autoHide: !p.autoHide })), [setConfig]);
   const toggleLabels = useCallback(() => setConfig((p) => ({ ...p, showLabels: !p.showLabels })), [setConfig]);
   const toggleFreeFloat = useCallback(
@@ -462,6 +478,8 @@ export function useConfig() {
     toggleGrayscaleIdle,
     toggleShowRunningApps,
     toggleHideSelf,
+    toggleOpenOnLogin,
+    setOpenOnLogin,
     toggleAutoHide,
     toggleLabels,
     toggleFreeFloat,

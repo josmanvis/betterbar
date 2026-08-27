@@ -3,13 +3,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   GearSix, Lightning, Eye, EyeSlash, ArrowsOut, ArrowsOutCardinal, PencilSimple,
   Plus, Trash, MagnifyingGlass, ArrowCounterClockwise, Warning, CaretUp, CaretDown,
+  DownloadSimple, UploadSimple, Copy, Check, FileText,
 } from "@phosphor-icons/react";
 import {
    BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
-   AppSet, BarLengthMode, DockItem, DockPosition, IconStyle, TerminalApp, ClockConfig, RunningApp, SectionId,
+   AppSet, BarLengthMode, DockItem, DockPosition, IconStyle, TerminalApp, ClockConfig, RunningApp, SectionId, ReleaseInfo,
  } from "./types";
- import { useConfig, DEFAULT_CONFIG } from "./store";
- import { getInstalledTerminals, getRunningApps, checkAccessibilityPermissions, requestAccessibilityPermissions, checkScreenRecordingPermission, requestScreenRecordingPermission } from "./tauri-bridge";
+ import { useConfig, DEFAULT_CONFIG, sanitize } from "./store";
+ import { getInstalledTerminals, getRunningApps, checkAccessibilityPermissions, requestAccessibilityPermissions, checkScreenRecordingPermission, requestScreenRecordingPermission, getOpenOnLogin, checkForUpdates, installUpdate } from "./tauri-bridge";
  import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getExtensionRegistry } from "./extensions-runtime";
 
@@ -79,6 +80,8 @@ export default function SettingsApp() {
     toggleGrayscaleIdle,
     toggleShowRunningApps,
     toggleHideSelf,
+    toggleOpenOnLogin,
+    setOpenOnLogin,
     toggleAutoHide,
     toggleLabels,
     toggleFreeFloat,
@@ -156,8 +159,22 @@ export default function SettingsApp() {
     return () => { unlisten?.(); };
   }, [activeTab, checkPermissions]);
 
+  const [hasUpdate, setHasUpdate] = useState(false);
+
   useEffect(() => {
     getInstalledTerminals().then(setTerminals).catch(console.error);
+    getOpenOnLogin()
+      .then((enabled) => {
+        if (config.openOnLogin !== enabled) {
+          setOpenOnLogin(enabled);
+        }
+      })
+      .catch(console.error);
+    checkForUpdates()
+      .then((info) => {
+        if (info.has_update) setHasUpdate(true);
+      })
+      .catch(() => {});
   }, []);
 
   // Fetch running apps on-demand when behaviour tab activates
@@ -216,13 +233,16 @@ export default function SettingsApp() {
               onClick={() => setActiveTab(tab.id)}
               onKeyDown={(e) => handleTabKeyDown(e, tab.id)}
               className={`
-                px-4 py-1.5 text-[11px] font-bold tracking-[0.18em] uppercase transition-colors cursor-pointer
+                px-4 py-1.5 text-[11px] font-bold tracking-[0.18em] uppercase transition-colors cursor-pointer flex items-center gap-1.5
                 ${isActive
                   ? "bg-[var(--bb-accent)] text-black font-extrabold"
                   : "text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:bg-[var(--bb-pane)]"}
               `}
             >
-              {isActive ? `[ ${tab.label} ]` : tab.label}
+              <span>{isActive ? `[ ${tab.label} ]` : tab.label}</span>
+              {tab.id === "help" && hasUpdate && (
+                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-black" : "bg-[var(--bb-accent)]"}`} />
+              )}
             </button>
           );
         })}
@@ -409,6 +429,12 @@ export default function SettingsApp() {
               >
                 <Section number="07" title="BEHAVIOUR">
                   <div className="flex flex-col">
+                    <Toggle
+                      label="OPEN_ON_LOGIN"
+                      description="Launch BetterBar automatically when you log into macOS"
+                      enabled={config.openOnLogin}
+                      onToggle={toggleOpenOnLogin}
+                    />
                     <Toggle
                       label="AUTO-HIDE"
                       description="Bar disappears when not in use"
@@ -751,7 +777,15 @@ export default function SettingsApp() {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.12 }}
               >
-                <Section number="16" title="LEGEND">
+                <Section number="16" title="SOFTWARE_UPDATE">
+                  <UpdatesSection />
+                </Section>
+
+                <Section number="17" title="BACKUP_AND_SHARE">
+                  <BackupSection config={config} onImport={setConfig} />
+                </Section>
+
+                <Section number="18" title="LEGEND">
                   <LegendContent onReset={() => {
                     setConfirmDialog({
                       message: "Reset all settings to defaults? This cannot be undone.",
@@ -1058,7 +1092,7 @@ function Header() {
           <span className="bb-caret text-[var(--bb-accent)]">▍</span>
         </div>
         <div className="text-[11px] text-[var(--bb-dim)] tabular-nums">
-          v0.6.0
+          v0.7.0
         </div>
       </div>
       <div className="h-[2px] flex">
@@ -1069,6 +1103,334 @@ function Header() {
         <div className="w-3 bg-[var(--bb-accent)]" />
       </div>
     </header>
+  );
+}
+
+// ── UpdatesSection ─────────────────────────────────────────────────────────────
+
+function UpdatesSection() {
+  const [loading, setLoading] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+
+  const check = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const info = await checkForUpdates();
+      setReleaseInfo(info);
+      setLastChecked(new Date());
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const install = useCallback(async () => {
+    if (!releaseInfo?.download_url) return;
+    setInstalling(true);
+    setError(null);
+    try {
+      await installUpdate(releaseInfo.download_url);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+      setInstalling(false);
+    }
+  }, [releaseInfo]);
+
+  useEffect(() => {
+    check();
+  }, [check]);
+
+  return (
+    <div className="border border-[var(--bb-line)] bg-[var(--bb-pane)] p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] font-bold tracking-[0.15em] text-[var(--bb-text)] uppercase">
+            BetterBar {releaseInfo?.current_version || "v0.7.0"}
+          </span>
+          <span className="text-[9px] px-1.5 py-0.5 bg-[var(--bb-line)] text-[var(--bb-dim)] font-mono uppercase">
+            Universal (x86_64 + arm64)
+          </span>
+        </div>
+
+        <div>
+          {loading ? (
+            <span className="text-[10px] uppercase tracking-wider text-[var(--bb-dim)] flex items-center gap-1.5 font-bold">
+              <ArrowCounterClockwise size={11} weight="bold" className="animate-spin text-[var(--bb-accent)]" />
+              Checking GitHub...
+            </span>
+          ) : releaseInfo?.has_update ? (
+            <span className="text-[10px] uppercase tracking-wider text-[var(--bb-accent)] font-bold flex items-center gap-1">
+              ● UPDATE AVAILABLE: {releaseInfo.version}
+            </span>
+          ) : (
+            <span className="text-[10px] uppercase tracking-wider text-[var(--bb-accent)] font-bold flex items-center gap-1">
+              ● UP TO DATE
+            </span>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-2.5 bg-[var(--bb-bad)]/10 border border-[var(--bb-bad)]/40 text-[10px] text-[var(--bb-bad)] flex items-center gap-2">
+          <Warning size={12} weight="bold" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {releaseInfo?.has_update && (
+        <div className="space-y-2.5 border border-[var(--bb-line-2)] bg-black/40 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-[var(--bb-accent)] uppercase tracking-wider">
+              {releaseInfo.name || releaseInfo.version}
+            </span>
+            {releaseInfo.published_at && (
+              <span className="text-[9px] text-[var(--bb-mute)]">
+                {new Date(releaseInfo.published_at).toLocaleDateString(undefined, {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </span>
+            )}
+          </div>
+          {releaseInfo.body && (
+            <pre className="text-[10px] text-[var(--bb-dim)] whitespace-pre-wrap font-mono leading-relaxed max-h-32 overflow-y-auto bb-scroll">
+              {releaseInfo.body}
+            </pre>
+          )}
+          <div className="pt-2 flex items-center gap-3">
+            {releaseInfo.download_url && (
+              <button
+                onClick={install}
+                disabled={installing}
+                className="flex items-center gap-2 px-4 py-2 bg-[var(--bb-accent)] text-black text-[10px] font-bold uppercase tracking-[0.18em] hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+              >
+                {installing ? (
+                  <>
+                    <ArrowCounterClockwise size={11} weight="bold" className="animate-spin" />
+                    <span>Installing & Restarting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lightning size={11} weight="fill" />
+                    <span>Update & Restart Now</span>
+                  </>
+                )}
+              </button>
+            )}
+            <a
+              href={releaseInfo.html_url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[10px] uppercase tracking-[0.15em] text-[var(--bb-dim)] hover:text-[var(--bb-text)] transition-colors underline"
+            >
+              View on GitHub ↗
+            </a>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between pt-1 border-t border-[var(--bb-line)]/50">
+        <span className="text-[9px] text-[var(--bb-mute)]">
+          {lastChecked ? `Last checked: ${lastChecked.toLocaleTimeString()}` : "Not checked yet"}
+        </span>
+        <button
+          onClick={check}
+          disabled={loading || installing}
+          className="flex items-center gap-1.5 px-3 py-1 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)] transition-colors cursor-pointer disabled:opacity-40"
+        >
+          <ArrowCounterClockwise size={11} weight="bold" className={loading ? "animate-spin" : ""} />
+          <span>Check For Updates</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── BackupSection (Export / Import) ────────────────────────────────────────────
+
+function BackupSection({
+  config,
+  onImport,
+}: {
+  config: ReturnType<typeof useConfig>["config"];
+  onImport: (newConfig: ReturnType<typeof useConfig>["config"]) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportFile = () => {
+    try {
+      const dataStr = JSON.stringify(config, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `betterbar-config-${dateStr}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setImportStatus({ type: "success", message: "Configuration exported to JSON file." });
+    } catch (err: any) {
+      setImportStatus({ type: "error", message: `Export failed: ${err.message}` });
+    }
+  };
+
+  const handleCopy = () => {
+    try {
+      const dataStr = JSON.stringify(config, null, 2);
+      navigator.clipboard.writeText(dataStr);
+      setCopied(true);
+      setImportStatus({ type: "success", message: "Configuration copied to clipboard!" });
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err: any) {
+      setImportStatus({ type: "error", message: `Copy failed: ${err.message}` });
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const raw = event.target?.result as string;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") {
+          throw new Error("Invalid JSON format");
+        }
+        const clean = sanitize({ ...DEFAULT_CONFIG, ...parsed });
+        onImport(clean);
+        setImportStatus({
+          type: "success",
+          message: `Configuration loaded successfully! (${clean.sets.length} sets, ${clean.sets.reduce((acc, s) => acc + s.items.length, 0)} items)`,
+        });
+      } catch (err: any) {
+        setImportStatus({ type: "error", message: `Import error: ${err.message}` });
+      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+    reader.readAsText(file);
+  };
+
+  const handlePasteImport = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        setImportStatus({ type: "error", message: "Clipboard is empty." });
+        return;
+      }
+      const parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error("Clipboard content is not a valid JSON object");
+      }
+      const clean = sanitize({ ...DEFAULT_CONFIG, ...parsed });
+      onImport(clean);
+      setImportStatus({
+        type: "success",
+        message: `Pasted configuration loaded! (${clean.sets.length} sets, ${clean.sets.reduce((acc, s) => acc + s.items.length, 0)} items)`,
+      });
+    } catch (err: any) {
+      setImportStatus({ type: "error", message: `Failed to import from clipboard: ${err.message}` });
+    }
+  };
+
+  return (
+    <div className="border border-[var(--bb-line)] bg-[var(--bb-pane)] p-4 space-y-4">
+      <p className="text-[10px] text-[var(--bb-mute)] leading-relaxed normal-case">
+        Export your complete BetterBar configuration (app sets, custom icons, layout, timezones, and behavior) to JSON, or import from another Mac.
+      </p>
+
+      {importStatus && (
+        <div
+          className={`p-2.5 text-[10px] flex items-center gap-2 border ${
+            importStatus.type === "success"
+              ? "bg-[var(--bb-accent)]/10 border-[var(--bb-accent)] text-[var(--bb-text)]"
+              : "bg-[var(--bb-bad)]/10 border-[var(--bb-bad)]/40 text-[var(--bb-bad)]"
+          }`}
+        >
+          {importStatus.type === "success" ? (
+            <Check size={12} weight="bold" className="text-[var(--bb-accent)]" />
+          ) : (
+            <Warning size={12} weight="bold" />
+          )}
+          <span>{importStatus.message}</span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        {/* Export Column */}
+        <div className="space-y-2 border border-[var(--bb-line-2)] bg-black/40 p-3 flex flex-col justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-[var(--bb-text)] uppercase tracking-wider block mb-1">
+              Export Configuration
+            </span>
+            <p className="text-[9px] text-[var(--bb-mute)] normal-case leading-relaxed">
+              Save as file or copy JSON to share with another machine.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 pt-2">
+            <button
+              onClick={handleExportFile}
+              className="flex items-center justify-center gap-1.5 py-1.5 px-2 text-[10px] uppercase tracking-[0.15em] bg-[var(--bb-accent)] text-black font-bold hover:opacity-90 transition-opacity cursor-pointer"
+            >
+              <DownloadSimple size={11} weight="bold" />
+              <span>Export File (.json)</span>
+            </button>
+            <button
+              onClick={handleCopy}
+              className="flex items-center justify-center gap-1.5 py-1.5 px-2 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)] transition-colors cursor-pointer"
+            >
+              {copied ? <Check size={11} weight="bold" className="text-[var(--bb-accent)]" /> : <Copy size={11} weight="bold" />}
+              <span>{copied ? "Copied to Clipboard" : "Copy JSON"}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Import Column */}
+        <div className="space-y-2 border border-[var(--bb-line-2)] bg-black/40 p-3 flex flex-col justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-[var(--bb-text)] uppercase tracking-wider block mb-1">
+              Import Configuration
+            </span>
+            <p className="text-[9px] text-[var(--bb-mute)] normal-case leading-relaxed">
+              Load configuration from a .json file or paste from clipboard.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 pt-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".json,application/json"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center justify-center gap-1.5 py-1.5 px-2 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-accent)] text-[var(--bb-accent)] hover:bg-[var(--bb-accent)]/10 font-bold transition-colors cursor-pointer"
+            >
+              <UploadSimple size={11} weight="bold" />
+              <span>Load File (.json)</span>
+            </button>
+            <button
+              onClick={handlePasteImport}
+              className="flex items-center justify-center gap-1.5 py-1.5 px-2 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)] transition-colors cursor-pointer"
+            >
+              <FileText size={11} weight="bold" />
+              <span>Paste from Clipboard</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
