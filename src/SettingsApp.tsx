@@ -10,7 +10,7 @@ import {
    AppSet, BarLengthMode, DockItem, DockPosition, IconStyle, TerminalApp, ClockConfig, RunningApp, SectionId, ReleaseInfo,
  } from "./types";
  import { useConfig, DEFAULT_CONFIG, sanitize } from "./store";
- import { getInstalledTerminals, getRunningApps, checkAccessibilityPermissions, requestAccessibilityPermissions, checkScreenRecordingPermission, requestScreenRecordingPermission, getOpenOnLogin, checkForUpdates, installUpdate } from "./tauri-bridge";
+ import { getInstalledTerminals, getRunningApps, checkAccessibilityPermissions, requestAccessibilityPermissions, checkScreenRecordingPermission, requestScreenRecordingPermission, getOpenOnLogin, checkForUpdates, getReleaseHistory, installUpdate } from "./tauri-bridge";
  import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getExtensionRegistry } from "./extensions-runtime";
 
@@ -1100,7 +1100,7 @@ function Header() {
           <span className="bb-caret text-[var(--bb-accent)]">▍</span>
         </div>
         <div className="text-[11px] text-[var(--bb-dim)] tabular-nums">
-          v0.8.0
+          v0.9.0
         </div>
       </div>
       <div className="h-[2px] flex">
@@ -1114,21 +1114,98 @@ function Header() {
   );
 }
 
+// ── FormattedChangelog & Markdown Parser ────────────────────────────────────────
+
+function renderInlineMarkdown(text: string) {
+  const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={i} className="font-bold text-[var(--bb-text)]">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code key={i} className="px-1 py-0.5 bg-black/60 border border-[var(--bb-line)] text-[var(--bb-accent)] text-[9px] font-mono mx-0.5">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+}
+
+function FormattedChangelog({ body }: { body: string }) {
+  if (!body) {
+    return <div className="text-[10px] text-[var(--bb-mute)] italic p-2">No release notes provided.</div>;
+  }
+
+  const lines = body.split("\n");
+
+  return (
+    <div className="space-y-1.5 text-[10px] leading-relaxed font-mono">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <div key={idx} className="h-0.5" />;
+
+        if (trimmed.startsWith("###") || trimmed.startsWith("##")) {
+          const headingText = trimmed.replace(/^#+\s*/, "");
+          return (
+            <div key={idx} className="pt-2 pb-1 border-b border-[var(--bb-line)]/50 flex items-center gap-2">
+              <span className="text-[10px] font-bold text-[var(--bb-accent)] uppercase tracking-wider">
+                {headingText}
+              </span>
+            </div>
+          );
+        }
+
+        if (trimmed.startsWith("-") || trimmed.startsWith("*")) {
+          const content = trimmed.substring(1).trim();
+          return (
+            <div key={idx} className="flex items-start gap-2 pl-1 text-[var(--bb-text)]">
+              <span className="text-[var(--bb-accent)] font-bold select-none text-[9px]">▸</span>
+              <div className="flex-1 leading-normal">
+                {renderInlineMarkdown(content)}
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div key={idx} className="text-[var(--bb-dim)]">
+            {renderInlineMarkdown(trimmed)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── UpdatesSection ─────────────────────────────────────────────────────────────
 
 function UpdatesSection() {
   const [loading, setLoading] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [installStep, setInstallStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null);
+  const [historyList, setHistoryList] = useState<ReleaseInfo[]>([]);
+  const [selectedArchiveIdx, setSelectedArchiveIdx] = useState(0);
+  const [viewMode, setViewMode] = useState<"latest" | "archive">("latest");
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
 
   const check = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const info = await checkForUpdates();
+      const [info, history] = await Promise.all([
+        checkForUpdates(),
+        getReleaseHistory().catch(() => []),
+      ]);
       setReleaseInfo(info);
+      setHistoryList(history);
       setLastChecked(new Date());
     } catch (e: any) {
       setError(e?.message || String(e));
@@ -1141,11 +1218,19 @@ function UpdatesSection() {
     if (!releaseInfo?.download_url) return;
     setInstalling(true);
     setError(null);
+    setInstallStep("[1/3] Downloading latest release from GitHub...");
     try {
+      setTimeout(() => {
+        setInstallStep("[2/3] Extracting universal bundle and verifying permissions...");
+      }, 1500);
+      setTimeout(() => {
+        setInstallStep("[3/3] Replacing /Applications/BetterBar.app and relaunching...");
+      }, 3000);
       await installUpdate(releaseInfo.download_url);
     } catch (e: any) {
       setError(e?.message || String(e));
       setInstalling(false);
+      setInstallStep(null);
     }
   }, [releaseInfo]);
 
@@ -1153,12 +1238,17 @@ function UpdatesSection() {
     check();
   }, [check]);
 
+  const activeDisplayRelease = viewMode === "archive" && historyList.length > 0
+    ? historyList[selectedArchiveIdx] || releaseInfo
+    : releaseInfo;
+
   return (
     <div className="border border-[var(--bb-line)] bg-[var(--bb-pane)] p-4 space-y-4">
-      <div className="flex items-center justify-between">
+      {/* Top Banner Status */}
+      <div className="flex items-center justify-between border-b border-[var(--bb-line)] pb-3">
         <div className="flex items-center gap-2">
           <span className="text-[12px] font-bold tracking-[0.15em] text-[var(--bb-text)] uppercase">
-            BetterBar {releaseInfo?.current_version || "v0.7.0"}
+            BetterBar {releaseInfo?.current_version || "v0.9.0"}
           </span>
           <span className="text-[9px] px-1.5 py-0.5 bg-[var(--bb-line)] text-[var(--bb-dim)] font-mono uppercase">
             Universal (x86_64 + arm64)
@@ -1190,14 +1280,23 @@ function UpdatesSection() {
         </div>
       )}
 
+      {/* Update Action Card (when update available) */}
       {releaseInfo?.has_update && (
-        <div className="space-y-2.5 border border-[var(--bb-line-2)] bg-black/40 p-3">
+        <div className="border border-[var(--bb-accent)] bg-[var(--bb-accent)]/5 p-3.5 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[var(--bb-accent)] uppercase tracking-wider">
-              {releaseInfo.name || releaseInfo.version}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[var(--bb-accent)] text-black">
+                NEW VERSION
+              </span>
+              <span className="text-[12px] font-bold text-[var(--bb-text)] tracking-wider">
+                {releaseInfo.version}
+              </span>
+              <span className="text-[10px] text-[var(--bb-mute)]">
+                (currently on {releaseInfo.current_version})
+              </span>
+            </div>
             {releaseInfo.published_at && (
-              <span className="text-[9px] text-[var(--bb-mute)]">
+              <span className="text-[9px] text-[var(--bb-dim)] font-mono">
                 {new Date(releaseInfo.published_at).toLocaleDateString(undefined, {
                   year: "numeric",
                   month: "short",
@@ -1206,12 +1305,15 @@ function UpdatesSection() {
               </span>
             )}
           </div>
-          {releaseInfo.body && (
-            <pre className="text-[10px] text-[var(--bb-dim)] whitespace-pre-wrap font-mono leading-relaxed max-h-32 overflow-y-auto bb-scroll">
-              {releaseInfo.body}
-            </pre>
+
+          {installing && installStep && (
+            <div className="p-2.5 bg-black/60 border border-[var(--bb-accent)]/50 text-[10px] text-[var(--bb-accent)] flex items-center gap-2">
+              <ArrowCounterClockwise size={12} weight="bold" className="animate-spin text-[var(--bb-accent)]" />
+              <span className="font-mono">{installStep}</span>
+            </div>
           )}
-          <div className="pt-2 flex items-center gap-3">
+
+          <div className="flex items-center gap-3 pt-1">
             {releaseInfo.download_url && (
               <button
                 onClick={install}
@@ -1221,7 +1323,7 @@ function UpdatesSection() {
                 {installing ? (
                   <>
                     <ArrowCounterClockwise size={11} weight="bold" className="animate-spin" />
-                    <span>Installing & Restarting...</span>
+                    <span>Updating...</span>
                   </>
                 ) : (
                   <>
@@ -1243,8 +1345,79 @@ function UpdatesSection() {
         </div>
       )}
 
+      {/* Integrated Changelog & Release Notes Viewer */}
+      <div className="border border-[var(--bb-line-2)] bg-black/50 p-3 space-y-3">
+        <div className="flex items-center justify-between border-b border-[var(--bb-line)] pb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-[var(--bb-text)] uppercase tracking-wider">
+              Changelog & Release Notes
+            </span>
+            {activeDisplayRelease?.version && (
+              <span className="text-[9px] px-1.5 py-0.2 bg-[var(--bb-line)] text-[var(--bb-accent)] font-mono">
+                {activeDisplayRelease.version}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setViewMode("latest")}
+              className={`px-2 py-0.5 text-[9px] uppercase tracking-wider font-bold transition-colors cursor-pointer ${
+                viewMode === "latest"
+                  ? "bg-[var(--bb-accent)] text-black"
+                  : "text-[var(--bb-dim)] hover:text-[var(--bb-text)]"
+              }`}
+            >
+              Latest
+            </button>
+            {historyList.length > 0 && (
+              <button
+                onClick={() => setViewMode("archive")}
+                className={`px-2 py-0.5 text-[9px] uppercase tracking-wider font-bold transition-colors cursor-pointer ${
+                  viewMode === "archive"
+                    ? "bg-[var(--bb-accent)] text-black"
+                    : "text-[var(--bb-dim)] hover:text-[var(--bb-text)]"
+                }`}
+              >
+                Archive ({historyList.length})
+              </button>
+            )}
+          </div>
+        </div>
+
+        {viewMode === "archive" && historyList.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 bb-scroll">
+            {historyList.map((rel, idx) => (
+              <button
+                key={rel.version}
+                onClick={() => setSelectedArchiveIdx(idx)}
+                className={`px-2 py-1 text-[9px] font-mono uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap border ${
+                  selectedArchiveIdx === idx
+                    ? "border-[var(--bb-accent)] bg-[var(--bb-accent)]/10 text-[var(--bb-accent)] font-bold"
+                    : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)]"
+                }`}
+              >
+                {rel.version}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Formatted Markdown Content */}
+        <div className="max-h-60 overflow-y-auto bb-scroll p-2 bg-black/40 border border-[var(--bb-line-2)]">
+          {activeDisplayRelease?.body ? (
+            <FormattedChangelog body={activeDisplayRelease.body} />
+          ) : (
+            <div className="text-[10px] text-[var(--bb-mute)] italic p-2">
+              {loading ? "Fetching changelog..." : "No changelog available for this release."}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer Check For Updates Button */}
       <div className="flex items-center justify-between pt-1 border-t border-[var(--bb-line)]/50">
-        <span className="text-[9px] text-[var(--bb-mute)]">
+        <span className="text-[9px] text-[var(--bb-mute)] font-mono">
           {lastChecked ? `Last checked: ${lastChecked.toLocaleTimeString()}` : "Not checked yet"}
         </span>
         <button
