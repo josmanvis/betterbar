@@ -59,17 +59,30 @@ Replace your macOS Dock with a minimal, monospace bar that shows pinned apps, ru
 
 ## Installation
 
-### Prerequisites
+### Via Homebrew (Recommended)
 
-- macOS 13.0+
-- [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) with the macOS target (`rustup target add aarch64-apple-darwin`)
+```bash
+brew install josmanvis/betterbar/betterbar
+```
+
+Or via two-step tap:
+
+```bash
+brew tap josmanvis/betterbar
+brew install --cask betterbar
+```
 
 ### From Release
 
-Download the latest `.dmg` or `.app` from the releases page.
+Download the latest `.dmg` or `.tar.gz` from the [GitHub Releases](https://github.com/josmanvis/betterbar/releases) page.
 
 ### From Source
+
+#### Prerequisites
+
+- macOS 13.0+
+- [Node.js](https://nodejs.org/) 18+
+- [Rust](https://rustup.rs/) with the macOS target (`rustup target add aarch64-apple-darwin` or `rustup target add x86_64-apple-darwin`)
 
 ```bash
 git clone https://github.com/josmanvis/betterbar.git
