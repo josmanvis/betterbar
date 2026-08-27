@@ -37,9 +37,7 @@ jobs:
         run: |
           mkdir -p release-assets
           cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg release-assets/ || true
-          cd src-tauri/target/universal-apple-darwin/release/bundle/macos
-          tar -czf ../../../../../release-assets/BetterBar_${{ github.ref_name }}_universal_macOS.tar.gz BetterBar.app
-          cd -
+          tar -C src-tauri/target/universal-apple-darwin/release/bundle/macos -czf release-assets/BetterBar_${{ github.ref_name }}_universal_macOS.tar.gz BetterBar.app
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

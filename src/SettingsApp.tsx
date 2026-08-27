@@ -1100,7 +1100,7 @@ function Header() {
           <span className="bb-caret text-[var(--bb-accent)]">▍</span>
         </div>
         <div className="text-[11px] text-[var(--bb-dim)] tabular-nums">
-          v0.9.0
+          v0.10.0
         </div>
       </div>
       <div className="h-[2px] flex">
@@ -1248,7 +1248,7 @@ function UpdatesSection() {
       <div className="flex items-center justify-between border-b border-[var(--bb-line)] pb-3">
         <div className="flex items-center gap-2">
           <span className="text-[12px] font-bold tracking-[0.15em] text-[var(--bb-text)] uppercase">
-            BetterBar {releaseInfo?.current_version || "v0.9.0"}
+            BetterBar {releaseInfo?.current_version || "v0.10.0"}
           </span>
           <span className="text-[9px] px-1.5 py-0.5 bg-[var(--bb-line)] text-[var(--bb-dim)] font-mono uppercase">
             Universal (x86_64 + arm64)

@@ -1,5 +1,9 @@
 # BetterBar — Changelog
 
+## 0.10.0
+- **Per-Section Padding & Custom Scale Controls** — configure top, right, bottom, and left padding and zoom scale per section, supporting pixel-perfect layout alignment across all bar items (`src/components/DockBar.tsx`, `src/types.ts`, `src/store.ts`).
+- **Caffeine Component Scaling Integration** — updated caffeine indicator styling to respect global and custom bar scaling seamlessly (`src/components/DockBar.tsx`).
+
 ## 0.9.0
 - **Caffeine / Keep Awake sleep prevention indicator** — keep macOS display and system awake with native \`caffeinate\` integration; left-click to toggle, right-click to pick durations (15m, 30m, 1h, 2h, 5h, or indefinite); customizable in \`SECTIONS\` settings (\`src/components/CaffeineIndicator.tsx\`, \`src/hooks/useCaffeine.ts\`, \`src-tauri/src/lib.rs\`).
 - **Transparent & Detailed Changelog & Release Viewer** — integrated in-app markdown changelog parser with headings, highlighted code badges, and bullet items; browse current and historical release notes right in the UI (\`src/SettingsApp.tsx\`).

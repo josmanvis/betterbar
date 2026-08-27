@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import {
   AppSet, BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
   BarLengthMode, BetterBarConfig, DEFAULT_CONFIG as TYPES_DEFAULT_CONFIG, DEFAULT_SECTION_ORDER, DockItem, DockPosition,
-  IconStyle, SectionId,
+  IconStyle, SectionId, SectionPadding, SectionStyleConfig,
 } from "./types";
 import { setOpenOnLogin as tauriSetOpenOnLogin } from "./tauri-bridge";
 
@@ -58,7 +58,34 @@ export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     showCaffeine: cfg.showCaffeine === undefined ? DEFAULT_CONFIG.showCaffeine : !!cfg.showCaffeine,
     openOnLogin: cfg.openOnLogin === undefined ? DEFAULT_CONFIG.openOnLogin : !!cfg.openOnLogin,
     sectionOrder: normalizeSectionOrder(cfg.sectionOrder),
+    sectionStyles: sanitizeSectionStyles(cfg.sectionStyles),
   };
+}
+
+function sanitizeSectionStyles(
+  styles: unknown
+): Partial<Record<SectionId, SectionStyleConfig>> {
+  if (!styles || typeof styles !== "object") return {};
+  const out: Partial<Record<SectionId, SectionStyleConfig>> = {};
+  for (const [key, val] of Object.entries(styles as Record<string, any>)) {
+    if (DEFAULT_SECTION_ORDER.includes(key as SectionId) && val && typeof val === "object") {
+      const p = val.padding;
+      const padding = p && typeof p === "object" ? {
+        top: Number.isFinite(p.top) ? Math.max(0, Math.min(100, Math.round(p.top))) : undefined,
+        right: Number.isFinite(p.right) ? Math.max(0, Math.min(100, Math.round(p.right))) : undefined,
+        bottom: Number.isFinite(p.bottom) ? Math.max(0, Math.min(100, Math.round(p.bottom))) : undefined,
+        left: Number.isFinite(p.left) ? Math.max(0, Math.min(100, Math.round(p.left))) : undefined,
+      } : undefined;
+      const contentScale = Number.isFinite(val.contentScale)
+        ? Math.max(0.3, Math.min(3.0, Number(val.contentScale.toFixed(2))))
+        : undefined;
+      out[key as SectionId] = {
+        padding,
+        contentScale,
+      };
+    }
+  }
+  return out;
 }
 
 /** Keep only known section ids (dropping unknowns/dupes) and append any known
@@ -505,5 +532,28 @@ export function useConfig() {
     toggleSpaces,
     toggleCaffeine: useCallback(() => setConfig((p) => ({ ...p, showCaffeine: !p.showCaffeine })), [setConfig]),
     toggleExtension,
+    setSectionPadding: useCallback((sectionId: SectionId, padding: SectionPadding) => {
+      setConfig((prev) => {
+        const styles = { ...(prev.sectionStyles || {}) };
+        const existing = styles[sectionId] || {};
+        styles[sectionId] = { ...existing, padding: { ...(existing.padding || {}), ...padding } };
+        return { ...prev, sectionStyles: styles };
+      });
+    }, [setConfig]),
+    setSectionContentScale: useCallback((sectionId: SectionId, contentScale: number) => {
+      setConfig((prev) => {
+        const styles = { ...(prev.sectionStyles || {}) };
+        const existing = styles[sectionId] || {};
+        styles[sectionId] = { ...existing, contentScale };
+        return { ...prev, sectionStyles: styles };
+      });
+    }, [setConfig]),
+    resetSectionStyle: useCallback((sectionId: SectionId) => {
+      setConfig((prev) => {
+        const styles = { ...(prev.sectionStyles || {}) };
+        delete styles[sectionId];
+        return { ...prev, sectionStyles: styles };
+      });
+    }, [setConfig]),
   };
 }

@@ -837,7 +837,7 @@ export function DockBar({
     </>
   );
 
-  const scaledSections = new Set<SectionId>(["time", "music", "battery", "sets", "sims", "cog", "extensions", "spaces"]);
+  const scaledSections = new Set<SectionId>(["time", "music", "caffeine", "battery", "sets", "sims", "cog", "extensions", "spaces"]);
   const orderedSections = config.sectionOrder.filter((id) => sectionNodes[id] !== undefined);
 
   return (
@@ -877,10 +877,22 @@ export function DockBar({
         {orderedSections.map((id) => {
           if (id === "spacer") return <div key={id} className="flex-1" />;
           const scaled = scaledSections.has(id);
+          const customStyle = config.sectionStyles?.[id];
+          const pad = customStyle?.padding;
+          const sectionScale = (customStyle?.contentScale ?? 1.0) * (scaled ? config.contentScale : 1.0);
+
+          const styleObj: React.CSSProperties = {
+            ...(sectionScale !== 1.0 ? ({ zoom: sectionScale } as any) : {}),
+            paddingTop: pad?.top !== undefined ? `${pad.top}px` : undefined,
+            paddingRight: pad?.right !== undefined ? `${pad.right}px` : undefined,
+            paddingBottom: pad?.bottom !== undefined ? `${pad.bottom}px` : undefined,
+            paddingLeft: pad?.left !== undefined ? `${pad.left}px` : undefined,
+          };
+
           return (
             <div
               key={id}
-              style={scaled ? ({ zoom: config.contentScale } as any) : undefined}
+              style={styleObj}
               className={`flex ${isVertical ? "flex-col" : "flex-row"} ${scaled ? "items-center justify-center" : "items-stretch"}`}
             >
               {sectionNodes[id]}
