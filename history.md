@@ -1,6 +1,10 @@
 # BetterBar — Changelog
 
 ## 0.8.0
+- **Universal Binary & Intel Mac Support** — compiled as a Universal Mach-O binary (`x86_64` + `arm64`) to run smoothly on all Intel Macs and Apple Silicon Macs natively.
+- **Open on Login setting** — automatically launch BetterBar on system startup, managed via macOS System Events under the `BEHAVIOUR` tab.
+- **GitHub Auto-Update & In-App Updater** — check for updates directly against GitHub Releases, review release notes, and install updates with one-click restart under `HELP` → `SOFTWARE_UPDATE`.
+- **Export & Import Configurations** — export full BetterBar configuration (sets, items, layout, custom icons) to `.json` files or clipboard, and import across different Macs under `HELP` → `BACKUP_AND_SHARE`.
 - **Extension API** — third-party React components as bar sections; Vite plugin scans `~/.betterbar/extensions/<name>/main.tsx`, transpiles with esbuild, and serves via virtual module (`EXTENSIONS.md`, `vite.config.ts`, `src/extensions-runtime.ts`).
 - **macOS Spaces integration** — `SpacesIndicator` with landscape-thumbnail rectangles; polls via `get_spaces` (uses `CGSCopyManagedDisplaySpaces` for reliable enumeration with actual workspace IDs); switching via `CGSGoToSpace`/`CGSSetWorkspace`/AppleScript fallback (`src/components/SpacesIndicator.tsx`, `src-tauri/src/lib.rs`).
 - **Bar right-click context menu** — right-click anywhere on the bar to open *BetterBar Settings…* (`src/components/DockBar.tsx`).

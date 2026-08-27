@@ -1092,7 +1092,7 @@ function Header() {
           <span className="bb-caret text-[var(--bb-accent)]">▍</span>
         </div>
         <div className="text-[11px] text-[var(--bb-dim)] tabular-nums">
-          v0.7.0
+          v0.8.0
         </div>
       </div>
       <div className="h-[2px] flex">
