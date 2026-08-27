@@ -158,6 +158,10 @@ export async function checkForUpdates(): Promise<ReleaseInfo> {
   return invoke<ReleaseInfo>("check_for_updates");
 }
 
+export async function getReleaseHistory(): Promise<ReleaseInfo[]> {
+  return invoke<ReleaseInfo[]>("get_release_history");
+}
+
 export async function installUpdate(downloadUrl: string): Promise<void> {
   return invoke("install_update", { downloadUrl });
 }

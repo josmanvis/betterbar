@@ -1,5 +1,11 @@
 # BetterBar — Changelog
 
+## 0.9.0
+- **Caffeine / Keep Awake sleep prevention indicator** — keep macOS display and system awake with native \`caffeinate\` integration; left-click to toggle, right-click to pick durations (15m, 30m, 1h, 2h, 5h, or indefinite); customizable in \`SECTIONS\` settings (\`src/components/CaffeineIndicator.tsx\`, \`src/hooks/useCaffeine.ts\`, \`src-tauri/src/lib.rs\`).
+- **Transparent & Detailed Changelog & Release Viewer** — integrated in-app markdown changelog parser with headings, highlighted code badges, and bullet items; browse current and historical release notes right in the UI (\`src/SettingsApp.tsx\`).
+- **Release Notes Archive** — new tab in \`SOFTWARE_UPDATE\` to inspect past versions and what was changed across every release without leaving BetterBar (\`src/SettingsApp.tsx\`, \`src-tauri/src/lib.rs\`).
+- **Multi-step Update Progress Feedback** — step-by-step progress status during download, package extraction, quarantine clearing, and app relaunch (\`src/SettingsApp.tsx\`).
+
 ## 0.8.0
 - **Universal Binary & Intel Mac Support** — compiled as a Universal Mach-O binary (`x86_64` + `arm64`) to run smoothly on all Intel Macs and Apple Silicon Macs natively.
 - **Open on Login setting** — automatically launch BetterBar on system startup, managed via macOS System Events under the `BEHAVIOUR` tab.

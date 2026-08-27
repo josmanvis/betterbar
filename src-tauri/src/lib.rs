@@ -431,6 +431,14 @@ async fn check_for_updates() -> Result<ReleaseInfo, String> {
 }
 
 #[tauri::command]
+async fn get_release_history() -> Result<Vec<ReleaseInfo>, String> {
+    #[cfg(target_os = "macos")]
+    { macos::get_release_history() }
+    #[cfg(not(target_os = "macos"))]
+    { Ok(vec![]) }
+}
+
+#[tauri::command]
 async fn install_update(download_url: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::install_update(&download_url) }
@@ -2136,6 +2144,69 @@ return "skip""#,
         })
     }
 
+    pub fn get_release_history() -> Result<Vec<super::ReleaseInfo>, String> {
+        let url = "https://api.github.com/repos/josmanvis/betterbar/releases?per_page=10";
+        let output = Command::new("curl")
+            .args([
+                "-s",
+                "-H", "User-Agent: BetterBar-App",
+                "-H", "Accept: application/vnd.github.v3+json",
+                url,
+            ])
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        if !output.status.success() {
+            return Err("Failed to query GitHub releases".to_string());
+        }
+
+        let json_str = String::from_utf8_lossy(&output.stdout);
+        let val: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+
+        let current_version = env!("CARGO_PKG_VERSION");
+        let mut list = Vec::new();
+
+        if let Some(releases) = val.as_array() {
+            for rel in releases {
+                let tag_name = rel.get("tag_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let name = rel.get("name").and_then(|v| v.as_str()).unwrap_or(&tag_name).to_string();
+                let published_at = rel.get("published_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let body = rel.get("body").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let html_url = rel.get("html_url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+                let mut download_url = None;
+                if let Some(assets) = rel.get("assets").and_then(|a| a.as_array()) {
+                    for asset in assets {
+                        let asset_name = asset.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                        let browser_download_url = asset.get("browser_download_url").and_then(|v| v.as_str()).unwrap_or("");
+                        if asset_name.ends_with(".tar.gz") {
+                            download_url = Some(browser_download_url.to_string());
+                            break;
+                        } else if asset_name.ends_with(".dmg") && download_url.is_none() {
+                            download_url = Some(browser_download_url.to_string());
+                        }
+                    }
+                }
+
+                let clean_tag = tag_name.trim_start_matches('v');
+                let has_update = is_newer_version(clean_tag, current_version);
+
+                list.push(super::ReleaseInfo {
+                    version: tag_name,
+                    name,
+                    published_at,
+                    body,
+                    html_url,
+                    download_url,
+                    has_update,
+                    current_version: format!("v{}", current_version),
+                });
+            }
+        }
+
+        Ok(list)
+    }
+
     fn is_newer_version(remote: &str, current: &str) -> bool {
         let r_parts: Vec<u32> = remote.split('.').filter_map(|s| s.parse::<u32>().ok()).collect();
         let c_parts: Vec<u32> = current.split('.').filter_map(|s| s.parse::<u32>().ok()).collect();
@@ -2344,6 +2415,7 @@ pub fn run() {
             get_open_on_login,
             set_open_on_login,
             check_for_updates,
+            get_release_history,
             install_update,
             get_caffeine_status,
             set_caffeine,
