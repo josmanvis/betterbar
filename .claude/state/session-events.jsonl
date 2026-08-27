@@ -121,3 +121,8 @@
 {"data":{"command":"npx tsc --noEmit 2\u003e\u00261 | head -30; echo \"EXIT: $?\""},"id":"event-000121","state":"stopped","ts":"2026-05-26T23:59:58Z","type":"tool.bash"}
 {"data":{"command":"npm run build 2\u003e\u00261 | tail -4"},"id":"event-000122","state":"stopped","ts":"2026-05-27T00:00:05Z","type":"tool.bash"}
 {"data":{"command":"grep -rn \"SortableSection\\|sectionSensors\\|handleSectionDragEnd\\|IconPointerSensor\\|SectionPointerSensor\\|useSortable\\|@dnd-kit/utilities\" /Users/jose.viscasillas/Developer/betterbar/src/components/Do"},"id":"event-000123","state":"stopped","ts":"2026-05-27T00:00:11Z","type":"tool.bash"}
+{"data":{"command":"grep -E '\"tauri\"' /Users/jose.viscasillas/Developer/betterbar/src-tauri/Cargo.toml"},"id":"event-000001","state":"initialized","ts":"2026-06-07T18:22:35Z","type":"tool.bash"}
+{"data":{"command":"grep -E '@tauri-apps' /Users/jose.viscasillas/Developer/betterbar/package.json"},"id":"event-000002","state":"initialized","ts":"2026-06-07T18:22:36Z","type":"tool.bash"}
+{"data":{"command":"grep -A2 '\\[dependencies\\]' /Users/jose.viscasillas/Developer/betterbar/src-tauri/Cargo.toml | head -20"},"id":"event-000003","state":"initialized","ts":"2026-06-07T18:22:40Z","type":"tool.bash"}
+{"data":{"command":"cd /Users/jose.viscasillas/Developer/betterbar \u0026\u0026 pnpm tauri build 2\u003e\u00261 | tail -20"},"id":"event-000004","state":"initialized","ts":"2026-06-07T18:24:33Z","type":"tool.bash"}
+{"data":{"command":"lsof -ti :1420 | xargs kill -9 2\u003e/dev/null \u0026\u0026 echo \"killed\""},"id":"event-000005","state":"stopped","ts":"2026-06-07T18:37:43Z","type":"tool.bash"}

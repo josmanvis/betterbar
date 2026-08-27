@@ -28,3 +28,64 @@
 - （必要に応じて追記）
 
 ---
+
+## セッション: 2026-06-07T18:24:37Z
+
+- session_id: `session-1780856550242869000`
+- project: `betterbar`
+- branch: `feature/macos-native-look-bottom`
+- started_at: `2026-06-07T18:22:30Z`
+- ended_at: `2026-06-07T18:24:37Z`
+- duration_minutes: 2
+- changes: 0
+
+### 変更ファイル
+- （なし）
+
+### 重要な変更（important=true）
+- （なし）
+
+### 次回への引き継ぎ（任意）
+- （必要に応じて追記）
+
+---
+
+## セッション: 2026-06-10T02:34:29Z
+
+- session_id: `session-1781058860654144000`
+- project: `betterbar`
+- branch: `feature/macos-native-look-bottom`
+- started_at: `2026-06-10T02:34:20Z`
+- ended_at: `2026-06-10T02:34:29Z`
+- changes: 0
+
+### 変更ファイル
+- （なし）
+
+### 重要な変更（important=true）
+- （なし）
+
+### 次回への引き継ぎ（任意）
+- （必要に応じて追記）
+
+---
+
+## セッション: 2026-06-10T20:09:33Z
+
+- session_id: `session-1781122163066119000`
+- project: `betterbar`
+- branch: `feature/macos-native-look-bottom`
+- started_at: `2026-06-10T20:09:22Z`
+- ended_at: `2026-06-10T20:09:33Z`
+- changes: 0
+
+### 変更ファイル
+- （なし）
+
+### 重要な変更（important=true）
+- （なし）
+
+### 次回への引き継ぎ（任意）
+- （必要に応じて追記）
+
+---
