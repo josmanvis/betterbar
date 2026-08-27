@@ -55,6 +55,7 @@ export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     showExtensions: cfg.showExtensions === undefined ? DEFAULT_CONFIG.showExtensions : !!cfg.showExtensions,
     enabledExtensions: Array.isArray(cfg.enabledExtensions) ? cfg.enabledExtensions : [],
     showSpaces: cfg.showSpaces === undefined ? DEFAULT_CONFIG.showSpaces : !!cfg.showSpaces,
+    showCaffeine: cfg.showCaffeine === undefined ? DEFAULT_CONFIG.showCaffeine : !!cfg.showCaffeine,
     openOnLogin: cfg.openOnLogin === undefined ? DEFAULT_CONFIG.openOnLogin : !!cfg.openOnLogin,
     sectionOrder: normalizeSectionOrder(cfg.sectionOrder),
   };
@@ -502,6 +503,7 @@ export function useConfig() {
     toggleDockArea,
     toggleShowExtensions,
     toggleSpaces,
+    toggleCaffeine: useCallback(() => setConfig((p) => ({ ...p, showCaffeine: !p.showCaffeine })), [setConfig]),
     toggleExtension,
   };
 }

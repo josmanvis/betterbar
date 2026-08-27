@@ -32,6 +32,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   spacer: "SPACER / GAP",
   time: "CLOCKS",
   music: "MUSIC",
+  caffeine: "CAFFEINE",
   battery: "BATTERY",
   sets: "SET SWITCHER",
   sims: "SIMULATORS",
@@ -109,6 +110,7 @@ export default function SettingsApp() {
     toggleDockArea,
     toggleShowExtensions,
     toggleSpaces,
+    toggleCaffeine,
     toggleExtension,
     setSectionOrder,
   } = useConfig();
@@ -622,6 +624,12 @@ export default function SettingsApp() {
                       description="Show the battery percentage indicator"
                       enabled={config.showBattery}
                       onToggle={toggleBattery}
+                    />
+                    <Toggle
+                      label="CAFFEINE / KEEP AWAKE"
+                      description="Show the caffeine coffee cup indicator to prevent display and system sleep"
+                      enabled={config.showCaffeine}
+                      onToggle={toggleCaffeine}
                     />
                     <Toggle
                       label="SET SWITCHER"

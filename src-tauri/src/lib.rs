@@ -81,6 +81,12 @@ pub struct ReleaseInfo {
     pub current_version: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaffeineStatus {
+    pub active: bool,
+    pub minutes_remaining: Option<u32>,
+}
+
 // --- Commands ---
 
 #[tauri::command]
@@ -430,6 +436,30 @@ async fn install_update(download_url: String) -> Result<(), String> {
     { macos::install_update(&download_url) }
     #[cfg(not(target_os = "macos"))]
     { let _ = download_url; Err("Not supported".to_string()) }
+}
+
+#[tauri::command]
+async fn get_caffeine_status() -> CaffeineStatus {
+    #[cfg(target_os = "macos")]
+    { macos::get_caffeine_status() }
+    #[cfg(not(target_os = "macos"))]
+    { CaffeineStatus { active: false, minutes_remaining: None } }
+}
+
+#[tauri::command]
+async fn set_caffeine(enabled: bool, duration_mins: Option<u32>) -> Result<CaffeineStatus, String> {
+    #[cfg(target_os = "macos")]
+    { macos::set_caffeine(enabled, duration_mins) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = (enabled, duration_mins); Ok(CaffeineStatus { active: false, minutes_remaining: None }) }
+}
+
+#[tauri::command]
+async fn toggle_caffeine(duration_mins: Option<u32>) -> Result<CaffeineStatus, String> {
+    #[cfg(target_os = "macos")]
+    { macos::toggle_caffeine(duration_mins) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = duration_mins; Ok(CaffeineStatus { active: false, minutes_remaining: None }) }
 }
 
 /// Show + focus the settings window. Implemented in Rust so it bypasses any
@@ -2190,6 +2220,88 @@ return "skip""#,
 
         std::process::exit(0);
     }
+
+    struct CaffeineState {
+        child: Option<std::process::Child>,
+        end_time: Option<std::time::Instant>,
+    }
+
+    static CAFFEINE_STATE: std::sync::Mutex<CaffeineState> = std::sync::Mutex::new(CaffeineState {
+        child: None,
+        end_time: None,
+    });
+
+    pub fn get_caffeine_status() -> crate::CaffeineStatus {
+        let mut state = CAFFEINE_STATE.lock().unwrap();
+        if let Some(ref mut child) = state.child {
+            match child.try_wait() {
+                Ok(Some(_)) => {
+                    state.child = None;
+                    state.end_time = None;
+                    crate::CaffeineStatus { active: false, minutes_remaining: None }
+                }
+                Ok(None) => {
+                    let mins_remaining = state.end_time.map(|end| {
+                        let now = std::time::Instant::now();
+                        if end > now {
+                            let secs = (end - now).as_secs();
+                            ((secs + 59) / 60) as u32
+                        } else {
+                            0
+                        }
+                    });
+                    crate::CaffeineStatus { active: true, minutes_remaining: mins_remaining }
+                }
+                Err(_) => {
+                    state.child = None;
+                    state.end_time = None;
+                    crate::CaffeineStatus { active: false, minutes_remaining: None }
+                }
+            }
+        } else {
+            crate::CaffeineStatus { active: false, minutes_remaining: None }
+        }
+    }
+
+    pub fn set_caffeine(enabled: bool, duration_mins: Option<u32>) -> Result<crate::CaffeineStatus, String> {
+        let mut state = CAFFEINE_STATE.lock().unwrap();
+        if let Some(mut child) = state.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        state.end_time = None;
+
+        if enabled {
+            let mut cmd = std::process::Command::new("/usr/bin/caffeinate");
+            cmd.arg("-d").arg("-i").arg("-m");
+            if let Some(mins) = duration_mins {
+                if mins > 0 {
+                    let secs = mins * 60;
+                    cmd.arg("-t").arg(secs.to_string());
+                    state.end_time = Some(std::time::Instant::now() + std::time::Duration::from_secs(secs as u64));
+                }
+            }
+            match cmd.spawn() {
+                Ok(child) => {
+                    state.child = Some(child);
+                    let mins_rem = duration_mins.filter(|&m| m > 0);
+                    Ok(crate::CaffeineStatus { active: true, minutes_remaining: mins_rem })
+                }
+                Err(e) => Err(format!("Failed to spawn caffeinate: {}", e)),
+            }
+        } else {
+            Ok(crate::CaffeineStatus { active: false, minutes_remaining: None })
+        }
+    }
+
+    pub fn toggle_caffeine(duration_mins: Option<u32>) -> Result<crate::CaffeineStatus, String> {
+        let status = get_caffeine_status();
+        if status.active {
+            set_caffeine(false, None)
+        } else {
+            set_caffeine(true, duration_mins)
+        }
+    }
 }
 
 // --- App entry ---
@@ -2233,6 +2345,9 @@ pub fn run() {
             set_open_on_login,
             check_for_updates,
             install_update,
+            get_caffeine_status,
+            set_caffeine,
+            toggle_caffeine,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

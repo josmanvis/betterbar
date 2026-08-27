@@ -22,6 +22,7 @@ import { TerminalInput } from "./TerminalInput";
 import { WorldClock } from "./WorldClock";
 import { BatteryIndicator } from "./BatteryIndicator";
 import { MusicIndicator } from "./MusicIndicator";
+import { CaffeineIndicator } from "./CaffeineIndicator";
 import { WindowPreview } from "./WindowPreview";
 import { DEVICE_GLYPHS } from "./deviceIcons";
 import {
@@ -716,6 +717,15 @@ export function DockBar({
       <>
         <Divider isVertical={isVertical} label="MUS" />
         <MusicIndicator music={music} isVertical={isVertical} />
+      </>
+    );
+  }
+
+  if (config.showCaffeine) {
+    sectionNodes.caffeine = (
+      <>
+        <Divider isVertical={isVertical} label="CAF" />
+        <CaffeineIndicator isVertical={isVertical} />
       </>
     );
   }
