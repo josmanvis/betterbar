@@ -137,6 +137,8 @@ export interface BetterBarConfig {
   showExtensions: boolean;
   enabledExtensions: string[];
   showSpaces: boolean;
+  /** Keep macOS awake (caffeine / sleep inhibitor) */
+  showCaffeine: boolean;
   /** Automatically launch BetterBar on macOS login. */
   openOnLogin: boolean;
   /** Left-to-right (or top-to-bottom) order of bar sections. ⌘-drag a section
@@ -152,6 +154,7 @@ export type SectionId =
   | "spacer"
   | "time"
   | "music"
+  | "caffeine"
   | "battery"
   | "sets"
   | "sims"
@@ -160,7 +163,7 @@ export type SectionId =
   | "spaces";
 
 export const DEFAULT_SECTION_ORDER: SectionId[] = [
-  "terminal", "pin", "run", "extensions", "spacer", "spaces", "time", "music", "battery", "sets", "sims", "cog",
+  "terminal", "pin", "run", "extensions", "spacer", "spaces", "time", "music", "caffeine", "battery", "sets", "sims", "cog",
 ];
 
 export const BAR_SIZE_MIN = 48;
@@ -205,6 +208,11 @@ export interface ReleaseInfo {
   current_version: string;
 }
 
+export interface CaffeineStatus {
+  active: boolean;
+  minutes_remaining: number | null;
+}
+
 export const DEFAULT_CONFIG: BetterBarConfig = {
   position: "left",
   iconSize: 48,
@@ -242,6 +250,7 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   showExtensions: true,
   enabledExtensions: [],
   showSpaces: true,
+  showCaffeine: true,
   openOnLogin: false,
   sectionOrder: DEFAULT_SECTION_ORDER,
 };

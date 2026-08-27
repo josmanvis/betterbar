@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { BatteryInfo, MusicInfo, RunningApp, ScreenInfo, WindowThumbnail, WindowDetails, SpaceInfo, ReleaseInfo } from "./types";
+import { BatteryInfo, MusicInfo, RunningApp, ScreenInfo, WindowThumbnail, WindowDetails, SpaceInfo, ReleaseInfo, CaffeineStatus } from "./types";
 
 export async function getRunningApps(): Promise<RunningApp[]> {
   return invoke<RunningApp[]>("get_running_apps");
@@ -161,5 +161,18 @@ export async function checkForUpdates(): Promise<ReleaseInfo> {
 export async function installUpdate(downloadUrl: string): Promise<void> {
   return invoke("install_update", { downloadUrl });
 }
+
+export async function getCaffeineStatus(): Promise<CaffeineStatus> {
+  return invoke<CaffeineStatus>("get_caffeine_status");
+}
+
+export async function setCaffeine(enabled: boolean, durationMins?: number): Promise<CaffeineStatus> {
+  return invoke<CaffeineStatus>("set_caffeine", { enabled, durationMins });
+}
+
+export async function toggleCaffeine(durationMins?: number): Promise<CaffeineStatus> {
+  return invoke<CaffeineStatus>("toggle_caffeine", { durationMins });
+}
+
 
 
