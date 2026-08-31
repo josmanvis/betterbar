@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import {
   AppSet, BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
   BarLengthMode, BetterBarConfig, DEFAULT_CONFIG as TYPES_DEFAULT_CONFIG, DEFAULT_SECTION_ORDER, DockItem, DockPosition,
-  IconStyle, SectionId, SectionPadding, SectionStyleConfig,
+  IconChrome, IconStyle, SectionId, SectionPadding, SectionStyleConfig,
 } from "./types";
 import { setOpenOnLogin as tauriSetOpenOnLogin } from "./tauri-bridge";
 
@@ -59,7 +59,60 @@ export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     openOnLogin: cfg.openOnLogin === undefined ? DEFAULT_CONFIG.openOnLogin : !!cfg.openOnLogin,
     sectionOrder: normalizeSectionOrder(cfg.sectionOrder),
     sectionStyles: sanitizeSectionStyles(cfg.sectionStyles),
+    iconChrome: sanitizeIconChrome(cfg.iconChrome),
+    sets: Array.isArray(cfg.sets)
+      ? cfg.sets.map((s) => ({
+          ...s,
+          items: Array.isArray(s.items)
+            ? s.items.map((it) => {
+                const chrome = sanitizeIconChrome(it.chrome);
+                return Object.keys(chrome).length ? { ...it, chrome } : stripChrome(it);
+              })
+            : s.items,
+        }))
+      : cfg.sets,
   };
+}
+
+function stripChrome(item: DockItem): DockItem {
+  if (item.chrome === undefined) return item;
+  const { chrome: _drop, ...rest } = item;
+  return rest;
+}
+
+const CHROME_COLOR_KEYS = ["background", "borderColor"] as const;
+const CHROME_NUM_LIMITS: Record<"borderWidth" | "radius" | "padding", number> = {
+  borderWidth: 4,
+  radius: 24,
+  padding: 16,
+};
+
+/** Keep only known keys, clamp the numeric ones, drop empty/invalid strings. */
+export function sanitizeIconChrome(v: unknown): IconChrome {
+  if (!v || typeof v !== "object") return {};
+  const src = v as Record<string, unknown>;
+  const out: IconChrome = {};
+  for (const key of CHROME_COLOR_KEYS) {
+    const raw = src[key];
+    if (typeof raw === "string" && raw.trim()) out[key] = raw.trim();
+  }
+  for (const key of Object.keys(CHROME_NUM_LIMITS) as (keyof typeof CHROME_NUM_LIMITS)[]) {
+    const raw = src[key];
+    if (Number.isFinite(raw)) {
+      out[key] = Math.max(0, Math.min(CHROME_NUM_LIMITS[key], Math.round(raw as number)));
+    }
+  }
+  return out;
+}
+
+/** Merge a chrome patch, treating `undefined` values as "clear this field". */
+function applyChromePatch(base: IconChrome | undefined, patch: Partial<IconChrome>): IconChrome {
+  const next: IconChrome = { ...(base || {}) };
+  for (const [k, val] of Object.entries(patch)) {
+    if (val === undefined) delete (next as Record<string, unknown>)[k];
+    else (next as Record<string, unknown>)[k] = val;
+  }
+  return sanitizeIconChrome(next);
 }
 
 function sanitizeSectionStyles(
@@ -555,5 +608,35 @@ export function useConfig() {
         return { ...prev, sectionStyles: styles };
       });
     }, [setConfig]),
+    setIconChrome: useCallback((patch: Partial<IconChrome>) => {
+      setConfig((prev) => ({ ...prev, iconChrome: applyChromePatch(prev.iconChrome, patch) }));
+    }, [setConfig]),
+    resetIconChrome: useCallback(() => {
+      setConfig((prev) => ({ ...prev, iconChrome: {} }));
+    }, [setConfig]),
+    setItemChrome: useCallback((id: string, patch: Partial<IconChrome>) => {
+      updateActiveSet((s) => ({
+        ...s,
+        items: s.items.map((i) => {
+          if (i.id !== id) return i;
+          const chrome = applyChromePatch(i.chrome, patch);
+          if (!Object.keys(chrome).length) {
+            const { chrome: _drop, ...rest } = i;
+            return rest;
+          }
+          return { ...i, chrome };
+        }),
+      }));
+    }, [updateActiveSet]),
+    resetItemChrome: useCallback((id: string) => {
+      updateActiveSet((s) => ({
+        ...s,
+        items: s.items.map((i) => {
+          if (i.id !== id || i.chrome === undefined) return i;
+          const { chrome: _drop, ...rest } = i;
+          return rest;
+        }),
+      }));
+    }, [updateActiveSet]),
   };
 }
