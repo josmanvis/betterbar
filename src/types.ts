@@ -1,5 +1,16 @@
 export type DockPosition = "bottom" | "left" | "right" | "top";
 
+/** Visual chrome for the box behind a dock icon. Every field is optional; a
+ *  per-item override falls back to the global `BetterBarConfig.iconChrome`,
+ *  which in turn falls back to the plain (chrome-less) default. */
+export interface IconChrome {
+  background?: string;   // css color, or "transparent"
+  borderColor?: string;  // css color, or "transparent"
+  borderWidth?: number;  // 0–4 px
+  radius?: number;       // 0–24 px
+  padding?: number;      // 0–16 px
+}
+
 export interface DockItem {
   id: string;
   name: string;
@@ -11,6 +22,9 @@ export interface DockItem {
   forceNative?: boolean; // when true, always use the native macOS icon — overrides global GLYPH icon style
   showLabel?: boolean; // per-item override for showLabels (deprecated — use displayType)
   displayType?: "icon" | "icon_label" | "label"; // unified display mode; overrides showLabel
+  /** Per-item override for the icon box background/border. Falls back to the
+   *  global `iconChrome` field-by-field. */
+  chrome?: IconChrome;
   order: number;
   /** Hidden items are kept in the set but not rendered in the bar.
    *  Toggleable from the settings window. */
@@ -146,7 +160,19 @@ export interface BetterBarConfig {
   sectionOrder: SectionId[];
   /** Per-section styling overrides (padding T/R/B/L and content scale) */
   sectionStyles?: Partial<Record<SectionId, SectionStyleConfig>>;
+  /** Global default chrome (background/border/radius/padding) for every dock
+   *  icon box. Individual items can override via `DockItem.chrome`. */
+  iconChrome?: IconChrome;
 }
+
+/** Named starting points for the icon-box editor. */
+export const ICON_CHROME_PRESETS: { name: string; chrome: IconChrome }[] = [
+  { name: "NONE",     chrome: {} },
+  { name: "OUTLINE",  chrome: { borderColor: "#2b2b2b", borderWidth: 1 } },
+  { name: "TILE",     chrome: { background: "#111111", borderColor: "#2b2b2b", borderWidth: 1 } },
+  { name: "SOFT",     chrome: { background: "#111111", radius: 8, padding: 4 } },
+  { name: "CONTRAST", chrome: { background: "rgba(255,255,255,0.08)", radius: 4 } },
+];
 
 export interface SectionPadding {
   top?: number;
@@ -268,4 +294,5 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   openOnLogin: false,
   sectionOrder: DEFAULT_SECTION_ORDER,
   sectionStyles: {},
+  iconChrome: {},
 };
