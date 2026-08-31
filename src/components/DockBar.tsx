@@ -27,8 +27,9 @@ import { WindowPreview } from "./WindowPreview";
 import { DEVICE_GLYPHS } from "./deviceIcons";
 import {
   AppSet, BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
-  BetterBarConfig, DockItem, FLOAT_DRAG_EDGE, IconStyle, RunningApp, DockPosition, SectionId,
+  BetterBarConfig, DockItem, FLOAT_DRAG_EDGE, IconChrome, IconStyle, RunningApp, DockPosition, SectionId,
 } from "../types";
+import { hasChrome, iconChromeStyle } from "../iconChrome";
 import { useRunningApps } from "../hooks/useRunningApps";
 import { useRunningWindows } from "../hooks/useRunningWindows";
 import { useWindowPosition } from "../hooks/useWindowPosition";
@@ -616,6 +617,7 @@ export function DockBar({
                       position={config.position}
                       iconStyle={config.iconStyle}
                       grayscaleIdle={config.grayscaleIdle}
+                      iconChrome={config.iconChrome}
                       onRemove={onRemove}
                       onRename={onRenameItem}
                       onHide={(id) => onSetItemHidden(id, true)}
@@ -644,6 +646,7 @@ export function DockBar({
                     position={config.position}
                     iconStyle={config.iconStyle}
                     grayscaleIdle={config.grayscaleIdle}
+                    iconChrome={config.iconChrome}
                     onRemove={onRemove}
                     onRename={onRenameItem}
                     onHide={(id) => onSetItemHidden(id, true)}
@@ -684,6 +687,7 @@ export function DockBar({
               iconSize={iconSize}
               iconStyle={config.iconStyle}
               grayscaleIdle={config.grayscaleIdle}
+              iconChrome={config.iconChrome}
               iconUrl={appIcons[item.app.bundle_id]}
               isVertical={isVertical}
               onPin={onAddItem}
@@ -930,13 +934,14 @@ export function DockBar({
 // Right-click shows native context menu: Pin to Dock, Group/Ungroup toggle.
 
 function RunningAppIcon({
-  app, iconSize, iconStyle, grayscaleIdle, iconUrl, isVertical, windowId, windowTitle, position,
+  app, iconSize, iconStyle, grayscaleIdle, iconChrome, iconUrl, isVertical, windowId, windowTitle, position,
   onPin, onToggleGrouping, ungroupedBundleIds, activeSetItemCount,
 }: {
   app: RunningApp;
   iconSize: number;
   iconStyle: IconStyle;
   grayscaleIdle: boolean;
+  iconChrome?: IconChrome;
   iconUrl?: string;
   isVertical: boolean;
   windowId?: number;
@@ -1038,6 +1043,7 @@ function RunningAppIcon({
             height: iconSize,
             filter: !grayscaleIdle || hovered ? "none" : "grayscale(60%) brightness(0.95)",
             transition: "filter 120ms linear",
+            ...iconChromeStyle(iconChrome || {}),
           }}
           className="flex items-center justify-center shrink-0"
         >
@@ -1050,7 +1056,9 @@ function RunningAppIcon({
             />
           ) : (
             <div
-              className="w-full h-full flex items-center justify-center bg-[var(--bb-pane-2)] border border-[var(--bb-line-2)] text-[var(--bb-accent)] font-bold tracking-tight"
+              className={`w-full h-full flex items-center justify-center text-[var(--bb-accent)] font-bold tracking-tight ${
+                hasChrome(iconChrome || {}) ? "" : "bg-[var(--bb-pane-2)] border border-[var(--bb-line-2)]"
+              }`}
               style={{ fontSize: Math.max(10, iconSize * 0.32) }}
             >
               {initials}

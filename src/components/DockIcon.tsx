@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Menu, MenuItem, CheckMenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
-import { DockItem, DockPosition, IconStyle, WindowDetails } from "../types";
+import { DockItem, DockPosition, IconChrome, IconStyle, WindowDetails } from "../types";
+import { hasChrome, iconChromeStyle, mergeChrome } from "../iconChrome";
 import { launchApp, focusApp, focusWindow, hideApp, quitApp, zoomAppWindow } from "../tauri-bridge";
 import { WindowPreview } from "./WindowPreview";
 import { DEVICE_GLYPHS } from "./deviceIcons";
@@ -21,6 +22,7 @@ interface DockIconProps {
   position: DockPosition;
   iconStyle?: IconStyle;
   grayscaleIdle?: boolean;
+  iconChrome?: IconChrome;
   onRemove?: (id: string) => void;
   onRename?: (id: string, name: string) => void;
   onHide?: (id: string) => void;
@@ -71,6 +73,7 @@ export function DockIcon({
   position,
   iconStyle,
   grayscaleIdle = true,
+  iconChrome,
   onRemove,
   onRename,
   onHide,
@@ -369,6 +372,12 @@ export function DockIcon({
       : showLabel;
   const showIcon = item.displayType ? item.displayType !== "label" : true;
 
+  const effChrome = mergeChrome(iconChrome, item.chrome);
+  const chromePainted = hasChrome(effChrome);
+  // The glyph / device fallbacks carry their own tile only when the chrome
+  // isn't painting a fill or border of its own.
+  const fallbackTile = chromePainted ? "" : "bg-[var(--bb-pane-2)] border border-[var(--bb-line-2)]";
+
   const runningStripeClass =
     position === "left"   ? "left-0 top-0 bottom-0 w-[2px]"  :
     position === "right"  ? "right-0 top-0 bottom-0 w-[2px]" :
@@ -452,12 +461,13 @@ export function DockIcon({
                       ? "none"
                       : "grayscale(80%) contrast(1.05) brightness(0.92)",
                   transition: "filter 120ms linear",
+                  ...iconChromeStyle(effChrome),
                 }}
                 className="flex items-center justify-center shrink-0"
               >
                 {item.forceGlyph ? (
                   <div
-                    className="w-full h-full flex items-center justify-center bg-[var(--bb-pane-2)] border border-[var(--bb-line-2)] text-[var(--bb-accent)] font-bold tracking-tight"
+                    className={`w-full h-full flex items-center justify-center text-[var(--bb-accent)] font-bold tracking-tight ${fallbackTile}`}
                     style={{ fontSize: Math.max(10, iconSize * 0.32) }}
                   >
                     {getFallbackGlyph(item)}
@@ -475,7 +485,7 @@ export function DockIcon({
                   />
                 ) : (
                   <div
-                    className="w-full h-full flex items-center justify-center bg-[var(--bb-pane-2)] border border-[var(--bb-line-2)] text-[var(--bb-accent)] font-bold tracking-tight"
+                    className={`w-full h-full flex items-center justify-center text-[var(--bb-accent)] font-bold tracking-tight ${fallbackTile}`}
                     style={{ fontSize: Math.max(10, iconSize * 0.32) }}
                   >
                     {getFallbackGlyph(item)}
