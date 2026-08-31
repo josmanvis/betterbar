@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  GearSix, Lightning, Eye, EyeSlash, ArrowsOut, ArrowsOutCardinal, PencilSimple,
+  Lightning, Eye, EyeSlash, PencilSimple,
   Plus, Trash, MagnifyingGlass, ArrowCounterClockwise, Warning, CaretUp, CaretDown,
-  DownloadSimple, UploadSimple, Copy, Check, FileText,
+  CaretRight, DownloadSimple, UploadSimple, Copy, Check, FileText,
+  SquaresFour, PaintBrush, StackSimple, SlidersHorizontal, Sparkle, ShieldCheck, Info,
 } from "@phosphor-icons/react";
 import {
    BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
-   AppSet, BarLengthMode, DockItem, DockPosition, IconStyle, TerminalApp, ClockConfig, RunningApp, SectionId, ReleaseInfo,
+   AppSet, BarLengthMode, DockItem, DockPosition, IconChrome, IconStyle, ICON_CHROME_PRESETS, TerminalApp, ClockConfig, RunningApp, SectionId, ReleaseInfo,
  } from "./types";
+ import { iconChromeStyle } from "./iconChrome";
  import { useConfig, DEFAULT_CONFIG, sanitize } from "./store";
  import { getInstalledTerminals, getRunningApps, checkAccessibilityPermissions, requestAccessibilityPermissions, checkScreenRecordingPermission, requestScreenRecordingPermission, getOpenOnLogin, checkForUpdates, getReleaseHistory, installUpdate } from "./tauri-bridge";
  import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -58,16 +60,18 @@ const PRESET_ACCENTS = [
   { name: "WHITE",      hex: "#ffffff" },
 ];
 
-const TABS = [
-  { id: "layout",    label: "LAYOUT" },
-  { id: "style",     label: "STYLE" },
-  { id: "behaviour", label: "BEHAVIOUR" },
-  { id: "content",   label: "CONTENT" },
-  { id: "permissions", label: "PERMS" },
-  { id: "help",      label: "HELP" },
+const NAV = [
+  { id: "layout",      label: "Layout",      Icon: SquaresFour },
+  { id: "style",       label: "Style",       Icon: PaintBrush },
+  { id: "icons",       label: "Icons",       Icon: StackSimple },
+  { id: "sets",        label: "Sets & Items", Icon: SlidersHorizontal },
+  { id: "sections",    label: "Sections",    Icon: SquaresFour },
+  { id: "behaviour",   label: "Behaviour",   Icon: Sparkle },
+  { id: "permissions", label: "Permissions", Icon: ShieldCheck },
+  { id: "about",       label: "About",       Icon: Info },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof NAV)[number]["id"];
 
 export default function SettingsApp() {
   const {
@@ -113,6 +117,10 @@ export default function SettingsApp() {
     toggleCaffeine,
     toggleExtension,
     setSectionOrder,
+    setIconChrome,
+    resetIconChrome,
+    setItemChrome,
+    resetItemChrome,
   } = useConfig();
 
   const [activeTab, setActiveTab] = useState<TabId>("layout");
@@ -190,21 +198,21 @@ export default function SettingsApp() {
     }
   }, [activeTab, runningApps.length, runningAppsLoading]);
 
-  // Keyboard navigation for tabs
+  // Keyboard navigation for the sidebar
   const handleTabKeyDown = useCallback((e: React.KeyboardEvent, tabId: TabId) => {
-    const idx = TABS.findIndex((t) => t.id === tabId);
-    if (e.key === "ArrowRight") {
+    const idx = NAV.findIndex((t) => t.id === tabId);
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") {
       e.preventDefault();
-      setActiveTab(TABS[(idx + 1) % TABS.length].id);
-    } else if (e.key === "ArrowLeft") {
+      setActiveTab(NAV[(idx + 1) % NAV.length].id);
+    } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
       e.preventDefault();
-      setActiveTab(TABS[(idx - 1 + TABS.length) % TABS.length].id);
+      setActiveTab(NAV[(idx - 1 + NAV.length) % NAV.length].id);
     } else if (e.key === "Home") {
       e.preventDefault();
-      setActiveTab(TABS[0].id);
+      setActiveTab(NAV[0].id);
     } else if (e.key === "End") {
       e.preventDefault();
-      setActiveTab(TABS[TABS.length - 1].id);
+      setActiveTab(NAV[NAV.length - 1].id);
     }
   }, []);
 
@@ -218,41 +226,48 @@ export default function SettingsApp() {
     >
       <Header />
 
-      <div
-        className="flex flex-wrap items-center gap-2 border-b border-[var(--bb-line)] bg-black px-6 py-3"
-        role="tablist"
-        aria-label="Settings tabs"
-      >
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              role="tab"
-              aria-selected={isActive}
-              aria-controls={`panel-${tab.id}`}
-              tabIndex={isActive ? 0 : -1}
-              onClick={() => setActiveTab(tab.id)}
-              onKeyDown={(e) => handleTabKeyDown(e, tab.id)}
-              className={`
-                px-4 py-1.5 text-[11px] font-bold tracking-[0.18em] uppercase transition-colors cursor-pointer flex items-center gap-1.5
-                ${isActive
-                  ? "bg-[var(--bb-accent)] text-black font-extrabold"
-                  : "text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:bg-[var(--bb-pane)]"}
-              `}
-            >
-              <span>{isActive ? `[ ${tab.label} ]` : tab.label}</span>
-              {tab.id === "help" && hasUpdate && (
-                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-black" : "bg-[var(--bb-accent)]"}`} />
-              )}
-            </button>
-          );
-        })}
-      </div>
+      <div className="flex-1 min-h-0 flex">
+        <nav
+          role="tablist"
+          aria-orientation="vertical"
+          aria-label="Settings"
+          className="w-[172px] shrink-0 border-r border-[var(--bb-line)] bg-black overflow-y-auto bb-scroll py-2"
+        >
+          {NAV.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const showDot = tab.id === "about" && hasUpdate;
+            return (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={`panel-${tab.id}`}
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => setActiveTab(tab.id)}
+                onKeyDown={(e) => handleTabKeyDown(e, tab.id)}
+                className={`
+                  w-full flex items-center gap-2.5 px-4 py-2 text-[11px] tracking-[0.12em] uppercase
+                  transition-colors cursor-pointer border-l-2
+                  ${isActive
+                    ? "border-[var(--bb-accent)] bg-[var(--bb-pane)] text-[var(--bb-text)] font-bold"
+                    : "border-transparent text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:bg-[var(--bb-pane)]/50"}
+                `}
+              >
+                <tab.Icon
+                  size={13}
+                  weight={isActive ? "fill" : "regular"}
+                  className={isActive ? "text-[var(--bb-accent)] shrink-0" : "shrink-0"}
+                />
+                <span className="flex-1 text-left truncate">{tab.label}</span>
+                {showDot && <span className="w-1.5 h-1.5 bg-[var(--bb-accent)] shrink-0" />}
+              </button>
+            );
+          })}
+        </nav>
 
-      <main className="flex-1 min-h-0 overflow-y-auto bb-scroll">
-        <div className="px-8 py-6 space-y-6 max-w-[680px]">
-          <AnimatePresence mode="wait">
+        <main className="flex-1 min-h-0 overflow-y-auto bb-scroll">
+          <div className="px-8 py-7 space-y-6 max-w-[600px]">
+            <AnimatePresence mode="wait">
             {activeTab === "layout" && (
               <motion.div
                 key="layout"
@@ -263,7 +278,7 @@ export default function SettingsApp() {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.12 }}
               >
-                <Section number="01" title="POSITION" hint={config.position.toUpperCase()}>
+                <Section title="POSITION" hint={config.position.toUpperCase()}>
                   <PillSelector
                     options={POSITIONS.map((p) => ({ value: p.value, label: p.label }))}
                     value={config.position}
@@ -271,44 +286,29 @@ export default function SettingsApp() {
                   />
                 </Section>
 
-                <Section
-                  number="02"
-                  title="BAR_SIZE"
-                  hint={`${config.barSize}px`}
-                  icon={<ArrowsOut size={11} weight="bold" />}
-                >
+                <Section title="BAR SIZE" hint={`${config.barSize}px`}>
                   <SliderRow
                     value={config.barSize}
                     min={BAR_SIZE_MIN}
                     max={BAR_SIZE_MAX}
                     step={2}
                     onChange={setBarSize}
-                    lo="THIN"
-                    hi="THICK"
                   />
                 </Section>
 
-                <Section
-                  number="03"
-                  title="CONTENT_SCALE"
-                  hint={`${config.contentScale.toFixed(2)}x`}
-                  icon={<ArrowsOut size={11} weight="bold" />}
-                >
+                <Section title="CONTENT SCALE" hint={`${config.contentScale.toFixed(2)}x`}>
                   <SliderRow
                     value={config.contentScale}
                     min={0.5}
                     max={2.0}
                     step={0.05}
                     onChange={setContentScale}
-                    lo="SMALL"
-                    hi="LARGE"
                     formatValue={(v) => v.toFixed(2)}
                   />
                 </Section>
 
                 <Section
-                  number="04"
-                  title="BAR_LENGTH"
+                  title="BAR LENGTH"
                   hint={
                     !config.freeFloat
                       ? "DISABLED"
@@ -316,7 +316,6 @@ export default function SettingsApp() {
                         ? `${config.barLength}px`
                         : config.barLengthMode.toUpperCase()
                   }
-                  icon={<ArrowsOutCardinal size={11} weight="bold" />}
                 >
                   <div className={config.freeFloat ? "space-y-3" : "space-y-3 opacity-40 pointer-events-none"}>
                     <PillSelector
@@ -332,8 +331,6 @@ export default function SettingsApp() {
                         max={BAR_LENGTH_MAX}
                         step={20}
                         onChange={setBarLength}
-                        lo="SHORT"
-                        hi="LONG"
                       />
                     </div>
 
@@ -348,7 +345,7 @@ export default function SettingsApp() {
                   </div>
                   {!config.freeFloat && (
                     <p className="mt-2 text-[10px] text-[var(--bb-mute)] uppercase tracking-[0.15em]">
-                      &gt; Enable FREE_FLOAT (under BEHAVIOUR tab) to use this control
+                      &gt; Turn on FREE FLOAT (Behaviour) to use this control
                     </p>
                   )}
                 </Section>
@@ -365,45 +362,10 @@ export default function SettingsApp() {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.12 }}
               >
-                <Section
-                  number="05"
-                  title="ICONS"
-                  hint={config.iconStyle === "auto" ? "APP_ICON" : "GLYPH"}
-                >
-                  <div className="space-y-3">
-                    <PillSelector
-                      options={ICON_STYLES.map((s) => ({ value: s.value, label: s.label, title: s.hint }))}
-                      value={config.iconStyle}
-                      onChange={(v) => setIconStyle(v as IconStyle)}
-                    />
-
-                    <Toggle
-                      label="GRAYSCALE_IDLE"
-                      description="Desaturate icons that aren't hovered or running"
-                      enabled={config.grayscaleIdle}
-                      onToggle={toggleGrayscaleIdle}
-                    />
-                    <Toggle
-                      label="SHOW_RUNNING"
-                      description="Append running-but-unpinned apps after the pinned section"
-                      enabled={config.showRunningApps}
-                      onToggle={toggleShowRunningApps}
-                    />
-                    <Toggle
-                      label="HIDE_SELF"
-                      description="Hide BetterBar from the running apps list"
-                      enabled={config.hideSelf}
-                      onToggle={toggleHideSelf}
-                      glyph={<EyeSlash size={11} weight="bold" />}
-                      glyphOff={<Eye size={11} weight="bold" />}
-                    />
-                  </div>
-                </Section>
-
-                <Section number="06" title="THEME">
+                <Section title="THEME">
                   <div className="flex flex-col gap-3">
                     <Toggle
-                      label="TRANSPARENT_BG"
+                      label="TRANSPARENT BG"
                       description="Make bar background translucent and enable backdrop blur"
                       enabled={config.transparentBg}
                       onToggle={toggleTransparentBg}
@@ -419,6 +381,61 @@ export default function SettingsApp() {
               </motion.div>
             )}
 
+            {activeTab === "icons" && (
+              <motion.div
+                key="icons"
+                id="panel-icons"
+                role="tabpanel"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.12 }}
+              >
+                <Section
+                  title="ICON SOURCE"
+                  hint={config.iconStyle === "auto" ? "APP ICON" : "GLYPH"}
+                >
+                  <div className="space-y-3">
+                    <PillSelector
+                      options={ICON_STYLES.map((s) => ({ value: s.value, label: s.label, title: s.hint }))}
+                      value={config.iconStyle}
+                      onChange={(v) => setIconStyle(v as IconStyle)}
+                    />
+
+                    <Toggle
+                      label="GRAYSCALE IDLE"
+                      description="Desaturate icons that aren't hovered or running"
+                      enabled={config.grayscaleIdle}
+                      onToggle={toggleGrayscaleIdle}
+                    />
+                    <Toggle
+                      label="SHOW RUNNING"
+                      description="Append running-but-unpinned apps after the pinned section"
+                      enabled={config.showRunningApps}
+                      onToggle={toggleShowRunningApps}
+                    />
+                    <Toggle
+                      label="HIDE SELF"
+                      description="Hide BetterBar from the running apps list"
+                      enabled={config.hideSelf}
+                      onToggle={toggleHideSelf}
+                    />
+                  </div>
+                </Section>
+
+                <Section
+                  title="ICON BOX"
+                  hint={hasChromeValue(config.iconChrome) ? "CUSTOM" : "DEFAULT"}
+                >
+                  <IconChromeEditor
+                    value={config.iconChrome ?? {}}
+                    onChange={setIconChrome}
+                    onReset={resetIconChrome}
+                  />
+                </Section>
+              </motion.div>
+            )}
+
             {activeTab === "behaviour" && (
               <motion.div
                 key="behaviour"
@@ -429,10 +446,10 @@ export default function SettingsApp() {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.12 }}
               >
-                <Section number="07" title="BEHAVIOUR">
+                <Section title="GENERAL">
                   <div className="flex flex-col">
                     <Toggle
-                      label="OPEN_ON_LOGIN"
+                      label="OPEN ON LOGIN"
                       description="Launch BetterBar automatically when you log into macOS"
                       enabled={config.openOnLogin}
                       onToggle={toggleOpenOnLogin}
@@ -442,30 +459,27 @@ export default function SettingsApp() {
                       description="Bar disappears when not in use"
                       enabled={config.autoHide}
                       onToggle={toggleAutoHide}
-                      glyph={<EyeSlash size={11} weight="bold" />}
-                      glyphOff={<Eye size={11} weight="bold" />}
                     />
                     <Toggle
-                      label="SHOW_LABELS"
+                      label="SHOW LABELS"
                       description="Render app names beneath icons"
                       enabled={config.showLabels}
                       onToggle={toggleLabels}
                     />
                     <Toggle
-                      label="FREE_FLOAT"
+                      label="FREE FLOAT"
                       description="Drag the bar anywhere on screen — hover edges for handle"
                       enabled={config.freeFloat}
                       onToggle={toggleFreeFloat}
-                      glyph={<ArrowsOutCardinal size={11} weight="bold" />}
                     />
                     <Toggle
-                      label="PREVENT_OVERLAP"
+                      label="PREVENT OVERLAP"
                       description="Prevent maximized windows from overlapping the bar when docked"
                       enabled={config.preventOverlap}
                       onToggle={togglePreventOverlap}
                     />
                     <Toggle
-                      label="STRICT_OVERLAP"
+                      label="STRICT OVERLAP"
                       description="Actively resizes/pushes any window that manually overlaps the bar"
                       enabled={config.strictOverlap}
                       onToggle={toggleStrictOverlap}
@@ -473,7 +487,7 @@ export default function SettingsApp() {
                   </div>
                 </Section>
 
-                <Section number="08" title="TERMINAL">
+                <Section title="TERMINAL">
                   <div className="flex flex-col gap-3">
                     <p className="text-[10px] text-[var(--bb-mute)] leading-relaxed normal-case">
                       Set a default terminal. If set, pressing Enter will execute the command immediately. You can still use the Arrow keys to open the selection carousel.
@@ -514,7 +528,7 @@ export default function SettingsApp() {
                   </div>
                 </Section>
 
-                <Section number="09" title="WINDOW_GROUPING" hint={`${config.ungroupedBundleIds?.length || 0} UNGROUPED`}>
+                <Section title="WINDOW GROUPING" hint={`${config.ungroupedBundleIds?.length || 0} UNGROUPED`}>
                   <WindowGroupingList
                     runningApps={runningApps}
                     activeSet={activeSet}
@@ -533,10 +547,10 @@ export default function SettingsApp() {
               </motion.div>
             )}
 
-            {activeTab === "content" && (
+            {activeTab === "sets" && (
               <motion.div
-                key="content"
-                id="panel-content"
+                key="sets"
+                id="panel-sets"
                 role="tabpanel"
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -544,7 +558,6 @@ export default function SettingsApp() {
                 transition={{ duration: 0.12 }}
               >
                 <Section
-                  number="10"
                   title="SETS"
                   hint={`${config.sets.length}`}
                 >
@@ -565,7 +578,6 @@ export default function SettingsApp() {
                 </Section>
 
                 <Section
-                  number="11"
                   title="ITEMS"
                   hint={`${activeSet.name} · ${activeSet.items.filter((i) => !i.hidden).length}/${activeSet.items.length}`}
                 >
@@ -573,10 +585,13 @@ export default function SettingsApp() {
                     items={activeSet.items}
                     onRename={renameItem}
                     onSetHidden={setItemHidden}
+                    globalChrome={config.iconChrome ?? {}}
+                    onSetItemChrome={setItemChrome}
+                    onResetItemChrome={resetItemChrome}
                   />
                 </Section>
 
-                <Section number="12" title="TIMEZONES" hint={`${config.clocks ? config.clocks.length : 0}`}>
+                <Section title="TIMEZONES" hint={`${config.clocks ? config.clocks.length : 0}`}>
                   <ClockList
                     clocks={config.clocks || []}
                     onChange={(nextClocks) => setConfig({ clocks: nextClocks })}
@@ -589,18 +604,22 @@ export default function SettingsApp() {
                     }}
                   />
                 </Section>
+              </motion.div>
+            )}
 
-                <Section number="13" title="MUSIC">
-                  <Toggle
-                    label="SHOW_MUSIC_CONTROLS"
-                    description="Show now-playing info and play/pause/skip controls for Music or Spotify"
-                    enabled={config.showMusic}
-                    onToggle={toggleMusic}
-                  />
-                </Section>
-
-                <Section number="14" title="SECTIONS">
-                  <div className="space-y-3">
+            {activeTab === "sections" && (
+              <motion.div
+                key="sections"
+                id="panel-sections"
+                role="tabpanel"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.12 }}
+              >
+                <Section title="VISIBLE SECTIONS">
+                  <div className="flex flex-col">
+                    <SubHead>Dock</SubHead>
                     <Toggle
                       label="DOCK AREA"
                       description="Show pinned apps and running apps"
@@ -612,6 +631,14 @@ export default function SettingsApp() {
                       description="Show the blinking cursor terminal launcher"
                       enabled={config.showTerminalIcon}
                       onToggle={toggleTerminalIcon}
+                    />
+
+                    <SubHead>Indicators</SubHead>
+                    <Toggle
+                      label="MUSIC"
+                      description="Now-playing info and play/pause/skip for Music or Spotify"
+                      enabled={config.showMusic}
+                      onToggle={toggleMusic}
                     />
                     <Toggle
                       label="TIME / CLOCKS"
@@ -627,7 +654,7 @@ export default function SettingsApp() {
                     />
                     <Toggle
                       label="CAFFEINE / KEEP AWAKE"
-                      description="Show the caffeine coffee cup indicator to prevent display and system sleep"
+                      description="Coffee-cup indicator that prevents display and system sleep"
                       enabled={config.showCaffeine}
                       onToggle={toggleCaffeine}
                     />
@@ -637,6 +664,8 @@ export default function SettingsApp() {
                       enabled={config.showSetSwitcher}
                       onToggle={toggleSetSwitcher}
                     />
+
+                    <SubHead>Extras</SubHead>
                     <Toggle
                       label="SIMULATOR ICONS"
                       description="Show simulator device quick-launch buttons"
@@ -666,7 +695,6 @@ export default function SettingsApp() {
 
                 {extensionsList.length > 0 && (
                   <Section
-                    number="14b"
                     title="EXTENSIONS"
                     hint={`${config.enabledExtensions.length}/${extensionsList.length} ENABLED`}
                   >
@@ -703,8 +731,8 @@ export default function SettingsApp() {
                   </Section>
                 )}
 
-                <Section number="15" title="SECTION_ORDER" hint="DRAG-FREE">
-                  <p className="text-[10px] text-[var(--bb-mute)] mb-2 leading-relaxed">
+                <Section title="SECTION ORDER" hint={`${config.sectionOrder.length}`}>
+                  <p className="text-[10px] text-[var(--bb-mute)] mb-2 leading-relaxed normal-case">
                     Order of regions along the bar. Use the arrows to move a section toward the start or end.
                   </p>
                   <div className="flex flex-col divide-y divide-[var(--bb-line)] border border-[var(--bb-line)]">
@@ -756,7 +784,7 @@ export default function SettingsApp() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
               >
-                <Section number="15" title="PERMISSIONS" hint={
+                <Section title="PERMISSIONS" hint={
                   axGranted === false || srGranted === false
                     ? "SOME DENIED"
                     : axGranted === null || srGranted === null
@@ -775,25 +803,25 @@ export default function SettingsApp() {
               </motion.div>
             )}
 
-            {activeTab === "help" && (
+            {activeTab === "about" && (
               <motion.div
-                key="help"
-                id="panel-help"
+                key="about"
+                id="panel-about"
                 role="tabpanel"
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.12 }}
               >
-                <Section number="16" title="SOFTWARE_UPDATE">
+                <Section title="SOFTWARE UPDATE">
                   <UpdatesSection />
                 </Section>
 
-                <Section number="17" title="BACKUP_AND_SHARE">
+                <Section title="BACKUP & SHARE">
                   <BackupSection config={config} onImport={setConfig} />
                 </Section>
 
-                <Section number="18" title="LEGEND">
+                <Section title="LEGEND">
                   <LegendContent onReset={() => {
                     setConfirmDialog({
                       message: "Reset all settings to defaults? This cannot be undone.",
@@ -803,11 +831,12 @@ export default function SettingsApp() {
                 </Section>
               </motion.div>
             )}
-          </AnimatePresence>
-        </div>
-      </main>
+            </AnimatePresence>
+          </div>
+        </main>
+      </div>
 
-      <Footer config={config} />
+      <Footer />
 
       {confirmDialog && (
         <ConfirmDialog
@@ -894,29 +923,26 @@ function PillSelector<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div className="flex items-center gap-px text-[11px] uppercase">
-      <span className="text-[var(--bb-mute)] pr-2">&lt;</span>
-      {options.map((opt, i) => {
+    <div className="flex border border-[var(--bb-line)] divide-x divide-[var(--bb-line)] text-[11px] uppercase w-full">
+      {options.map((opt) => {
         const active = value === opt.value;
         return (
-          <span key={opt.value} className="flex items-center">
-            {i > 0 && <span className="text-[var(--bb-line-2)] px-2">|</span>}
-            <button
-              onClick={() => onChange(opt.value)}
-              title={opt.title}
-              className={`
-                px-2 py-0.5 tracking-[0.15em] transition-colors cursor-pointer
-                ${active
-                  ? "bg-[var(--bb-accent)] text-black font-bold"
-                  : "text-[var(--bb-dim)] hover:text-[var(--bb-text)]"}
-              `}
-            >
-              {opt.label}
-            </button>
-          </span>
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            title={opt.title}
+            aria-pressed={active}
+            className={`
+              flex-1 px-2 py-1.5 tracking-[0.15em] transition-colors cursor-pointer
+              ${active
+                ? "bg-[var(--bb-accent)] text-black font-bold"
+                : "text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:bg-[var(--bb-pane-2)]"}
+            `}
+          >
+            {opt.label}
+          </button>
         );
       })}
-      <span className="text-[var(--bb-mute)] pl-2">&gt;</span>
     </div>
   );
 }
@@ -1103,13 +1129,7 @@ function Header() {
           v0.10.0
         </div>
       </div>
-      <div className="h-[2px] flex">
-        <div className="flex-1 bg-[var(--bb-accent)]" />
-        <div className="w-12 bg-[var(--bb-line)]" />
-        <div className="w-2 bg-[var(--bb-accent)]" />
-        <div className="w-1 bg-[var(--bb-line)]" />
-        <div className="w-3 bg-[var(--bb-accent)]" />
-      </div>
+      <div className="h-px bg-[var(--bb-accent)]/60" />
     </header>
   );
 }
@@ -1740,33 +1760,34 @@ function PermissionRow({
 
 // ── Footer / status line ───────────────────────────────────────────────────────
 
-function Footer({ config }: { config: ReturnType<typeof useConfig>["config"] }) {
-  const lenBit = config.barLengthMode === "custom" ? `${config.barLength}px` : config.barLengthMode;
-  const floatBit = config.freeFloat ? ` float=on len=${lenBit}` : "";
-  const stats = `pos=${config.position} bar=${config.barSize}px sets=${config.sets.length}${floatBit}`;
+function Footer() {
   return (
-    <footer className="border-t border-[var(--bb-line)] bg-black px-4 py-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.18em]">
-      <span className="text-[var(--bb-mute)] flex items-center gap-1.5">
-        <Lightning size={10} weight="fill" className="text-[var(--bb-accent)]" />
-        Live — changes save instantly
-      </span>
-      <span className="text-[var(--bb-dim)] tabular-nums normal-case tracking-normal">
-        {stats}
-      </span>
+    <footer className="border-t border-[var(--bb-line)] bg-black px-6 py-2 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--bb-mute)]">
+      <Lightning size={10} weight="fill" className="text-[var(--bb-accent)]" />
+      Changes save automatically
     </footer>
+  );
+}
+
+// ── Small caps sub-header (used to group rows inside a Section) ─────────────────
+
+function SubHead({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[9px] tracking-[0.22em] uppercase text-[var(--bb-mute)] pt-4 first:pt-0 pb-1.5">
+      {children}
+    </div>
   );
 }
 
 // ── Section ────────────────────────────────────────────────────────────────────
 
 function Section({
-  number,
   title,
   hint,
   icon,
   children,
 }: {
-  number: string;
+  number?: string;
   title: string;
   hint?: string;
   icon?: React.ReactNode;
@@ -1774,17 +1795,14 @@ function Section({
 }) {
   return (
     <section className="border border-[var(--bb-line)] bg-[var(--bb-pane)]">
-      <header className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--bb-line)] bg-[var(--bb-pane-2)]">
-        <div className="flex items-baseline gap-2 text-[11px] uppercase tracking-[0.2em]">
-          <span className="text-[var(--bb-mute)]">[{number}]</span>
-          <span className="text-[var(--bb-text)] font-bold flex items-center gap-1.5">
-            {icon}
-            {title}
-          </span>
-        </div>
+      <header className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--bb-line)]">
+        <span className="text-[11px] uppercase tracking-[0.2em] text-[var(--bb-text)] font-bold flex items-center gap-1.5">
+          {icon}
+          {title}
+        </span>
         {hint && (
-          <span className="text-[10px] text-[var(--bb-accent)] tabular-nums uppercase tracking-wider">
-            ::&nbsp;{hint}
+          <span className="text-[10px] text-[var(--bb-dim)] tabular-nums uppercase tracking-wider">
+            {hint}
           </span>
         )}
       </header>
@@ -1798,51 +1816,55 @@ function Section({
 // ── Slider row ─────────────────────────────────────────────────────────────────
 
 function SliderRow({
-  value, min, max, step, onChange, lo, hi, formatValue
+  value, min, max, step, onChange, formatValue, unit = "px",
 }: {
   value: number; min: number; max: number; step: number;
   onChange: (v: number) => void;
-  lo: string; hi: string;
+  lo?: string; hi?: string;
   formatValue?: (v: number) => string;
+  unit?: string;
 }) {
   const fillPct = ((value - min) / (max - min)) * 100;
+  const clamp = (n: number) => Math.max(min, Math.min(max, n));
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-2">
-        <span className="text-[var(--bb-mute)] text-[10px]">[</span>
+    <div className="flex items-center gap-3">
+      <input
+        type="range"
+        className="bb-range flex-1"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ ["--fill" as string]: `${fillPct}%` }}
+      />
+      <div className="flex items-center gap-1 shrink-0">
         <input
-          type="range"
-          className="bb-range flex-1"
+          type="number"
           min={min}
           max={max}
           step={step}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          style={{ ["--fill" as string]: `${fillPct}%` }}
+          value={formatValue ? formatValue(value) : value}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (Number.isFinite(n)) onChange(clamp(n));
+          }}
+          className="w-14 bg-black border border-[var(--bb-line)] text-[var(--bb-text)] text-[10px] tabular-nums text-right px-1.5 py-1 outline-none focus:border-[var(--bb-accent)]"
         />
-        <span className="text-[var(--bb-mute)] text-[10px]">]</span>
-        <span className="text-[10px] tabular-nums text-[var(--bb-text)] w-12 text-right">
-          {formatValue ? formatValue(value) : value.toString().padStart(3, "0")}<span className="text-[var(--bb-mute)]">{!formatValue && "px"}</span>
-        </span>
-      </div>
-      <div className="flex justify-between text-[8px] tracking-[0.2em] text-[var(--bb-mute)]">
-        <span>{lo}&nbsp;{min}</span>
-        <span>{max}&nbsp;{hi}</span>
+        {!formatValue && unit && <span className="text-[9px] text-[var(--bb-mute)]">{unit}</span>}
       </div>
     </div>
   );
 }
 
-// ── Toggle ─────────────────────────────────────────────────────────────────────
+// ── Toggle (switch) ───────────────────────────────────────────────────────────
 
 function Toggle({
   label,
   description,
   enabled,
   onToggle,
-  glyph,
-  glyphOff,
 }: {
   label: string;
   description: string;
@@ -1856,41 +1878,214 @@ function Toggle({
       onClick={onToggle}
       role="switch"
       aria-checked={enabled}
-      className="w-full flex items-center justify-between gap-3 py-2.5 px-1 group border-b border-[var(--bb-line)]/60 last:border-b-0"
+      className="w-full flex items-center justify-between gap-3 py-2.5 px-1 min-h-[44px] group text-left border-b border-[var(--bb-line)]/60 last:border-b-0"
     >
-      <div className="flex items-center gap-2 text-left">
-        <span className={`text-[12px] tabular-nums tracking-[0.15em] ${enabled ? "text-[var(--bb-accent)]" : "text-[var(--bb-mute)]"}`}>
-          {enabled ? "[X]" : "[ ]"}
+      <div className="flex flex-col leading-tight min-w-0">
+        <span className={`text-[11px] tracking-[0.15em] uppercase ${enabled ? "text-[var(--bb-text)]" : "text-[var(--bb-dim)] group-hover:text-[var(--bb-text)]"}`}>
+          {label}
         </span>
-        <div className="flex flex-col leading-tight">
-          <span className={`text-[11px] tracking-[0.15em] uppercase ${enabled ? "text-[var(--bb-text)]" : "text-[var(--bb-dim)] group-hover:text-[var(--bb-text)]"}`}>
-            {label}
-          </span>
-          <span className="text-[10px] text-[var(--bb-mute)] normal-case tracking-normal">
-            {description}
-          </span>
-        </div>
+        <span className="text-[10px] text-[var(--bb-mute)] normal-case tracking-normal">
+          {description}
+        </span>
       </div>
-      <span className={`${enabled ? "text-[var(--bb-accent)]" : "text-[var(--bb-mute)]"} flex items-center`}>
-        {enabled ? (glyph ?? <GearSix size={12} weight="bold" />) : (glyphOff ?? null)}
+      <span
+        aria-hidden
+        className={`relative shrink-0 w-9 h-5 border transition-colors duration-100 ${
+          enabled
+            ? "bg-[var(--bb-accent)] border-[var(--bb-accent)]"
+            : "bg-[var(--bb-line-2)] border-[var(--bb-line-2)]"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 w-3.5 h-3.5 transition-all duration-100 ${
+            enabled ? "left-[18px] bg-black" : "left-0.5 bg-[var(--bb-text)]"
+          }`}
+        />
       </span>
     </button>
   );
 }
 
-// ── Item list (active set): rename + hide/show toggle per item ────────────────
+// ── IconChromeEditor ──────────────────────────────────────────────────────────
+
+function hasChromeValue(c?: IconChrome): boolean {
+  return !!c && Object.keys(c).length > 0;
+}
+
+const CHROME_BG_SWATCHES: { name: string; value: string | undefined }[] = [
+  { name: "NONE",   value: undefined },
+  { name: "PANE",   value: "#0a0a0a" },
+  { name: "TILE",   value: "#111111" },
+  { name: "FROST",  value: "rgba(255,255,255,0.06)" },
+];
+
+const CHROME_BORDER_SWATCHES: { name: string; value: string | undefined }[] = [
+  { name: "NONE",   value: undefined },
+  { name: "LINE",   value: "#1f1f1f" },
+  { name: "LINE+",  value: "#2b2b2b" },
+  { name: "ACCENT", value: "var(--bb-accent)" },
+];
+
+function SwatchStrip({
+  label, swatches, current, onPick,
+}: {
+  label: string;
+  swatches: { name: string; value: string | undefined }[];
+  current: string | undefined;
+  onPick: (v: string | undefined) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[9px] tracking-[0.18em] uppercase text-[var(--bb-dim)]">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {swatches.map((sw) => {
+          const active = (current ?? undefined) === sw.value
+            || (sw.value === undefined && current === undefined);
+          return (
+            <button
+              key={sw.name}
+              onClick={() => onPick(sw.value)}
+              className={`flex items-center gap-1.5 px-2 py-1 text-[9px] tracking-[0.1em] uppercase border transition-colors cursor-pointer ${
+                active
+                  ? "border-[var(--bb-accent)] text-[var(--bb-text)]"
+                  : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"
+              }`}
+            >
+              <span
+                className="w-3 h-3 border border-black shrink-0"
+                style={sw.value ? { background: sw.value } : {
+                  backgroundImage: "linear-gradient(45deg, #333 25%, transparent 25%, transparent 75%, #333 75%)",
+                  backgroundSize: "6px 6px",
+                }}
+              />
+              {sw.name}
+            </button>
+          );
+        })}
+        <label className="flex items-center gap-1 px-2 py-1 text-[9px] tracking-[0.1em] uppercase border border-[var(--bb-line)] text-[var(--bb-dim)] cursor-pointer hover:border-[var(--bb-dim)]">
+          <input
+            type="color"
+            value={/^#[0-9a-fA-F]{6}$/.test(current || "") ? (current as string) : "#111111"}
+            onChange={(e) => onPick(e.target.value)}
+            className="w-3 h-3 bg-transparent border-0 p-0 cursor-pointer outline-none"
+          />
+          CUSTOM
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function IconChromeEditor({
+  value,
+  inherited,
+  onChange,
+  onReset,
+  compact,
+}: {
+  value: IconChrome;
+  inherited?: IconChrome;
+  onChange: (patch: Partial<IconChrome>) => void;
+  onReset: () => void;
+  compact?: boolean;
+}) {
+  const eff: IconChrome = { ...(inherited || {}), ...value };
+  const dirty = hasChromeValue(value);
+
+  return (
+    <div className={`flex flex-col ${compact ? "gap-3" : "gap-4"}`}>
+      {/* Preview */}
+      <div className="flex items-center gap-3 border border-[var(--bb-line)] bg-black p-3">
+        <div className="w-12 h-12 flex items-center justify-center shrink-0" style={iconChromeStyle(eff)}>
+          <span className="text-[var(--bb-accent)] font-bold text-[15px] tracking-tight">BB</span>
+        </div>
+        <div className="text-[9px] text-[var(--bb-mute)] normal-case leading-relaxed">
+          {inherited
+            ? dirty ? "This item overrides the global icon box." : "Following the global icon box."
+            : "Applies to every dock icon. Individual items can override this."}
+        </div>
+      </div>
+
+      {/* Presets */}
+      <div className="flex flex-wrap gap-1.5">
+        {ICON_CHROME_PRESETS.map((p) => (
+          <button
+            key={p.name}
+            onClick={() => onChange({
+              background: p.chrome.background,
+              borderColor: p.chrome.borderColor,
+              borderWidth: p.chrome.borderWidth,
+              radius: p.chrome.radius,
+              padding: p.chrome.padding,
+            })}
+            className="px-2 py-1 text-[9px] tracking-[0.12em] uppercase border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-accent)] transition-colors cursor-pointer"
+          >
+            {p.name}
+          </button>
+        ))}
+      </div>
+
+      <SwatchStrip
+        label="Background"
+        swatches={CHROME_BG_SWATCHES}
+        current={value.background}
+        onPick={(v) => onChange({ background: v })}
+      />
+      <SwatchStrip
+        label="Border color"
+        swatches={CHROME_BORDER_SWATCHES}
+        current={value.borderColor}
+        onPick={(v) => onChange({ borderColor: v })}
+      />
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[9px] tracking-[0.18em] uppercase text-[var(--bb-dim)]">Border width</span>
+        <SliderRow value={eff.borderWidth ?? 0} min={0} max={4} step={1}
+          onChange={(v) => onChange({ borderWidth: v === 0 ? undefined : v })} />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[9px] tracking-[0.18em] uppercase text-[var(--bb-dim)]">Corner radius</span>
+        <SliderRow value={eff.radius ?? 0} min={0} max={24} step={1}
+          onChange={(v) => onChange({ radius: v === 0 ? undefined : v })} />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[9px] tracking-[0.18em] uppercase text-[var(--bb-dim)]">Inner padding</span>
+        <SliderRow value={eff.padding ?? 0} min={0} max={16} step={1}
+          onChange={(v) => onChange({ padding: v === 0 ? undefined : v })} />
+      </div>
+
+      <button
+        onClick={onReset}
+        disabled={!dirty}
+        className="self-start flex items-center gap-1.5 px-2.5 py-1 text-[9px] uppercase tracking-[0.15em] border border-[var(--bb-line)] text-[var(--bb-dim)] enabled:hover:text-[var(--bb-text)] enabled:hover:border-[var(--bb-dim)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        <ArrowCounterClockwise size={10} weight="bold" />
+        {inherited ? "Use global default" : "Clear"}
+      </button>
+    </div>
+  );
+}
+
+// ── Item list (active set): rename + hide/show + per-item icon box ─────────────
 
 function ItemList({
   items,
   onRename,
   onSetHidden,
+  globalChrome,
+  onSetItemChrome,
+  onResetItemChrome,
 }: {
   items: DockItem[];
   onRename: (id: string, name: string) => void;
   onSetHidden: (id: string, hidden: boolean) => void;
+  globalChrome: IconChrome;
+  onSetItemChrome: (id: string, patch: Partial<IconChrome>) => void;
+  onResetItemChrome: (id: string) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function commit() {
@@ -1914,61 +2109,86 @@ function ItemList({
         const num = String(i + 1).padStart(2, "0");
         const isHidden = !!item.hidden;
         const isEditing = editingId === item.id;
+        const isExpanded = expandedId === item.id;
+        const customized = hasChromeValue(item.chrome);
         return (
           <div
             key={item.id}
-              className={`
-                flex items-center gap-2 py-2 px-1
-                border-b border-[var(--bb-line)]/60 last:border-b-0
-                ${isHidden ? "opacity-50" : ""}
-              `}
+            className={`border-b border-[var(--bb-line)]/60 last:border-b-0 ${isHidden ? "opacity-50" : ""}`}
           >
-            <span className="text-[9px] tabular-nums text-[var(--bb-mute)] w-6">{num}</span>
+            <div className="flex items-center gap-2 py-2 px-1">
+              <span className="text-[9px] tabular-nums text-[var(--bb-mute)] w-6">{num}</span>
 
-            {isEditing ? (
-              <input
-                ref={inputRef}
-                value={editingName}
-                onChange={(e) => setEditingName(e.target.value)}
-                onBlur={commit}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commit();
-                  if (e.key === "Escape") setEditingId(null);
-                }}
-                className="flex-1 bg-black text-[var(--bb-text)] text-[11px] px-1 py-0.5 outline-none border border-[var(--bb-accent)] min-w-0"
-                autoFocus
-              />
-            ) : (
-              <span className="flex-1 text-[11px] text-[var(--bb-text)] truncate">
-                {item.name}
-              </span>
-            )}
+              {isEditing ? (
+                <input
+                  ref={inputRef}
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onBlur={commit}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commit();
+                    if (e.key === "Escape") setEditingId(null);
+                  }}
+                  className="flex-1 bg-black text-[var(--bb-text)] text-[11px] px-1 py-0.5 outline-none border border-[var(--bb-accent)] min-w-0"
+                  autoFocus
+                />
+              ) : (
+                <span className="flex-1 text-[11px] text-[var(--bb-text)] truncate flex items-center gap-1.5">
+                  {item.name}
+                  {customized && <span className="w-1 h-1 bg-[var(--bb-accent)] shrink-0" title="Custom icon box" />}
+                </span>
+              )}
 
-            {!isEditing && (
+              {!isEditing && (
+                <button
+                  onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                  title="Icon box"
+                  className={`w-6 h-6 flex items-center justify-center cursor-pointer ${
+                    isExpanded || customized ? "text-[var(--bb-accent)]" : "text-[var(--bb-dim)] hover:text-[var(--bb-accent)]"
+                  }`}
+                >
+                  {isExpanded ? <CaretDown size={11} weight="bold" /> : <CaretRight size={11} weight="bold" />}
+                </button>
+              )}
+
+              {!isEditing && (
+                <button
+                  onClick={() => {
+                    setEditingId(item.id);
+                    setEditingName(item.name);
+                    setTimeout(() => inputRef.current?.select(), 30);
+                  }}
+                  title="Rename"
+                  className="w-6 h-6 flex items-center justify-center text-[var(--bb-dim)] hover:text-[var(--bb-accent)] cursor-pointer"
+                >
+                  <PencilSimple size={11} weight="bold" />
+                </button>
+              )}
+
               <button
-                onClick={() => {
-                  setEditingId(item.id);
-                  setEditingName(item.name);
-                  setTimeout(() => inputRef.current?.select(), 30);
-                }}
-                title="Rename"
-                className="w-6 h-6 flex items-center justify-center text-[var(--bb-dim)] hover:text-[var(--bb-accent)] cursor-pointer"
+                onClick={() => onSetHidden(item.id, !isHidden)}
+                title={isHidden ? "Show in bar" : "Hide from bar"}
+                className={`w-6 h-6 flex items-center justify-center cursor-pointer ${
+                  isHidden
+                    ? "text-[var(--bb-mute)] hover:text-[var(--bb-accent)]"
+                    : "text-[var(--bb-dim)] hover:text-[var(--bb-warn)]"
+                }`}
               >
-                <PencilSimple size={11} weight="bold" />
+                {isHidden ? <Eye size={11} weight="bold" /> : <EyeSlash size={11} weight="bold" />}
               </button>
-            )}
+            </div>
 
-            <button
-              onClick={() => onSetHidden(item.id, !isHidden)}
-              title={isHidden ? "Show in bar" : "Hide from bar"}
-              className={`w-6 h-6 flex items-center justify-center cursor-pointer ${
-                isHidden
-                  ? "text-[var(--bb-mute)] hover:text-[var(--bb-accent)]"
-                  : "text-[var(--bb-dim)] hover:text-[var(--bb-warn)]"
-              }`}
-            >
-              {isHidden ? <Eye size={11} weight="bold" /> : <EyeSlash size={11} weight="bold" />}
-            </button>
+            {isExpanded && (
+              <div className="px-2 pb-3 pt-1">
+                <IconChromeEditor
+                  compact
+                  value={item.chrome ?? {}}
+                  inherited={globalChrome}
+                  onChange={(patch) => onSetItemChrome(item.id, patch)}
+                  onReset={() => onResetItemChrome(item.id)}
+                />
+              </div>
+            )}
           </div>
         );
       })}
