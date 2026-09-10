@@ -4,7 +4,7 @@ import {
   Lightning, Eye, EyeSlash, PencilSimple,
   Plus, Trash, MagnifyingGlass, ArrowCounterClockwise, Warning, CaretUp, CaretDown,
   CaretRight, DownloadSimple, UploadSimple, Copy, Check, FileText,
-  SquaresFour, PaintBrush, StackSimple, SlidersHorizontal, Sparkle, ShieldCheck, Info,
+  SquaresFour, PaintBrush, StackSimple, SlidersHorizontal, Sparkle, ShieldCheck, Info, PuzzlePiece
 } from "@phosphor-icons/react";
 import {
    BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
@@ -14,7 +14,7 @@ import {
  import { useConfig, DEFAULT_CONFIG, sanitize } from "./store";
  import { getInstalledTerminals, getRunningApps, checkAccessibilityPermissions, requestAccessibilityPermissions, checkScreenRecordingPermission, requestScreenRecordingPermission, getOpenOnLogin, checkForUpdates, getReleaseHistory, installUpdate } from "./tauri-bridge";
  import { getCurrentWindow } from "@tauri-apps/api/window";
-import { getExtensionRegistry } from "./extensions-runtime";
+import { useExtensions } from "./extensions-runtime";
 
 const LENGTH_MODES: { value: BarLengthMode; label: string }[] = [
   { value: "edge",   label: "EDGE" },
@@ -66,6 +66,7 @@ const NAV = [
   { id: "icons",       label: "Icons",       Icon: StackSimple },
   { id: "sets",        label: "Sets & Items", Icon: SlidersHorizontal },
   { id: "sections",    label: "Sections",    Icon: SquaresFour },
+  { id: "extensions",  label: "Extensions",  Icon: PuzzlePiece },
   { id: "behaviour",   label: "Behaviour",   Icon: Sparkle },
   { id: "permissions", label: "Permissions", Icon: ShieldCheck },
   { id: "about",       label: "About",       Icon: Info },
@@ -114,6 +115,7 @@ export default function SettingsApp() {
     toggleDockArea,
     toggleShowExtensions,
     toggleSpaces,
+    toggleSettingsCog,
     toggleCaffeine,
     toggleExtension,
     setSectionOrder,
@@ -132,7 +134,16 @@ export default function SettingsApp() {
     onConfirm: () => void;
   } | null>(null);
 
-  const [extensionsList] = useState(() => getExtensionRegistry());
+  const [extensionsList, setExtensionsList] = useState<{name: string, displayName: string}[]>([]);
+  const loadedExtensions = useExtensions(config.enabledExtensions);
+
+  useEffect(() => {
+    import("./extensions-runtime").then(m => {
+      m.fetchExtensionRegistry().then(() => {
+        setExtensionsList(m.getExtensionRegistry());
+      });
+    });
+  }, []);
 
   const [axGranted, setAxGranted] = useState<boolean | null>(null);
   const [srGranted, setSrGranted] = useState<boolean | null>(null);
@@ -246,7 +257,7 @@ export default function SettingsApp() {
                 onClick={() => setActiveTab(tab.id)}
                 onKeyDown={(e) => handleTabKeyDown(e, tab.id)}
                 className={`
-                  w-full flex items-center gap-2.5 px-4 py-2 text-[11px] tracking-[0.12em] uppercase
+                  w-full flex items-center gap-2.5 px-4 py-3 text-[11px] tracking-[0.12em] uppercase
                   transition-colors cursor-pointer border-l-2
                   ${isActive
                     ? "border-[var(--bb-accent)] bg-[var(--bb-pane)] text-[var(--bb-text)] font-bold"
@@ -266,7 +277,7 @@ export default function SettingsApp() {
         </nav>
 
         <main className="flex-1 min-h-0 overflow-y-auto bb-scroll">
-          <div className="px-8 py-7 space-y-6 max-w-[600px]">
+          <div className="px-8 py-7 space-y-8 max-w-[600px]">
             <AnimatePresence mode="wait">
             {activeTab === "layout" && (
               <motion.div
@@ -496,7 +507,7 @@ export default function SettingsApp() {
                       <button
                         onClick={() => setDefaultTerminal(undefined)}
                         className={`
-                          px-2 py-1 text-[10px] tracking-[0.1em] uppercase border transition-colors cursor-pointer
+                          px-4 py-1 text-[10px] tracking-[0.1em] uppercase border transition-colors cursor-pointer
                           ${!config.defaultTerminal
                             ? "bg-[var(--bb-accent)] border-[var(--bb-accent)] text-black font-bold"
                             : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"}
@@ -511,7 +522,7 @@ export default function SettingsApp() {
                             key={term.bundle_id}
                             onClick={() => setDefaultTerminal(term.bundle_id)}
                             className={`
-                              px-2 py-1 text-[10px] flex items-center gap-1.5 border transition-colors cursor-pointer
+                              px-4 py-1 text-[10px] flex items-center gap-1.5 border transition-colors cursor-pointer
                               ${active
                                 ? "bg-[var(--bb-accent)] border-[var(--bb-accent)] text-black font-bold"
                                 : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"}
@@ -690,46 +701,16 @@ export default function SettingsApp() {
                       enabled={config.showSpaces}
                       onToggle={toggleSpaces}
                     />
+                    <Toggle
+                      label="SETTINGS COG"
+                      description="Show the settings cog button in the bar"
+                      enabled={config.showSettingsCog}
+                      onToggle={toggleSettingsCog}
+                    />
                   </div>
                 </Section>
 
-                {extensionsList.length > 0 && (
-                  <Section
-                    title="EXTENSIONS"
-                    hint={`${config.enabledExtensions.length}/${extensionsList.length} ENABLED`}
-                  >
-                    <div className="flex flex-col">
-                      {extensionsList.map((ext) => {
-                        const enabled = config.enabledExtensions.includes(ext.name);
-                        return (
-                          <div
-                            key={ext.name}
-                            className="flex items-center justify-between py-2 px-1 border-b border-[var(--bb-line)]/60 last:border-b-0"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className={`text-[12px] tabular-nums tracking-[0.15em] ${enabled ? "text-[var(--bb-accent)]" : "text-[var(--bb-mute)]"}`}>
-                                {enabled ? "[X]" : "[ ]"}
-                              </span>
-                              <span className={`text-[11px] tracking-[0.15em] ${enabled ? "text-[var(--bb-text)]" : "text-[var(--bb-dim)]"}`}>
-                                {ext.displayName}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => toggleExtension(ext.name)}
-                              className={`px-2.5 py-0.5 text-[9px] tracking-[0.12em] uppercase border transition-colors cursor-pointer font-bold shrink-0 ml-2 ${
-                                enabled
-                                  ? "border-[var(--bb-accent)] text-[var(--bb-accent)] hover:bg-[var(--bb-accent)]/10"
-                                  : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"
-                              }`}
-                            >
-                              {enabled ? "ENABLED" : "DISABLED"}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </Section>
-                )}
+                
 
                 <Section title="SECTION ORDER" hint={`${config.sectionOrder.length}`}>
                   <p className="text-[10px] text-[var(--bb-mute)] mb-2 leading-relaxed normal-case">
@@ -737,7 +718,7 @@ export default function SettingsApp() {
                   </p>
                   <div className="flex flex-col divide-y divide-[var(--bb-line)] border border-[var(--bb-line)]">
                     {config.sectionOrder.map((id, idx) => (
-                      <div key={id} className="flex items-center justify-between px-2 py-1.5">
+                      <div key={id} className="flex items-center justify-between px-4 py-3">
                         <span className="text-[11px] tracking-wider text-[var(--bb-text)] tabular-nums">
                           <span className="text-[var(--bb-mute)] mr-2">{String(idx + 1).padStart(2, "0")}</span>
                           {SECTION_LABELS[id]}
@@ -771,6 +752,89 @@ export default function SettingsApp() {
                       </div>
                     ))}
                   </div>
+                </Section>
+              </motion.div>
+            )}
+
+                        {activeTab === "extensions" && (
+              <motion.div
+                key="extensions"
+                id="panel-extensions"
+                role="tabpanel"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+              >
+                <Section
+                  title="EXTENSIONS"
+                  hint={
+                    <div className="flex items-center gap-2">
+                      <span>{`${config.enabledExtensions.length}/${extensionsList.length} ENABLED`}</span>
+                      <button 
+                        onClick={() => {
+                          import("./extensions-runtime").then(m => {
+                            m.reloadExtensions().then(() => {
+                              setExtensionsList(m.getExtensionRegistry());
+                              window.dispatchEvent(new Event("betterbar-reload-extensions"));
+                            });
+                          });
+                        }}
+                        className="px-4 py-0.5 text-[9px] uppercase border border-[var(--bb-line)] text-[var(--bb-text)] hover:bg-[var(--bb-line)]/50 transition-colors pointer-events-auto cursor-pointer"
+                      >
+                        RELOAD
+                      </button>
+                    </div>
+                  }
+                >
+                  {extensionsList.length === 0 ? (
+                    <div className="text-[11px] text-[var(--bb-dim)] py-4 text-center">
+                      No extensions found in ~/.betterbar/extensions
+                    </div>
+                  ) : (
+                    <div className="flex flex-col">
+                      {extensionsList.map((ext) => {
+                        const enabled = config.enabledExtensions.includes(ext.name);
+                        const loaded = loadedExtensions.find(e => e.name === ext.name);
+                        const SettingsComponent = loaded?.Settings;
+                        
+                        return (
+                          <div
+                            key={ext.name}
+                            className="flex flex-col py-3 px-4 border-b border-[var(--bb-line)]/60 last:border-b-0"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[12px] tabular-nums tracking-[0.15em] ${enabled ? "text-[var(--bb-accent)]" : "text-[var(--bb-mute)]"}`}>
+                                  {enabled ? "[X]" : "[ ]"}
+                                </span>
+                                <span className={`text-[11px] tracking-[0.15em] ${enabled ? "text-[var(--bb-text)]" : "text-[var(--bb-dim)]"}`}>
+                                  {ext.displayName}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => toggleExtension(ext.name)}
+                                  className={`px-4.5 py-0.5 text-[9px] tracking-[0.12em] uppercase border transition-colors cursor-pointer font-bold shrink-0 ml-2 ${
+                                    enabled
+                                      ? "border-[var(--bb-accent)] text-[var(--bb-accent)] hover:bg-[var(--bb-accent)]/10"
+                                      : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"
+                                  }`}
+                                >
+                                  {enabled ? "ENABLED" : "DISABLED"}
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {enabled && SettingsComponent && (
+                              <div className="mt-3 ml-6 p-3 bg-black/20 border border-[var(--bb-line)] rounded-md">
+                                <SettingsComponent config={config} updateConfig={setConfig} />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </Section>
               </motion.div>
             )}
@@ -889,7 +953,7 @@ function ConfirmDialog({
             Confirm
           </span>
         </div>
-        <div className="px-4 py-4">
+        <div className="px-5 py-5">
           <p className="text-[11px] text-[var(--bb-dim)] leading-relaxed">{message}</p>
         </div>
         <div className="flex border-t border-[var(--bb-line)]">
@@ -933,7 +997,7 @@ function PillSelector<T extends string>({
             title={opt.title}
             aria-pressed={active}
             className={`
-              flex-1 px-2 py-1.5 tracking-[0.15em] transition-colors cursor-pointer
+              flex-1 px-4 py-1.5 tracking-[0.15em] transition-colors cursor-pointer
               ${active
                 ? "bg-[var(--bb-accent)] text-black font-bold"
                 : "text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:bg-[var(--bb-pane-2)]"}
@@ -971,7 +1035,7 @@ function AccentColorPicker({
               key={preset.hex}
               onClick={() => onChange(preset.hex)}
               className={`
-                px-2 py-1 text-[10px] tracking-[0.1em] uppercase border transition-colors flex items-center gap-1.5 cursor-pointer
+                px-4 py-1 text-[10px] tracking-[0.1em] uppercase border transition-colors flex items-center gap-1.5 cursor-pointer
                 ${active
                   ? "bg-[var(--bb-accent)] border-[var(--bb-accent)] text-black font-bold"
                   : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"}
@@ -983,7 +1047,7 @@ function AccentColorPicker({
           );
         })}
 
-        <div className="flex items-center gap-1.5 border border-[var(--bb-line)] px-2 py-1 text-[10px] text-[var(--bb-dim)]">
+        <div className="flex items-center gap-1.5 border border-[var(--bb-line)] px-4 py-1 text-[10px] text-[var(--bb-dim)]">
           <span>CUSTOM:</span>
           <input
             type="color"
@@ -1055,7 +1119,7 @@ function WindowGroupingList({
       </p>
 
       <div className="flex items-center gap-2">
-        <div className="flex-1 flex items-center gap-1.5 border border-[var(--bb-line)] px-2 py-1">
+        <div className="flex-1 flex items-center gap-1.5 border border-[var(--bb-line)] px-4 py-1">
           <MagnifyingGlass size={10} className="text-[var(--bb-mute)]" weight="bold" />
           <input
             type="text"
@@ -1068,7 +1132,7 @@ function WindowGroupingList({
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="px-2 py-1 border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)] transition-colors cursor-pointer disabled:opacity-40"
+          className="px-4 py-1 border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)] transition-colors cursor-pointer disabled:opacity-40"
           title="Refresh app list"
         >
           <ArrowCounterClockwise size={11} weight="bold" className={loading ? "animate-spin" : ""} />
@@ -1086,7 +1150,7 @@ function WindowGroupingList({
             return (
               <div
                 key={app.bundleId}
-                className="flex items-center justify-between py-1.5 border-b border-[var(--bb-line)]/60 last:border-b-0"
+                className="flex items-center justify-between py-1.5 px-4 border-b border-[var(--bb-line)]/60 last:border-b-0"
               >
                 <div className="flex flex-col min-w-0 overflow-hidden">
                   <span className="text-[11px] text-[var(--bb-text)] font-semibold truncate">{app.name}</span>
@@ -1095,7 +1159,7 @@ function WindowGroupingList({
                 <button
                   onClick={() => onToggle(app.bundleId)}
                   className={`
-                    px-2.5 py-0.5 text-[9px] tracking-[0.12em] uppercase border transition-colors cursor-pointer font-bold shrink-0 ml-2
+                    px-4.5 py-0.5 text-[9px] tracking-[0.12em] uppercase border transition-colors cursor-pointer font-bold shrink-0 ml-2
                     ${isUngrouped
                       ? "border-[var(--bb-accent)] text-[var(--bb-accent)] hover:bg-[var(--bb-accent)]/10"
                       : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"}
@@ -1305,7 +1369,7 @@ function UpdatesSection() {
         <div className="border border-[var(--bb-accent)] bg-[var(--bb-accent)]/5 p-3.5 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[var(--bb-accent)] text-black">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-4 py-0.5 bg-[var(--bb-accent)] text-black">
                 NEW VERSION
               </span>
               <span className="text-[12px] font-bold text-[var(--bb-text)] tracking-wider">
@@ -1382,7 +1446,7 @@ function UpdatesSection() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setViewMode("latest")}
-              className={`px-2 py-0.5 text-[9px] uppercase tracking-wider font-bold transition-colors cursor-pointer ${
+              className={`px-4 py-0.5 text-[9px] uppercase tracking-wider font-bold transition-colors cursor-pointer ${
                 viewMode === "latest"
                   ? "bg-[var(--bb-accent)] text-black"
                   : "text-[var(--bb-dim)] hover:text-[var(--bb-text)]"
@@ -1393,7 +1457,7 @@ function UpdatesSection() {
             {historyList.length > 0 && (
               <button
                 onClick={() => setViewMode("archive")}
-                className={`px-2 py-0.5 text-[9px] uppercase tracking-wider font-bold transition-colors cursor-pointer ${
+                className={`px-4 py-0.5 text-[9px] uppercase tracking-wider font-bold transition-colors cursor-pointer ${
                   viewMode === "archive"
                     ? "bg-[var(--bb-accent)] text-black"
                     : "text-[var(--bb-dim)] hover:text-[var(--bb-text)]"
@@ -1411,7 +1475,7 @@ function UpdatesSection() {
               <button
                 key={rel.version}
                 onClick={() => setSelectedArchiveIdx(idx)}
-                className={`px-2 py-1 text-[9px] font-mono uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap border ${
+                className={`px-4 py-1 text-[9px] font-mono uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap border ${
                   selectedArchiveIdx === idx
                     ? "border-[var(--bb-accent)] bg-[var(--bb-accent)]/10 text-[var(--bb-accent)] font-bold"
                     : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)]"
@@ -1581,14 +1645,14 @@ function BackupSection({
           <div className="flex flex-col gap-2 pt-2">
             <button
               onClick={handleExportFile}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-2 text-[10px] uppercase tracking-[0.15em] bg-[var(--bb-accent)] text-black font-bold hover:opacity-90 transition-opacity cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-1.5 px-4 text-[10px] uppercase tracking-[0.15em] bg-[var(--bb-accent)] text-black font-bold hover:opacity-90 transition-opacity cursor-pointer"
             >
               <DownloadSimple size={11} weight="bold" />
               <span>Export File (.json)</span>
             </button>
             <button
               onClick={handleCopy}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-2 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)] transition-colors cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-1.5 px-4 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)] transition-colors cursor-pointer"
             >
               {copied ? <Check size={11} weight="bold" className="text-[var(--bb-accent)]" /> : <Copy size={11} weight="bold" />}
               <span>{copied ? "Copied to Clipboard" : "Copy JSON"}</span>
@@ -1616,14 +1680,14 @@ function BackupSection({
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-2 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-accent)] text-[var(--bb-accent)] hover:bg-[var(--bb-accent)]/10 font-bold transition-colors cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-1.5 px-4 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-accent)] text-[var(--bb-accent)] hover:bg-[var(--bb-accent)]/10 font-bold transition-colors cursor-pointer"
             >
               <UploadSimple size={11} weight="bold" />
               <span>Load File (.json)</span>
             </button>
             <button
               onClick={handlePasteImport}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-2 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)] transition-colors cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-1.5 px-4 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)] transition-colors cursor-pointer"
             >
               <FileText size={11} weight="bold" />
               <span>Paste from Clipboard</span>
@@ -1731,7 +1795,7 @@ function PermissionRow({
 
   return (
     <div className="border border-[var(--bb-line)] bg-[var(--bb-pane)]">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--bb-line)]">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--bb-line)]">
         <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-[var(--bb-text)]">
           {name}
         </span>
@@ -1773,7 +1837,7 @@ function Footer() {
 
 function SubHead({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[9px] tracking-[0.22em] uppercase text-[var(--bb-mute)] pt-4 first:pt-0 pb-1.5">
+    <div className="text-[9px] tracking-[0.22em] uppercase text-[var(--bb-mute)] pt-6 first:pt-0 pb-2">
       {children}
     </div>
   );
@@ -1789,13 +1853,13 @@ function Section({
 }: {
   number?: string;
   title: string;
-  hint?: string;
+  hint?: React.ReactNode;
   icon?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="border border-[var(--bb-line)] bg-[var(--bb-pane)]">
-      <header className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--bb-line)]">
+      <header className="flex items-center justify-between px-5 py-3 border-b border-[var(--bb-line)]">
         <span className="text-[11px] uppercase tracking-[0.2em] text-[var(--bb-text)] font-bold flex items-center gap-1.5">
           {icon}
           {title}
@@ -1878,7 +1942,7 @@ function Toggle({
       onClick={onToggle}
       role="switch"
       aria-checked={enabled}
-      className="w-full flex items-center justify-between gap-3 py-2.5 px-1 min-h-[44px] group text-left border-b border-[var(--bb-line)]/60 last:border-b-0"
+      className="w-full flex items-center justify-between gap-3 py-3.5 px-4 min-h-[48px] group text-left border-b border-[var(--bb-line)]/60 last:border-b-0"
     >
       <div className="flex flex-col leading-tight min-w-0">
         <span className={`text-[11px] tracking-[0.15em] uppercase ${enabled ? "text-[var(--bb-text)]" : "text-[var(--bb-dim)] group-hover:text-[var(--bb-text)]"}`}>
@@ -1945,7 +2009,7 @@ function SwatchStrip({
             <button
               key={sw.name}
               onClick={() => onPick(sw.value)}
-              className={`flex items-center gap-1.5 px-2 py-1 text-[9px] tracking-[0.1em] uppercase border transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 px-4 py-1 text-[9px] tracking-[0.1em] uppercase border transition-colors cursor-pointer ${
                 active
                   ? "border-[var(--bb-accent)] text-[var(--bb-text)]"
                   : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"
@@ -1962,7 +2026,7 @@ function SwatchStrip({
             </button>
           );
         })}
-        <label className="flex items-center gap-1 px-2 py-1 text-[9px] tracking-[0.1em] uppercase border border-[var(--bb-line)] text-[var(--bb-dim)] cursor-pointer hover:border-[var(--bb-dim)]">
+        <label className="flex items-center gap-1 px-4 py-1 text-[9px] tracking-[0.1em] uppercase border border-[var(--bb-line)] text-[var(--bb-dim)] cursor-pointer hover:border-[var(--bb-dim)]">
           <input
             type="color"
             value={/^#[0-9a-fA-F]{6}$/.test(current || "") ? (current as string) : "#111111"}
@@ -2018,7 +2082,7 @@ function IconChromeEditor({
               radius: p.chrome.radius,
               padding: p.chrome.padding,
             })}
-            className="px-2 py-1 text-[9px] tracking-[0.12em] uppercase border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-accent)] transition-colors cursor-pointer"
+            className="px-4 py-1 text-[9px] tracking-[0.12em] uppercase border border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-accent)] transition-colors cursor-pointer"
           >
             {p.name}
           </button>
@@ -2057,7 +2121,7 @@ function IconChromeEditor({
       <button
         onClick={onReset}
         disabled={!dirty}
-        className="self-start flex items-center gap-1.5 px-2.5 py-1 text-[9px] uppercase tracking-[0.15em] border border-[var(--bb-line)] text-[var(--bb-dim)] enabled:hover:text-[var(--bb-text)] enabled:hover:border-[var(--bb-dim)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        className="self-start flex items-center gap-1.5 px-4.5 py-1 text-[9px] uppercase tracking-[0.15em] border border-[var(--bb-line)] text-[var(--bb-dim)] enabled:hover:text-[var(--bb-text)] enabled:hover:border-[var(--bb-dim)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
         <ArrowCounterClockwise size={10} weight="bold" />
         {inherited ? "Use global default" : "Clear"}
@@ -2116,7 +2180,7 @@ function ItemList({
             key={item.id}
             className={`border-b border-[var(--bb-line)]/60 last:border-b-0 ${isHidden ? "opacity-50" : ""}`}
           >
-            <div className="flex items-center gap-2 py-2 px-1">
+            <div className="flex items-center gap-2 py-2 px-4">
               <span className="text-[9px] tabular-nums text-[var(--bb-mute)] w-6">{num}</span>
 
               {isEditing ? (
@@ -2179,7 +2243,7 @@ function ItemList({
             </div>
 
             {isExpanded && (
-              <div className="px-2 pb-3 pt-1">
+              <div className="px-4 pb-3 pt-1">
                 <IconChromeEditor
                   compact
                   value={item.chrome ?? {}}
@@ -2234,7 +2298,7 @@ function SetList({
           <div
             key={set.id}
               className={`
-                flex items-center gap-2 py-2 px-1
+                flex items-center gap-2 py-2 px-4
                 border-b border-[var(--bb-line)]/60 last:border-b-0
                 ${isActive ? "bg-[var(--bb-accent)]/[0.06]" : ""}
               `}
@@ -2305,7 +2369,7 @@ function SetList({
 
       <button
         onClick={() => onAdd(`Set ${sets.length + 1}`)}
-        className="mt-2 flex items-center justify-center gap-2 py-1.5 px-2 text-[10px] uppercase tracking-[0.18em] text-[var(--bb-dim)] hover:text-[var(--bb-accent)] border border-[var(--bb-line)] hover:border-[var(--bb-accent)] transition-colors cursor-pointer"
+        className="mt-2 flex items-center justify-center gap-2 py-1.5 px-4 text-[10px] uppercase tracking-[0.18em] text-[var(--bb-dim)] hover:text-[var(--bb-accent)] border border-[var(--bb-line)] hover:border-[var(--bb-accent)] transition-colors cursor-pointer"
       >
         <Plus size={11} weight="bold" />
         <span>New set</span>
@@ -2358,7 +2422,7 @@ function ClockList({
         return (
           <div
             key={clock.id}
-            className="flex items-center gap-2 py-2 px-1 border-b border-[var(--bb-line)]/60 last:border-b-0"
+            className="flex items-center gap-2 py-2 px-4 border-b border-[var(--bb-line)]/60 last:border-b-0"
           >
             <span className="text-[9px] tabular-nums text-[var(--bb-mute)] w-6">{num}</span>
             {isEditing ? (
@@ -2378,13 +2442,13 @@ function ClockList({
                 />
                 <button
                   onClick={() => save(clock.id)}
-                  className="px-2 py-0.5 bg-[var(--bb-accent)] text-black text-[10px] font-bold uppercase cursor-pointer"
+                  className="px-4 py-0.5 bg-[var(--bb-accent)] text-black text-[10px] font-bold uppercase cursor-pointer"
                 >
                   Save
                 </button>
                 <button
                   onClick={() => setEditingId(null)}
-                  className="px-2 py-0.5 border border-[var(--bb-line)] text-[var(--bb-dim)] text-[10px] uppercase cursor-pointer"
+                  className="px-4 py-0.5 border border-[var(--bb-line)] text-[var(--bb-dim)] text-[10px] uppercase cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -2422,7 +2486,7 @@ function ClockList({
       })}
       <button
         onClick={addClock}
-        className="mt-2 flex items-center justify-center gap-2 py-1.5 px-2 text-[10px] uppercase tracking-[0.18em] text-[var(--bb-dim)] hover:text-[var(--bb-accent)] border border-[var(--bb-line)] hover:border-[var(--bb-accent)] transition-colors cursor-pointer"
+        className="mt-2 flex items-center justify-center gap-2 py-1.5 px-4 text-[10px] uppercase tracking-[0.18em] text-[var(--bb-dim)] hover:text-[var(--bb-accent)] border border-[var(--bb-line)] hover:border-[var(--bb-accent)] transition-colors cursor-pointer"
       >
         <Plus size={11} weight="bold" />
         <span>Add Timezone</span>
