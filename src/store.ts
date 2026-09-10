@@ -55,6 +55,7 @@ export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     showExtensions: cfg.showExtensions === undefined ? DEFAULT_CONFIG.showExtensions : !!cfg.showExtensions,
     enabledExtensions: Array.isArray(cfg.enabledExtensions) ? cfg.enabledExtensions : [],
     showSpaces: cfg.showSpaces === undefined ? DEFAULT_CONFIG.showSpaces : !!cfg.showSpaces,
+    showSettingsCog: cfg.showSettingsCog === undefined ? DEFAULT_CONFIG.showSettingsCog : !!cfg.showSettingsCog,
     showCaffeine: cfg.showCaffeine === undefined ? DEFAULT_CONFIG.showCaffeine : !!cfg.showCaffeine,
     openOnLogin: cfg.openOnLogin === undefined ? DEFAULT_CONFIG.openOnLogin : !!cfg.openOnLogin,
     sectionOrder: normalizeSectionOrder(cfg.sectionOrder),
@@ -512,6 +513,11 @@ export function useConfig() {
     [setConfig]
   );
 
+    const toggleSettingsCog = useCallback(
+    () => setConfig((p) => ({ ...p, showSettingsCog: !p.showSettingsCog })),
+    [setConfig]
+  );
+
   const toggleSpaces = useCallback(
     () => setConfig((p) => ({ ...p, showSpaces: !p.showSpaces })),
     [setConfig]
@@ -583,6 +589,7 @@ export function useConfig() {
     toggleDockArea,
     toggleShowExtensions,
     toggleSpaces,
+    toggleSettingsCog,
     toggleCaffeine: useCallback(() => setConfig((p) => ({ ...p, showCaffeine: !p.showCaffeine })), [setConfig]),
     toggleExtension,
     setSectionPadding: useCallback((sectionId: SectionId, padding: SectionPadding) => {

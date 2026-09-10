@@ -1,7 +1,7 @@
 {
   "name": "betterbar",
   "private": true,
-  "version": "0.10.0",
+  "version": "0.11.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,8 +24,10 @@
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-opener": "^2",
     "framer-motion": "^12.38.0",
+    "marked": "^18.0.12",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "sucrase": "^3.35.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",

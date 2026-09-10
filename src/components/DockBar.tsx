@@ -162,7 +162,16 @@ export function DockBar({
   const runningWindows = useRunningWindows();
   const extensions = useExtensions(config.showExtensions ? config.enabledExtensions : []);
   const spaces = useSpaces();
-  useWindowPosition(config, onFloatPositionChange, autoLength, terminalExpanded && isVertical ? 320 : undefined);
+  
+  const [customExpandedSize, setCustomExpandedSize] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const handleExpand = (e: any) => setCustomExpandedSize(e.detail);
+    window.addEventListener("betterbar-expand", handleExpand);
+    return () => window.removeEventListener("betterbar-expand", handleExpand);
+  }, []);
+
+  const effectiveExpandedSize = customExpandedSize ?? (terminalExpanded && isVertical ? 320 : undefined);
+  useWindowPosition(config, onFloatPositionChange, autoLength, effectiveExpandedSize);
 
   const sortedItems = [...activeSet.items]
     .filter((i) => !i.hidden)
@@ -800,13 +809,7 @@ export function DockBar({
           className={`flex ${isVertical ? "flex-col" : "flex-row"} items-stretch ${isVertical ? "w-full gap-px" : "h-full gap-px"}`}
         >
           {extensions.map((ext) => (
-            <ExtensionIcon
-              key={ext.name}
-              name={ext.displayName}
-              barSize={config.barSize}
-            >
-              <ext.Component />
-            </ExtensionIcon>
+            <ext.Component key={ext.name} isVertical={isVertical} config={config} />
           ))}
         </div>
         <Divider isVertical={isVertical} />
@@ -824,22 +827,24 @@ export function DockBar({
     );
   }
 
-  sectionNodes.cog = (
-    <>
-      <Divider isVertical={isVertical} />
-      <div className={`flex ${isVertical ? "flex-col pb-1 gap-px" : "flex-row pr-1 gap-px"} items-center justify-center`}>
-        <RailButton
-          label="COG"
-          active={false}
-          onClick={handleOpenSettings}
-          isVertical={isVertical}
-          barSize={config.barSize}
-        >
-          <GearSix size={13} weight="bold" />
-        </RailButton>
-      </div>
-    </>
-  );
+  if (config.showSettingsCog) {
+    sectionNodes.cog = (
+      <>
+        <Divider isVertical={isVertical} />
+        <div className={`flex ${isVertical ? "flex-col pb-3 gap-px" : "flex-row px-4 gap-px"} items-center justify-center`}>
+          <RailButton
+            label="COG"
+            active={false}
+            onClick={handleOpenSettings}
+            isVertical={isVertical}
+            barSize={config.barSize}
+          >
+            <GearSix size={13} weight="bold" />
+          </RailButton>
+        </div>
+      </>
+    );
+  }
 
   const scaledSections = new Set<SectionId>(["time", "music", "caffeine", "battery", "sets", "sims", "cog", "extensions", "spaces"]);
   const orderedSections = config.sectionOrder.filter((id) => sectionNodes[id] !== undefined);
@@ -856,7 +861,7 @@ export function DockBar({
           ${isVertical ? "flex-col items-stretch" : "flex-row items-stretch pl-3"}
           ${config.transparentBg ? "bg-black/35 backdrop-blur-md" : "bg-black"} ${panelBorder}
           border-[var(--bb-line)]
-          select-none overflow-hidden bb-scanlines
+          select-none bb-scanlines
         `}
         style={{
           width: config.freeFloat ? undefined : (isVertical ? config.barSize : undefined),
@@ -1343,7 +1348,7 @@ function ExtensionIcon({
     <div
       title={name}
       style={{ width: size, height: size }}
-      className="shrink-0 flex items-center justify-center border border-[var(--bb-line)] text-[var(--bb-dim)] overflow-hidden hover:border-[var(--bb-accent)] hover:text-[var(--bb-accent)] cursor-pointer transition-colors"
+      className="shrink-0 flex items-center justify-center border border-[var(--bb-line)] text-[var(--bb-dim)] hover:border-[var(--bb-accent)] hover:text-[var(--bb-accent)] cursor-pointer transition-colors"
     >
       {children}
     </div>

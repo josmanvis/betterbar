@@ -1,3 +1,4 @@
+mod extensions;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime, WindowEvent};
 
@@ -2378,10 +2379,16 @@ return "skip""#,
 // --- App entry ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+
+
+
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            extensions::fetch_extension_files_from_disk,
+            extensions::read_standup_file,
             get_running_apps,
             get_installed_terminals,
             execute_terminal_command,

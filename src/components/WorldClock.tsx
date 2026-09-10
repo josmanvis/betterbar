@@ -68,7 +68,7 @@ export function WorldClock({ isVertical, clocks = DEFAULT_CLOCKS }: WorldClockPr
   }
 
   return (
-    <div className="h-full flex items-center gap-3 px-2">
+    <div className="h-full flex items-center gap-4 px-4">
       {activeClocks.map(({ id, code, tz }) => {
         const time = formatTime(tz, now);
         return (

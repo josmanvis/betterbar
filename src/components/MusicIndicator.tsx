@@ -86,7 +86,7 @@ export function MusicIndicator({ music, isVertical }: MusicIndicatorProps) {
 
   return (
     <div
-      className="h-full flex items-center px-1.5 gap-1.5 cursor-pointer"
+      className="h-full flex items-center px-4 gap-2 cursor-pointer"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={handleOpenApp}

@@ -151,6 +151,7 @@ export interface BetterBarConfig {
   showExtensions: boolean;
   enabledExtensions: string[];
   showSpaces: boolean;
+  showSettingsCog: boolean;
   /** Keep macOS awake (caffeine / sleep inhibitor) */
   showCaffeine: boolean;
   /** Automatically launch BetterBar on macOS login. */
@@ -290,6 +291,7 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   showExtensions: true,
   enabledExtensions: [],
   showSpaces: true,
+  showSettingsCog: true,
   showCaffeine: true,
   openOnLogin: false,
   sectionOrder: DEFAULT_SECTION_ORDER,
