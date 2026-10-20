@@ -4,7 +4,7 @@ import { getBatteryInfo } from "../tauri-bridge";
 
 const POLL_MS = 30_000;
 
-export function useBattery(): BatteryInfo {
+export function useBattery(enabled = true): BatteryInfo {
   const [info, setInfo] = useState<BatteryInfo>({
     percentage: 0,
     is_charging: false,
@@ -13,6 +13,7 @@ export function useBattery(): BatteryInfo {
   });
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
 
     async function poll() {
@@ -28,7 +29,7 @@ export function useBattery(): BatteryInfo {
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
+  }, [enabled]);
 
   return info;
 }

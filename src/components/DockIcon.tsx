@@ -446,7 +446,7 @@ export function DockIcon({
               if (e.key === "Enter") commitRename();
               if (e.key === "Escape") { setRenaming(false); }
             }}
-            className="w-full h-full bg-black text-[var(--bb-text)] text-[10px] px-2 outline-none min-w-[140px] text-left tabular-nums border border-[var(--bb-accent)]"
+            className="w-full h-full bg-[var(--bb-bg)] text-[var(--bb-text)] text-[10px] px-2 outline-none min-w-[140px] text-left tabular-nums border border-[var(--bb-accent)]"
             autoFocus
           />
         ) : (
@@ -515,7 +515,7 @@ export function DockIcon({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.08 }}
-            className={`absolute z-50 bg-black border border-[var(--bb-line-2)] shadow-[3px_3px_0_0_rgba(0,0,0,1)] ${tooltipClass(position)} ${
+            className={`absolute z-50 bg-[var(--bb-bg)] border border-[var(--bb-line-2)] shadow-[3px_3px_0_0_rgba(0,0,0,1)] ${tooltipClass(position)} ${
               isRunning && runningPid !== undefined
                 ? "p-1.5"
                 : "px-2 py-1 pointer-events-none whitespace-nowrap"

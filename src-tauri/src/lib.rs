@@ -1,3 +1,5 @@
+mod extensions;
+mod applications;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime, WindowEvent};
 
@@ -496,8 +498,8 @@ async fn open_settings_window<R: Runtime>(app: AppHandle<R>) -> Result<(), Strin
             tauri::WebviewUrl::App("index.html#settings".into()),
         )
         .title("BetterBar Settings")
-        .inner_size(480.0, 600.0)
-        .min_inner_size(420.0, 480.0)
+        .inner_size(1000.0, 740.0)
+        .min_inner_size(720.0, 520.0)
         .decorations(true)
         .transparent(false)
         .always_on_top(false)
@@ -2378,10 +2380,19 @@ return "skip""#,
 // --- App entry ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+
+
+
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            extensions::fetch_extension_files_from_disk,
+            extensions::read_standup_file,
+            extensions::open_timesheets,
+            extensions::open_floatnote,
+            applications::get_installed_apps,
             get_running_apps,
             get_installed_terminals,
             execute_terminal_command,

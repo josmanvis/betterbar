@@ -1,54 +1,134 @@
 import { useState, useEffect } from "react";
-
+import * as React from "react";
 import type { ComponentType } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { transform } from "sucrase";
+import { marked } from "marked";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
+import { availableMonitors, currentMonitor } from "@tauri-apps/api/window";
+import { homeDir, join } from "@tauri-apps/api/path";
 
-export interface RegistryEntry {
+export interface ExtensionFile {
   name: string;
-  displayName: string;
-  load: () => Promise<ExtensionModule>;
+  display_name: string;
+  content: string;
 }
-
-interface ExtensionModule {
-  default: ComponentType<any>;
-  name?: string;
-  description?: string;
-}
-
-// Virtual module provided by the Vite plugin – see vite.config.ts
-// eslint-disable-next-line import/no-unresolved
-import { registry as _registry } from "virtual:betterbar-extensions";
-
-const registry: RegistryEntry[] = _registry;
 
 export interface LoadedExtension {
   name: string;
   displayName: string;
   Component: ComponentType<any>;
+  Settings?: ComponentType<any>;
 }
 
+// We will fetch the registry dynamically from Rust
+let cachedRegistry: ExtensionFile[] = [];
+let registryLoaded = false;
+let registryPromise: Promise<ExtensionFile[]> | null = null;
+const registryListeners = new Set<() => void>();
+const RELOAD_KEY = "betterbar-extensions-reload";
+let watchingReloads = false;
+
+export async function fetchExtensionRegistry(): Promise<ExtensionFile[]> {
+  if (registryLoaded) return cachedRegistry;
+  if (!registryPromise) {
+    registryPromise = invoke<ExtensionFile[]>("fetch_extension_files_from_disk").then((exts) => {
+      cachedRegistry = exts;
+      registryLoaded = true;
+      registryListeners.forEach(listener => listener());
+      return exts;
+    });
+  }
+  return registryPromise;
+}
+
+// Synchronous getter for the UI (SettingsApp uses this on mount)
+// SettingsApp might mount before fetchExtensionRegistry completes, so we return empty if not ready.
 export function getExtensionRegistry(): { name: string; displayName: string }[] {
-  return registry.map(({ name, displayName }) => ({ name, displayName }));
+  return cachedRegistry.map((ext) => ({ name: ext.name, displayName: ext.display_name }));
+}
+
+export function useExtensionRegistry() {
+  const [registry, setRegistry] = useState(() => ({ extensions: getExtensionRegistry(), ready: registryLoaded }));
+  useEffect(() => {
+    const sync = () => setRegistry({ extensions: getExtensionRegistry(), ready: registryLoaded });
+    if (!watchingReloads) {
+      watchingReloads = true;
+      window.addEventListener("storage", event => {
+        if (event.key !== RELOAD_KEY) return;
+        registryLoaded = false; registryPromise = null;
+        fetchExtensionRegistry().then(() => window.dispatchEvent(new Event("betterbar-reload-extensions"))).catch(console.error);
+      });
+    }
+    registryListeners.add(sync);
+    fetchExtensionRegistry().then(sync).catch(console.error);
+    return () => { registryListeners.delete(sync); };
+  }, []);
+  return registry;
+}
+
+function evaluateExtension(tsxCode: string, name: string) {
+  try {
+    const jsCode = transform(tsxCode, {
+      transforms: ["typescript", "jsx", "imports"],
+      jsxPragma: "React.createElement",
+      jsxFragmentPragma: "React.Fragment",
+    }).code;
+
+    const exports: any = {};
+    const module = { exports };
+    const require_fn = (id: string) => {
+      if (id === "react") return React;
+      if (id === "marked") return { marked };
+      if (id === "@tauri-apps/api/webviewWindow") return { WebviewWindow };
+      if (id === "@tauri-apps/api/dpi") return { LogicalSize, PhysicalPosition };
+      if (id === "@tauri-apps/api/window") return { availableMonitors, currentMonitor };
+      if (id === "@tauri-apps/api/path") return { homeDir, join };
+      throw new Error(`Cannot require ${id} in extension`);
+    };
+
+    const f = new Function("exports", "module", "require", "React", "invoke", jsCode);
+    f(exports, module, require_fn, React, invoke);
+
+    return module.exports;
+  } catch (err) {
+    console.error(`[extensions] Failed to evaluate "${name}":`, err);
+    throw err;
+  }
 }
 
 export function useExtensions(enabled: string[]): LoadedExtension[] {
   const [loaded, setLoaded] = useState<LoadedExtension[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    const handleReload = () => setReloadKey(k => k + 1);
+    window.addEventListener("betterbar-reload-extensions", handleReload);
+    return () => window.removeEventListener("betterbar-reload-extensions", handleReload);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadAll() {
       const results: LoadedExtension[] = [];
-      for (const entry of registry) {
-        if (!enabled.includes(entry.name)) continue;
+      const exts = await fetchExtensionRegistry();
+
+      for (const ext of exts) {
+        if (!enabled.includes(ext.name)) continue;
         try {
-          const mod = await entry.load();
-          results.push({
-            name: entry.name,
-            displayName: mod.name ?? entry.displayName,
-            Component: mod.default,
-          });
+          const mod = evaluateExtension(ext.content, ext.name);
+          if (mod && mod.default) {
+            results.push({
+              name: ext.name,
+              displayName: mod.name || ext.display_name,
+              Component: mod.default,
+              Settings: mod.Settings,
+            });
+          }
         } catch (e) {
-          console.error(`[extensions] Failed to load "${entry.name}":`, e);
+          console.error(`[extensions] Failed to load "${ext.name}":`, e);
         }
       }
       if (!cancelled) setLoaded(results);
@@ -56,7 +136,16 @@ export function useExtensions(enabled: string[]): LoadedExtension[] {
 
     loadAll();
     return () => { cancelled = true; };
-  }, [enabled.join(",")]);
+  }, [enabled.join(","), reloadKey]);
 
   return loaded;
+}
+
+export async function reloadExtensions() {
+  registryLoaded = false;
+  registryPromise = null;
+  const registry = await fetchExtensionRegistry();
+  window.dispatchEvent(new Event("betterbar-reload-extensions"));
+  localStorage.setItem(RELOAD_KEY, `${Date.now()}-${Math.random()}`);
+  return registry;
 }

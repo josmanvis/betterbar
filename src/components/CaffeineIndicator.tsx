@@ -101,7 +101,7 @@ export function CaffeineIndicator({ isVertical }: CaffeineIndicatorProps) {
 
   return (
     <div
-      className="h-full flex items-center px-1.5 cursor-pointer transition-colors group select-none"
+      className="h-full flex items-center px-4 cursor-pointer transition-colors group select-none"
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       title={tooltip}

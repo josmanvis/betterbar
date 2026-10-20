@@ -30,7 +30,7 @@ export function BatteryIndicator({ battery, isVertical }: BatteryIndicatorProps)
   }
 
   return (
-    <div className="h-full flex items-center px-2">
+    <div className="h-full flex items-center px-4">
       <span className="text-[10px] tabular-nums flex items-center gap-0.5" style={{ color: tone }}>
         {battery.is_charging && <Lightning size={9} weight="fill" />}
         <span>{pct}</span>

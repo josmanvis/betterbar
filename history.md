@@ -1,8 +1,22 @@
 # BetterBar — Changelog
 
+## Unreleased
+- **Apps Drawer extension** — searchable native app icons, Library and Launch panel layouts, pinned favorites, recents, keyboard navigation, customizable appearance and behavior, and size/position remembered per layout across restarts and display changes.
+- **Unified extensions** — installed Time, Media, and Power extensions replace their native widgets at their existing bar positions. Visibility migrates once; disabling an extension hides its feature. A dedicated Extensions tab owns their settings, with cross-window reloads and consistent icon sizing.
+- **Customization and settings** — larger settings window, clearer Apps & Sets naming, full shared palette, opacity, blur, borders, corners, inner shadow, scanlines, presets, and per-extension appearance overrides.
+- **Time controls** — edit and reorder timezone clocks; customize 12/24-hour format, seconds, dates, labels, layout, typography, and spacing with a live preview. Preserve empty clock lists and clean up clock timers correctly.
+- **Owned app shortcuts and windows** — Timesheets and Floatnote shortcuts use their existing app integrations. Extension developers choose native window decorations; Standup Update uses a closable native frame while Apps Drawer stays borderless.
+- **Regression checks** — application-discovery tests and portable extension checks for drawer placement, appearance, time editing/formatting/timers, and native-widget replacement.
+
 ## 0.11.0
 - **Settings window redesign** — replaced the wrapping top tab-pills with a left **sidebar** nav (Layout / Style / Icons / Sets & Items / Sections / Behaviour / Permissions / About) and de-noised the panel chrome: dropped the `[01]` section numbers and `:: HINT` suffixes, the multi-block header stripe, and the decorative footer stats line. `[X] / [ ]` text checkboxes are now real **switch** toggles; the `< A | B >` pill selectors are a single bordered **segmented** control; sliders gained an editable numeric readout. Section-visibility toggles are grouped under Dock / Indicators / Extras sub-heads (`src/SettingsApp.tsx`, `src/index.css` untouched). Settings window default size bumped to 720×660 / min 560 wide for the sidebar (`src-tauri/tauri.conf.json`).
 - **Customizable icon box** — new `IconChrome` model (background fill, border color + width, corner radius, inner padding) for the box behind every dock icon. Set a **global default** under *Icons → Icon Box* (with `NONE / OUTLINE / TILE / SOFT / CONTRAST` presets and a live preview), or override it **per pinned item** from an expander in *Sets & Items → Items*. Rendering is shared between the live bar and the settings preview via `src/iconChrome.ts` (`iconChromeStyle` / `hasChrome` / `mergeChrome`). New `BetterBarConfig.iconChrome` and `DockItem.chrome` fields with `setIconChrome` / `resetIconChrome` / `setItemChrome` / `resetItemChrome` store operations and `sanitizeIconChrome` clamping; applied in `src/components/DockIcon.tsx` and `RunningAppIcon` (`src/components/DockBar.tsx`, `src/types.ts`, `src/store.ts`). Config export/import and *Reset All Settings* round-trip the new fields.
+
+## 0.11.0
+- **Extensions Architecture Overhaul**: Extensions are no longer constrained by the 28x28 square `ExtensionIcon` wrapper. They can now render freely at any size, just like native BetterBar modules.
+- **Native Extension Windows**: `Standup Update` now spawns native Tauri WebviewWindows correctly using safe URL parameters.
+- **Settings UI Padding Fix**: Globally increased horizontal padding across SettingsApp lists (Toggle rows, App Grouping list, Extensions list) for vastly improved readability.
+- **Testbed Extensions**: Added `time`, `media`, and `power` extensions that mirror native functionality via standard IPC calls to prove out the new extension layout rendering.
 
 ## 0.10.0
 - **Per-Section Padding & Custom Scale Controls** — configure top, right, bottom, and left padding and zoom scale per section, supporting pixel-perfect layout alignment across all bar items (`src/components/DockBar.tsx`, `src/types.ts`, `src/store.ts`).

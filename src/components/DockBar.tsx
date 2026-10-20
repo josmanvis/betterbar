@@ -48,7 +48,9 @@ import {
   focusWindow,
   launchSimulator,
 } from "../tauri-bridge";
-import { useExtensions } from "../extensions-runtime";
+import { useExtensions, useExtensionRegistry, type LoadedExtension } from "../extensions-runtime";
+import { installedReplacements } from "../extension-replacements";
+import { appearanceFor, barSurface, themeStyle } from "../appearance";
 import { useSpaces, SpacesIndicator } from "./SpacesIndicator";
 
 async function handleOpenSettings() {
@@ -156,13 +158,26 @@ export function DockBar({
 
   const isVertical = config.position === "left" || config.position === "right";
 
-  const battery = useBattery();
-  const music = useMusic();
+  const registry = useExtensionRegistry();
+  const replacements = installedReplacements(registry.extensions.map(extension => extension.name));
+  const replacedSections = new Set<SectionId>(replacements.map(replacement => replacement.section));
+  const battery = useBattery(config.showBattery && !replacedSections.has("battery"));
+  const music = useMusic(config.showMusic && !replacedSections.has("music"));
   const runningApps = useRunningApps();
   const runningWindows = useRunningWindows();
   const extensions = useExtensions(config.showExtensions ? config.enabledExtensions : []);
+  const extraExtensions = extensions.filter(extension => !replacements.some(replacement => replacement.name === extension.name));
   const spaces = useSpaces();
-  useWindowPosition(config, onFloatPositionChange, autoLength, terminalExpanded && isVertical ? 320 : undefined);
+
+  const [customExpandedSize, setCustomExpandedSize] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const handleExpand = (e: any) => setCustomExpandedSize(e.detail);
+    window.addEventListener("betterbar-expand", handleExpand);
+    return () => window.removeEventListener("betterbar-expand", handleExpand);
+  }, []);
+
+  const effectiveExpandedSize = customExpandedSize ?? (terminalExpanded && isVertical ? 320 : undefined);
+  useWindowPosition(config, onFloatPositionChange, autoLength, effectiveExpandedSize);
 
   const sortedItems = [...activeSet.items]
     .filter((i) => !i.hidden)
@@ -529,6 +544,15 @@ export function DockBar({
   // Each visible region of the bar is a node here; they render in
   // `config.sectionOrder` and can be reordered by ⌘-dragging on the bar.
   const sectionNodes: Partial<Record<SectionId, React.ReactNode>> = {};
+  function extensionNode(ext: LoadedExtension) {
+    return <div key={ext.name} className="flex items-center justify-center shrink-0"
+      style={{ ...themeStyle(config, ext.name), opacity: (config.extensionAppearance?.[ext.name]?.opacity ?? 100) / 100,
+        zoom: config.extensionAppearance?.[ext.name]?.iconScale ?? 1,
+        "--bb-extension-icon-size": `${iconSize}px`, "--bb-extension-slot-size": `${iconSize + 8}px`,
+      } as React.CSSProperties}>
+      <ext.Component isVertical={isVertical} config={config} barSize={config.barSize} iconSize={iconSize} slotSize={iconSize + 8} />
+    </div>;
+  }
 
   if (config.showTerminalIcon) {
     sectionNodes.terminal = (
@@ -707,7 +731,7 @@ export function DockBar({
     sectionNodes.spacer = <></>;
   }
 
-  if (config.showClocks) {
+  if (config.showClocks && !replacedSections.has("time")) {
     sectionNodes.time = (
       <>
         <Divider isVertical={isVertical} label="TIME" />
@@ -716,7 +740,7 @@ export function DockBar({
     );
   }
 
-  if (config.showMusic) {
+  if (config.showMusic && !replacedSections.has("music")) {
     sectionNodes.music = (
       <>
         <Divider isVertical={isVertical} label="MUS" />
@@ -734,7 +758,7 @@ export function DockBar({
     );
   }
 
-  if (config.showBattery) {
+  if (config.showBattery && !replacedSections.has("battery")) {
     sectionNodes.battery = (
       <>
         <Divider isVertical={isVertical} label="PWR" />
@@ -792,22 +816,26 @@ export function DockBar({
     );
   }
 
-  if (config.showExtensions && extensions.length > 0) {
+  for (const replacement of replacements) {
+    const extension = extensions.find(extension => extension.name === replacement.name);
+    if (extension) sectionNodes[replacement.section] = <>
+      <Divider isVertical={isVertical} label={replacement.label} />
+      {extensionNode(extension)}
+    </>;
+  }
+
+  if (config.showExtensions && extraExtensions.length > 0) {
     sectionNodes.extensions = (
       <>
         <Divider isVertical={isVertical} label="EXT" />
         <div
-          className={`flex ${isVertical ? "flex-col" : "flex-row"} items-stretch ${isVertical ? "w-full gap-px" : "h-full gap-px"}`}
+          className={`flex ${isVertical ? "flex-col" : "flex-row"} items-center ${isVertical ? "w-full gap-px" : "h-full gap-px"}`}
+          style={{
+            "--bb-extension-icon-size": `${iconSize}px`,
+            "--bb-extension-slot-size": `${iconSize + 8}px`,
+          } as React.CSSProperties}
         >
-          {extensions.map((ext) => (
-            <ExtensionIcon
-              key={ext.name}
-              name={ext.displayName}
-              barSize={config.barSize}
-            >
-              <ext.Component />
-            </ExtensionIcon>
-          ))}
+          {extraExtensions.map(extensionNode)}
         </div>
         <Divider isVertical={isVertical} />
       </>
@@ -824,22 +852,24 @@ export function DockBar({
     );
   }
 
-  sectionNodes.cog = (
-    <>
-      <Divider isVertical={isVertical} />
-      <div className={`flex ${isVertical ? "flex-col pb-1 gap-px" : "flex-row pr-1 gap-px"} items-center justify-center`}>
-        <RailButton
-          label="COG"
-          active={false}
-          onClick={handleOpenSettings}
-          isVertical={isVertical}
-          barSize={config.barSize}
-        >
-          <GearSix size={13} weight="bold" />
-        </RailButton>
-      </div>
-    </>
-  );
+  if (config.showSettingsCog) {
+    sectionNodes.cog = (
+      <>
+        <Divider isVertical={isVertical} />
+        <div className={`flex ${isVertical ? "flex-col pb-3 gap-px" : "flex-row px-4 gap-px"} items-center justify-center`}>
+          <RailButton
+            label="COG"
+            active={false}
+            onClick={handleOpenSettings}
+            isVertical={isVertical}
+            barSize={config.barSize}
+          >
+            <GearSix size={13} weight="bold" />
+          </RailButton>
+        </div>
+      </>
+    );
+  }
 
   const scaledSections = new Set<SectionId>(["time", "music", "caffeine", "battery", "sets", "sims", "cog", "extensions", "spaces"]);
   const orderedSections = config.sectionOrder.filter((id) => sectionNodes[id] !== undefined);
@@ -854,15 +884,14 @@ export function DockBar({
         className={`
           fixed ${edgeClass} z-50 flex
           ${isVertical ? "flex-col items-stretch" : "flex-row items-stretch pl-3"}
-          ${config.transparentBg ? "bg-black/35 backdrop-blur-md" : "bg-black"} ${panelBorder}
+          ${panelBorder}
           border-[var(--bb-line)]
-          select-none overflow-hidden bb-scanlines
+          select-none ${appearanceFor(config).scanlines ? "bb-scanlines" : ""}
         `}
         style={{
+          ...barSurface(config),
           width: config.freeFloat ? undefined : (isVertical ? config.barSize : undefined),
           height: config.freeFloat ? undefined : (isVertical ? undefined : config.barSize),
-          "--bb-accent": config.accentColor || "#c5f500",
-          "--bb-accent-d": config.accentColor || "#c5f500",
         } as any}
       >
         {displayEdge && (
@@ -914,7 +943,7 @@ export function DockBar({
               transition={{ duration: 0.1 }}
               className={`
                 absolute pointer-events-none z-50
-                px-2 py-1 bg-black border border-[var(--bb-accent)]
+                px-2 py-1 bg-[var(--bb-bg)] border border-[var(--bb-accent)]
                 text-[var(--bb-accent)] text-[10px] uppercase tracking-widest font-semibold whitespace-nowrap
                 ${isVertical
                   ? "left-full ml-2 top-1/2 -translate-y-1/2"
@@ -1075,7 +1104,7 @@ function RunningAppIcon({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.08 }}
-            className={`absolute z-50 bg-black border border-[var(--bb-line-2)] shadow-[3px_3px_0_0_rgba(0,0,0,1)] ${tooltipClass(position)} ${
+            className={`absolute z-50 bg-[var(--bb-bg)] border border-[var(--bb-line-2)] shadow-[3px_3px_0_0_rgba(0,0,0,1)] ${tooltipClass(position)} ${
               windowId !== undefined ? "p-1.5" : "px-2 py-1 pointer-events-none whitespace-nowrap"
             }`}
           >
@@ -1295,7 +1324,7 @@ function RailButton({
         relative shrink-0 flex items-center justify-center
         border border-[var(--bb-line)] mx-1
         ${active
-          ? "bg-[var(--bb-accent)] text-black border-[var(--bb-accent)]"
+          ? "bg-[var(--bb-accent)] text-[var(--bb-on-accent)] border-[var(--bb-accent)]"
           : "text-[var(--bb-dim)] hover:text-[var(--bb-accent)] hover:border-[var(--bb-accent)]"}
         transition-colors
       `}
@@ -1326,27 +1355,6 @@ function SimButton({
     >
       {children}
     </button>
-  );
-}
-
-function ExtensionIcon({
-  name,
-  barSize,
-  children,
-}: {
-  name: string;
-  barSize: number;
-  children: React.ReactNode;
-}) {
-  const size = Math.max(20, barSize - 8);
-  return (
-    <div
-      title={name}
-      style={{ width: size, height: size }}
-      className="shrink-0 flex items-center justify-center border border-[var(--bb-line)] text-[var(--bb-dim)] overflow-hidden hover:border-[var(--bb-accent)] hover:text-[var(--bb-accent)] cursor-pointer transition-colors"
-    >
-      {children}
-    </div>
   );
 }
 
