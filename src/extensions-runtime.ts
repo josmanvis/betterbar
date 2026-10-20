@@ -5,6 +5,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { transform } from "sucrase";
 import { marked } from "marked";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
+import { availableMonitors, currentMonitor } from "@tauri-apps/api/window";
+import { homeDir, join } from "@tauri-apps/api/path";
 
 export interface ExtensionFile {
   name: string;
@@ -23,6 +26,9 @@ export interface LoadedExtension {
 let cachedRegistry: ExtensionFile[] = [];
 let registryLoaded = false;
 let registryPromise: Promise<ExtensionFile[]> | null = null;
+const registryListeners = new Set<() => void>();
+const RELOAD_KEY = "betterbar-extensions-reload";
+let watchingReloads = false;
 
 export async function fetchExtensionRegistry(): Promise<ExtensionFile[]> {
   if (registryLoaded) return cachedRegistry;
@@ -30,6 +36,7 @@ export async function fetchExtensionRegistry(): Promise<ExtensionFile[]> {
     registryPromise = invoke<ExtensionFile[]>("fetch_extension_files_from_disk").then((exts) => {
       cachedRegistry = exts;
       registryLoaded = true;
+      registryListeners.forEach(listener => listener());
       return exts;
     });
   }
@@ -40,6 +47,25 @@ export async function fetchExtensionRegistry(): Promise<ExtensionFile[]> {
 // SettingsApp might mount before fetchExtensionRegistry completes, so we return empty if not ready.
 export function getExtensionRegistry(): { name: string; displayName: string }[] {
   return cachedRegistry.map((ext) => ({ name: ext.name, displayName: ext.display_name }));
+}
+
+export function useExtensionRegistry() {
+  const [registry, setRegistry] = useState(() => ({ extensions: getExtensionRegistry(), ready: registryLoaded }));
+  useEffect(() => {
+    const sync = () => setRegistry({ extensions: getExtensionRegistry(), ready: registryLoaded });
+    if (!watchingReloads) {
+      watchingReloads = true;
+      window.addEventListener("storage", event => {
+        if (event.key !== RELOAD_KEY) return;
+        registryLoaded = false; registryPromise = null;
+        fetchExtensionRegistry().then(() => window.dispatchEvent(new Event("betterbar-reload-extensions"))).catch(console.error);
+      });
+    }
+    registryListeners.add(sync);
+    fetchExtensionRegistry().then(sync).catch(console.error);
+    return () => { registryListeners.delete(sync); };
+  }, []);
+  return registry;
 }
 
 function evaluateExtension(tsxCode: string, name: string) {
@@ -56,6 +82,9 @@ function evaluateExtension(tsxCode: string, name: string) {
       if (id === "react") return React;
       if (id === "marked") return { marked };
       if (id === "@tauri-apps/api/webviewWindow") return { WebviewWindow };
+      if (id === "@tauri-apps/api/dpi") return { LogicalSize, PhysicalPosition };
+      if (id === "@tauri-apps/api/window") return { availableMonitors, currentMonitor };
+      if (id === "@tauri-apps/api/path") return { homeDir, join };
       throw new Error(`Cannot require ${id} in extension`);
     };
 
@@ -85,7 +114,7 @@ export function useExtensions(enabled: string[]): LoadedExtension[] {
     async function loadAll() {
       const results: LoadedExtension[] = [];
       const exts = await fetchExtensionRegistry();
-      
+
       for (const ext of exts) {
         if (!enabled.includes(ext.name)) continue;
         try {
@@ -115,5 +144,8 @@ export function useExtensions(enabled: string[]): LoadedExtension[] {
 export async function reloadExtensions() {
   registryLoaded = false;
   registryPromise = null;
-  return fetchExtensionRegistry();
+  const registry = await fetchExtensionRegistry();
+  window.dispatchEvent(new Event("betterbar-reload-extensions"));
+  localStorage.setItem(RELOAD_KEY, `${Date.now()}-${Math.random()}`);
+  return registry;
 }

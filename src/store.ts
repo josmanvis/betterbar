@@ -5,6 +5,9 @@ import {
   IconChrome, IconStyle, SectionId, SectionPadding, SectionStyleConfig,
 } from "./types";
 import { setOpenOnLogin as tauriSetOpenOnLogin } from "./tauri-bridge";
+import { color, sanitizeAppearance, sanitizeExtensionAppearance, themeStyle } from "./appearance";
+import { useExtensionRegistry } from "./extensions-runtime";
+import { migrateExtensionReplacements } from "./extension-replacements";
 
 export const DEFAULT_CONFIG = TYPES_DEFAULT_CONFIG;
 
@@ -40,7 +43,9 @@ export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     defaultTerminal: cfg.defaultTerminal,
     clocks: Array.isArray(cfg.clocks) ? cfg.clocks : DEFAULT_CONFIG.clocks,
     transparentBg: cfg.transparentBg === undefined ? DEFAULT_CONFIG.transparentBg : !!cfg.transparentBg,
-    accentColor: typeof cfg.accentColor === "string" ? cfg.accentColor : DEFAULT_CONFIG.accentColor,
+    accentColor: color(cfg.accentColor, DEFAULT_CONFIG.accentColor),
+    appearance: sanitizeAppearance(cfg.appearance, cfg.transparentBg),
+    extensionAppearance: sanitizeExtensionAppearance(cfg.extensionAppearance),
     preventOverlap: cfg.preventOverlap === undefined ? DEFAULT_CONFIG.preventOverlap : !!cfg.preventOverlap,
     strictOverlap: cfg.strictOverlap === undefined ? DEFAULT_CONFIG.strictOverlap : !!cfg.strictOverlap,
     ungroupedBundleIds: Array.isArray(cfg.ungroupedBundleIds) ? cfg.ungroupedBundleIds : [],
@@ -54,6 +59,7 @@ export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     showDockArea: cfg.showDockArea === undefined ? DEFAULT_CONFIG.showDockArea : !!cfg.showDockArea,
     showExtensions: cfg.showExtensions === undefined ? DEFAULT_CONFIG.showExtensions : !!cfg.showExtensions,
     enabledExtensions: Array.isArray(cfg.enabledExtensions) ? cfg.enabledExtensions : [],
+    extensionReplacements: Array.isArray(cfg.extensionReplacements) ? cfg.extensionReplacements.filter((name): name is string => typeof name === "string") : [],
     showSpaces: cfg.showSpaces === undefined ? DEFAULT_CONFIG.showSpaces : !!cfg.showSpaces,
     showSettingsCog: cfg.showSettingsCog === undefined ? DEFAULT_CONFIG.showSettingsCog : !!cfg.showSettingsCog,
     showCaffeine: cfg.showCaffeine === undefined ? DEFAULT_CONFIG.showCaffeine : !!cfg.showCaffeine,
@@ -179,6 +185,20 @@ function saveConfig(config: BetterBarConfig) {
 
 export function useConfig() {
   const [config, setConfigState] = useState<BetterBarConfig>(loadConfig);
+  const registry = useExtensionRegistry();
+  useEffect(() => {
+    if (!registry.ready) return;
+    setConfigState(previous => {
+      const next = migrateExtensionReplacements(previous, registry.extensions.map(extension => extension.name));
+      if (next !== previous) saveConfig(next);
+      return next;
+    });
+  }, [registry]);
+  useEffect(() => {
+    for (const [property, value] of Object.entries(themeStyle(config))) {
+      if (property.startsWith("--")) document.documentElement.style.setProperty(property, String(value));
+    }
+  }, [config]);
 
   // Sync state across BetterBar windows: when another window writes to
   // localStorage, mirror the change locally without re-saving (avoid loops).
@@ -446,7 +466,8 @@ export function useConfig() {
     [setConfig]
   );
   const toggleTransparentBg = useCallback(
-    () => setConfig((p) => ({ ...p, transparentBg: !p.transparentBg })),
+    () => setConfig((p) => ({ ...p, transparentBg: !p.transparentBg,
+      appearance: { ...sanitizeAppearance(p.appearance), opacity: p.transparentBg ? 100 : 35, blur: p.transparentBg ? 0 : 12 } })),
     [setConfig]
   );
   const setAccentColor = useCallback(

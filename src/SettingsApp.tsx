@@ -14,7 +14,11 @@ import {
  import { useConfig, DEFAULT_CONFIG, sanitize } from "./store";
  import { getInstalledTerminals, getRunningApps, checkAccessibilityPermissions, requestAccessibilityPermissions, checkScreenRecordingPermission, requestScreenRecordingPermission, getOpenOnLogin, checkForUpdates, getReleaseHistory, installUpdate } from "./tauri-bridge";
  import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useExtensions } from "./extensions-runtime";
+import { useExtensions, useExtensionRegistry } from "./extensions-runtime";
+import { replacementForSection } from "./extension-replacements";
+import { getVersion } from "@tauri-apps/api/app";
+import { themeStyle } from "./appearance";
+import { AppearanceEditor, ExtensionAppearanceEditor } from "./components/AppearanceEditor";
 
 const LENGTH_MODES: { value: BarLengthMode; label: string }[] = [
   { value: "edge",   label: "EDGE" },
@@ -50,21 +54,11 @@ const POSITIONS: { value: DockPosition; label: string }[] = [
   { value: "right",  label: "RIGHT" },
 ];
 
-const PRESET_ACCENTS = [
-  { name: "CHARTREUSE", hex: "#c5f500" },
-  { name: "CYAN",       hex: "#00f0ff" },
-  { name: "GREEN",      hex: "#39ff14" },
-  { name: "AMBER",      hex: "#ffb800" },
-  { name: "MAGENTA",    hex: "#ff007a" },
-  { name: "BLUE",       hex: "#00a3ff" },
-  { name: "WHITE",      hex: "#ffffff" },
-];
-
 const NAV = [
   { id: "layout",      label: "Layout",      Icon: SquaresFour },
   { id: "style",       label: "Style",       Icon: PaintBrush },
   { id: "icons",       label: "Icons",       Icon: StackSimple },
-  { id: "sets",        label: "Sets & Items", Icon: SlidersHorizontal },
+  { id: "sets",        label: "Apps & Sets", Icon: SlidersHorizontal },
   { id: "sections",    label: "Sections",    Icon: SquaresFour },
   { id: "extensions",  label: "Extensions",  Icon: PuzzlePiece },
   { id: "behaviour",   label: "Behaviour",   Icon: Sparkle },
@@ -73,6 +67,18 @@ const NAV = [
 ] as const;
 
 type TabId = (typeof NAV)[number]["id"];
+
+const TAB_DESCRIPTIONS: Record<TabId, string> = {
+  layout: "Give your bar the right size and a place to call home.",
+  style: "Set the tone with color and surface treatments.",
+  icons: "Choose how your apps look on the bar.",
+  sets: "Organize the apps and shortcuts you reach for most.",
+  sections: "Choose what appears on your bar and in what order.",
+  extensions: "Make BetterBar yours. Manage extensions and fine-tune each one here.",
+  behaviour: "Adjust how BetterBar fits into your day.",
+  permissions: "Manage the macOS access BetterBar needs.",
+  about: "Updates, release notes, and a backup of your setup.",
+};
 
 export default function SettingsApp() {
   const {
@@ -100,8 +106,6 @@ export default function SettingsApp() {
     setContentScale,
     setDefaultTerminal,
     setConfig,
-    toggleTransparentBg,
-    setAccentColor,
     togglePreventOverlap,
     toggleStrictOverlap,
     toggleWindowGrouping,
@@ -134,16 +138,11 @@ export default function SettingsApp() {
     onConfirm: () => void;
   } | null>(null);
 
-  const [extensionsList, setExtensionsList] = useState<{name: string, displayName: string}[]>([]);
+  const { extensions: extensionsList } = useExtensionRegistry();
+  const extensionNames = extensionsList.map(extension => extension.name);
   const loadedExtensions = useExtensions(config.enabledExtensions);
 
-  useEffect(() => {
-    import("./extensions-runtime").then(m => {
-      m.fetchExtensionRegistry().then(() => {
-        setExtensionsList(m.getExtensionRegistry());
-      });
-    });
-  }, []);
+
 
   const [axGranted, setAxGranted] = useState<boolean | null>(null);
   const [srGranted, setSrGranted] = useState<boolean | null>(null);
@@ -212,28 +211,30 @@ export default function SettingsApp() {
   // Keyboard navigation for the sidebar
   const handleTabKeyDown = useCallback((e: React.KeyboardEvent, tabId: TabId) => {
     const idx = NAV.findIndex((t) => t.id === tabId);
+    let next: TabId | undefined;
     if (e.key === "ArrowDown" || e.key === "ArrowRight") {
       e.preventDefault();
-      setActiveTab(NAV[(idx + 1) % NAV.length].id);
+      next = NAV[(idx + 1) % NAV.length].id;
     } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
       e.preventDefault();
-      setActiveTab(NAV[(idx - 1 + NAV.length) % NAV.length].id);
+      next = NAV[(idx - 1 + NAV.length) % NAV.length].id;
     } else if (e.key === "Home") {
       e.preventDefault();
-      setActiveTab(NAV[0].id);
+      next = NAV[0].id;
     } else if (e.key === "End") {
       e.preventDefault();
-      setActiveTab(NAV[NAV.length - 1].id);
+      next = NAV[NAV.length - 1].id;
+    }
+    if (next) {
+      setActiveTab(next);
+      document.getElementById(`settings-tab-${next}`)?.focus();
     }
   }, []);
 
   return (
     <div
-      style={{
-        "--bb-accent": config.accentColor || "#c5f500",
-        "--bb-accent-d": config.accentColor || "#c5f500",
-      } as any}
-      className="h-screen bg-black text-[var(--bb-text)] flex flex-col"
+      style={themeStyle(config)}
+      className="bb-settings h-screen bg-[var(--bb-bg)] text-[var(--bb-text)] flex flex-col"
     >
       <Header />
 
@@ -242,7 +243,7 @@ export default function SettingsApp() {
           role="tablist"
           aria-orientation="vertical"
           aria-label="Settings"
-          className="w-[172px] shrink-0 border-r border-[var(--bb-line)] bg-black overflow-y-auto bb-scroll py-2"
+          className="bb-settings-nav shrink-0 border-r border-[var(--bb-line)] overflow-y-auto bb-scroll"
         >
           {NAV.map((tab) => {
             const isActive = activeTab === tab.id;
@@ -250,6 +251,7 @@ export default function SettingsApp() {
             return (
               <button
                 key={tab.id}
+                id={`settings-tab-${tab.id}`}
                 role="tab"
                 aria-selected={isActive}
                 aria-controls={`panel-${tab.id}`}
@@ -257,7 +259,7 @@ export default function SettingsApp() {
                 onClick={() => setActiveTab(tab.id)}
                 onKeyDown={(e) => handleTabKeyDown(e, tab.id)}
                 className={`
-                  w-full flex items-center gap-2.5 px-4 py-3 text-[11px] tracking-[0.12em] uppercase
+                  w-full flex items-center gap-3 px-5 py-3.5 text-[12px] tracking-[0.04em]
                   transition-colors cursor-pointer border-l-2
                   ${isActive
                     ? "border-[var(--bb-accent)] bg-[var(--bb-pane)] text-[var(--bb-text)] font-bold"
@@ -265,19 +267,24 @@ export default function SettingsApp() {
                 `}
               >
                 <tab.Icon
-                  size={13}
+                  size={17}
                   weight={isActive ? "fill" : "regular"}
                   className={isActive ? "text-[var(--bb-accent)] shrink-0" : "shrink-0"}
                 />
-                <span className="flex-1 text-left truncate">{tab.label}</span>
+                <span className="flex-1 text-left">{tab.label}</span>
+                {tab.id === "extensions" && config.enabledExtensions.length > 0 && <span className="bb-nav-count">{config.enabledExtensions.length}</span>}
                 {showDot && <span className="w-1.5 h-1.5 bg-[var(--bb-accent)] shrink-0" />}
               </button>
             );
           })}
         </nav>
 
-        <main className="flex-1 min-h-0 overflow-y-auto bb-scroll">
-          <div className="px-8 py-7 space-y-8 max-w-[600px]">
+        <main className="flex-1 min-w-0 min-h-0 overflow-y-auto bb-scroll" key={activeTab}>
+          <div className="bb-settings-content">
+            <div className="bb-settings-intro">
+              <h1>{NAV.find(tab => tab.id === activeTab)?.label}</h1>
+              <p>{TAB_DESCRIPTIONS[activeTab]}</p>
+            </div>
             <AnimatePresence mode="wait">
             {activeTab === "layout" && (
               <motion.div
@@ -375,18 +382,8 @@ export default function SettingsApp() {
               >
                 <Section title="THEME">
                   <div className="flex flex-col gap-3">
-                    <Toggle
-                      label="TRANSPARENT BG"
-                      description="Make bar background translucent and enable backdrop blur"
-                      enabled={config.transparentBg}
-                      onToggle={toggleTransparentBg}
-                    />
+                    <AppearanceEditor config={config} update={setConfig} />
 
-                    <AccentColorPicker
-                      presets={PRESET_ACCENTS}
-                      value={config.accentColor}
-                      onChange={setAccentColor}
-                    />
                   </div>
                 </Section>
               </motion.div>
@@ -509,7 +506,7 @@ export default function SettingsApp() {
                         className={`
                           px-4 py-1 text-[10px] tracking-[0.1em] uppercase border transition-colors cursor-pointer
                           ${!config.defaultTerminal
-                            ? "bg-[var(--bb-accent)] border-[var(--bb-accent)] text-black font-bold"
+                            ? "bg-[var(--bb-accent)] border-[var(--bb-accent)] text-[var(--bb-on-accent)] font-bold"
                             : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"}
                         `}
                       >
@@ -524,7 +521,7 @@ export default function SettingsApp() {
                             className={`
                               px-4 py-1 text-[10px] flex items-center gap-1.5 border transition-colors cursor-pointer
                               ${active
-                                ? "bg-[var(--bb-accent)] border-[var(--bb-accent)] text-black font-bold"
+                                ? "bg-[var(--bb-accent)] border-[var(--bb-accent)] text-[var(--bb-on-accent)] font-bold"
                                 : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"}
                             `}
                           >
@@ -589,7 +586,7 @@ export default function SettingsApp() {
                 </Section>
 
                 <Section
-                  title="ITEMS"
+                  title="PINNED APPS"
                   hint={`${activeSet.name} · ${activeSet.items.filter((i) => !i.hidden).length}/${activeSet.items.length}`}
                 >
                   <ItemList
@@ -602,7 +599,7 @@ export default function SettingsApp() {
                   />
                 </Section>
 
-                <Section title="TIMEZONES" hint={`${config.clocks ? config.clocks.length : 0}`}>
+                {!extensionNames.includes("time") && <Section title="TIMEZONES" hint={`${config.clocks ? config.clocks.length : 0}`}>
                   <ClockList
                     clocks={config.clocks || []}
                     onChange={(nextClocks) => setConfig({ clocks: nextClocks })}
@@ -614,7 +611,7 @@ export default function SettingsApp() {
                       });
                     }}
                   />
-                </Section>
+                </Section>}
               </motion.div>
             )}
 
@@ -645,24 +642,27 @@ export default function SettingsApp() {
                     />
 
                     <SubHead>Indicators</SubHead>
-                    <Toggle
+                    {extensionNames.some(name => ["time", "media", "power"].includes(name)) && <p className="text-[11px] text-[var(--bb-dim)] leading-relaxed py-3">
+                      Time, Media, and Power are managed in <button className="underline text-[var(--bb-accent)]" onClick={() => setActiveTab("extensions")}>Extensions</button> when installed.
+                    </p>}
+                    {!extensionNames.includes("media") && <Toggle
                       label="MUSIC"
                       description="Now-playing info and play/pause/skip for Music or Spotify"
                       enabled={config.showMusic}
                       onToggle={toggleMusic}
-                    />
-                    <Toggle
+                    />}
+                    {!extensionNames.includes("time") && <Toggle
                       label="TIME / CLOCKS"
                       description="Show the world clock section"
                       enabled={config.showClocks}
                       onToggle={toggleClocks}
-                    />
-                    <Toggle
+                    />}
+                    {!extensionNames.includes("power") && <Toggle
                       label="POWER / BATTERY"
                       description="Show the battery percentage indicator"
                       enabled={config.showBattery}
                       onToggle={toggleBattery}
-                    />
+                    />}
                     <Toggle
                       label="CAFFEINE / KEEP AWAKE"
                       description="Coffee-cup indicator that prevents display and system sleep"
@@ -690,12 +690,6 @@ export default function SettingsApp() {
                       onToggle={toggleSimDropdown}
                     />
                     <Toggle
-                      label="EXTENSIONS"
-                      description="Show third-party extensions registered on the bar"
-                      enabled={config.showExtensions}
-                      onToggle={toggleShowExtensions}
-                    />
-                    <Toggle
                       label="SPACES"
                       description="Show macOS workspace switcher rectangles"
                       enabled={config.showSpaces}
@@ -710,7 +704,7 @@ export default function SettingsApp() {
                   </div>
                 </Section>
 
-                
+
 
                 <Section title="SECTION ORDER" hint={`${config.sectionOrder.length}`}>
                   <p className="text-[10px] text-[var(--bb-mute)] mb-2 leading-relaxed normal-case">
@@ -721,7 +715,7 @@ export default function SettingsApp() {
                       <div key={id} className="flex items-center justify-between px-4 py-3">
                         <span className="text-[11px] tracking-wider text-[var(--bb-text)] tabular-nums">
                           <span className="text-[var(--bb-mute)] mr-2">{String(idx + 1).padStart(2, "0")}</span>
-                          {SECTION_LABELS[id]}
+                          {replacementForSection(id, extensionNames)?.label || SECTION_LABELS[id]}
                         </span>
                         <div className="flex items-center gap-1">
                           <button
@@ -756,7 +750,7 @@ export default function SettingsApp() {
               </motion.div>
             )}
 
-                        {activeTab === "extensions" && (
+            {activeTab === "extensions" && (
               <motion.div
                 key="extensions"
                 id="panel-extensions"
@@ -765,21 +759,22 @@ export default function SettingsApp() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
               >
+                <Section title="ON YOUR BAR">
+                  <Toggle label="Show extensions" description="Display your enabled extensions in the bar."
+                    enabled={config.showExtensions} onToggle={toggleShowExtensions} />
+                </Section>
                 <Section
-                  title="EXTENSIONS"
+                  title="YOUR EXTENSIONS"
                   hint={
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
                       <span>{`${config.enabledExtensions.length}/${extensionsList.length} ENABLED`}</span>
-                      <button 
+                      <button
                         onClick={() => {
                           import("./extensions-runtime").then(m => {
-                            m.reloadExtensions().then(() => {
-                              setExtensionsList(m.getExtensionRegistry());
-                              window.dispatchEvent(new Event("betterbar-reload-extensions"));
-                            });
+                            m.reloadExtensions().catch(console.error);
                           });
                         }}
-                        className="px-4 py-0.5 text-[9px] uppercase border border-[var(--bb-line)] text-[var(--bb-text)] hover:bg-[var(--bb-line)]/50 transition-colors pointer-events-auto cursor-pointer"
+                        className="px-3 py-2 text-[10px] uppercase border border-[var(--bb-line)] text-[var(--bb-text)] hover:bg-[var(--bb-line)]/50 transition-colors pointer-events-auto cursor-pointer"
                       >
                         RELOAD
                       </button>
@@ -791,30 +786,28 @@ export default function SettingsApp() {
                       No extensions found in ~/.betterbar/extensions
                     </div>
                   ) : (
-                    <div className="flex flex-col">
-                      {extensionsList.map((ext) => {
+                    <div className="bb-extension-list">
+                      {[...extensionsList].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((ext) => {
                         const enabled = config.enabledExtensions.includes(ext.name);
                         const loaded = loadedExtensions.find(e => e.name === ext.name);
                         const SettingsComponent = loaded?.Settings;
-                        
+
                         return (
                           <div
                             key={ext.name}
-                            className="flex flex-col py-3 px-4 border-b border-[var(--bb-line)]/60 last:border-b-0"
+                            className="bb-extension-card"
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className={`text-[12px] tabular-nums tracking-[0.15em] ${enabled ? "text-[var(--bb-accent)]" : "text-[var(--bb-mute)]"}`}>
-                                  {enabled ? "[X]" : "[ ]"}
-                                </span>
-                                <span className={`text-[11px] tracking-[0.15em] ${enabled ? "text-[var(--bb-text)]" : "text-[var(--bb-dim)]"}`}>
-                                  {ext.displayName}
-                                </span>
+                            <div className="bb-extension-header">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <PuzzlePiece size={20} className={enabled ? "text-[var(--bb-accent)] shrink-0" : "text-[var(--bb-dim)] shrink-0"} />
+                                <h2 className="text-[13px] font-medium">{loaded?.displayName || ext.displayName.replace(/\b\w/g, c => c.toUpperCase())}</h2>
                               </div>
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => toggleExtension(ext.name)}
-                                  className={`px-4.5 py-0.5 text-[9px] tracking-[0.12em] uppercase border transition-colors cursor-pointer font-bold shrink-0 ml-2 ${
+                                  aria-label={`${enabled ? "Disable" : "Enable"} ${loaded?.displayName || ext.displayName}`}
+                                  aria-pressed={enabled}
+                                  className={`px-3 py-2 text-[10px] tracking-[0.08em] uppercase border transition-colors cursor-pointer font-bold shrink-0 ${
                                     enabled
                                       ? "border-[var(--bb-accent)] text-[var(--bb-accent)] hover:bg-[var(--bb-accent)]/10"
                                       : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"
@@ -824,10 +817,11 @@ export default function SettingsApp() {
                                 </button>
                               </div>
                             </div>
-                            
-                            {enabled && SettingsComponent && (
-                              <div className="mt-3 ml-6 p-3 bg-black/20 border border-[var(--bb-line)] rounded-md">
-                                <SettingsComponent config={config} updateConfig={setConfig} />
+
+                            {enabled && (
+                              <div className="bb-extension-options">
+                                <ExtensionAppearanceEditor config={config} name={ext.name} label={loaded?.displayName || ext.displayName} update={setConfig} />
+                                {SettingsComponent && <SettingsComponent config={config} updateConfig={setConfig} />}
                               </div>
                             )}
                           </div>
@@ -999,7 +993,7 @@ function PillSelector<T extends string>({
             className={`
               flex-1 px-4 py-1.5 tracking-[0.15em] transition-colors cursor-pointer
               ${active
-                ? "bg-[var(--bb-accent)] text-black font-bold"
+                ? "bg-[var(--bb-accent)] text-[var(--bb-on-accent)] font-bold"
                 : "text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:bg-[var(--bb-pane-2)]"}
             `}
           >
@@ -1007,59 +1001,6 @@ function PillSelector<T extends string>({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-// ── AccentColorPicker ──────────────────────────────────────────────────────────
-
-function AccentColorPicker({
-  presets,
-  value,
-  onChange,
-}: {
-  presets: { name: string; hex: string }[];
-  value: string;
-  onChange: (hex: string) => void;
-}) {
-  return (
-    <div className="pt-3 border-t border-[var(--bb-line)]/60">
-      <span className="text-[10px] tracking-[0.15em] uppercase text-[var(--bb-dim)] font-semibold">
-        Accent Color
-      </span>
-      <div className="flex flex-wrap gap-2 mt-2">
-        {presets.map((preset) => {
-          const active = value.toLowerCase() === preset.hex.toLowerCase();
-          return (
-            <button
-              key={preset.hex}
-              onClick={() => onChange(preset.hex)}
-              className={`
-                px-4 py-1 text-[10px] tracking-[0.1em] uppercase border transition-colors flex items-center gap-1.5 cursor-pointer
-                ${active
-                  ? "bg-[var(--bb-accent)] border-[var(--bb-accent)] text-black font-bold"
-                  : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"}
-              `}
-            >
-              <div className="w-2.5 h-2.5 border border-black" style={{ backgroundColor: preset.hex }} />
-              <span>{preset.name}</span>
-            </button>
-          );
-        })}
-
-        <div className="flex items-center gap-1.5 border border-[var(--bb-line)] px-4 py-1 text-[10px] text-[var(--bb-dim)]">
-          <span>CUSTOM:</span>
-          <input
-            type="color"
-            value={value || "#c5f500"}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-4 h-4 bg-transparent border-0 cursor-pointer outline-none"
-          />
-          <span className="font-mono text-[9px] text-[var(--bb-text)] select-all uppercase">
-            {value}
-          </span>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1179,9 +1120,11 @@ function WindowGroupingList({
 // ── Header ─────────────────────────────────────────────────────────────────────
 
 function Header() {
+  const [version, setVersion] = useState("");
+  useEffect(() => { getVersion().then(setVersion).catch(console.error); }, []);
   return (
-    <header className="border-b border-[var(--bb-line)] bg-black">
-      <div className="flex items-center justify-between px-4 py-2">
+    <header className="border-b border-[var(--bb-line)] bg-[var(--bb-bg)]">
+      <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-baseline gap-2 text-[13px] tracking-[0.2em] uppercase">
           <span className="text-[var(--bb-accent)] font-bold">&gt;</span>
           <span className="text-[var(--bb-text)] font-bold">betterbar</span>
@@ -1190,7 +1133,7 @@ function Header() {
           <span className="bb-caret text-[var(--bb-accent)]">▍</span>
         </div>
         <div className="text-[11px] text-[var(--bb-dim)] tabular-nums">
-          v0.10.0
+          {version && `v${version}`}
         </div>
       </div>
       <div className="h-px bg-[var(--bb-accent)]/60" />
@@ -1212,7 +1155,7 @@ function renderInlineMarkdown(text: string) {
     }
     if (part.startsWith("`") && part.endsWith("`")) {
       return (
-        <code key={i} className="px-1 py-0.5 bg-black/60 border border-[var(--bb-line)] text-[var(--bb-accent)] text-[9px] font-mono mx-0.5">
+        <code key={i} className="px-1 py-0.5 bg-[var(--bb-bg)]/60 border border-[var(--bb-line)] text-[var(--bb-accent)] text-[9px] font-mono mx-0.5">
           {part.slice(1, -1)}
         </code>
       );
@@ -1369,7 +1312,7 @@ function UpdatesSection() {
         <div className="border border-[var(--bb-accent)] bg-[var(--bb-accent)]/5 p-3.5 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider px-4 py-0.5 bg-[var(--bb-accent)] text-black">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-4 py-0.5 bg-[var(--bb-accent)] text-[var(--bb-on-accent)]">
                 NEW VERSION
               </span>
               <span className="text-[12px] font-bold text-[var(--bb-text)] tracking-wider">
@@ -1391,7 +1334,7 @@ function UpdatesSection() {
           </div>
 
           {installing && installStep && (
-            <div className="p-2.5 bg-black/60 border border-[var(--bb-accent)]/50 text-[10px] text-[var(--bb-accent)] flex items-center gap-2">
+            <div className="p-2.5 bg-[var(--bb-bg)]/60 border border-[var(--bb-accent)]/50 text-[10px] text-[var(--bb-accent)] flex items-center gap-2">
               <ArrowCounterClockwise size={12} weight="bold" className="animate-spin text-[var(--bb-accent)]" />
               <span className="font-mono">{installStep}</span>
             </div>
@@ -1402,7 +1345,7 @@ function UpdatesSection() {
               <button
                 onClick={install}
                 disabled={installing}
-                className="flex items-center gap-2 px-4 py-2 bg-[var(--bb-accent)] text-black text-[10px] font-bold uppercase tracking-[0.18em] hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-[var(--bb-accent)] text-[var(--bb-on-accent)] text-[10px] font-bold uppercase tracking-[0.18em] hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
               >
                 {installing ? (
                   <>
@@ -1430,7 +1373,7 @@ function UpdatesSection() {
       )}
 
       {/* Integrated Changelog & Release Notes Viewer */}
-      <div className="border border-[var(--bb-line-2)] bg-black/50 p-3 space-y-3">
+      <div className="border border-[var(--bb-line-2)] bg-[var(--bb-bg)]/50 p-3 space-y-3">
         <div className="flex items-center justify-between border-b border-[var(--bb-line)] pb-2">
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold text-[var(--bb-text)] uppercase tracking-wider">
@@ -1448,7 +1391,7 @@ function UpdatesSection() {
               onClick={() => setViewMode("latest")}
               className={`px-4 py-0.5 text-[9px] uppercase tracking-wider font-bold transition-colors cursor-pointer ${
                 viewMode === "latest"
-                  ? "bg-[var(--bb-accent)] text-black"
+                  ? "bg-[var(--bb-accent)] text-[var(--bb-on-accent)]"
                   : "text-[var(--bb-dim)] hover:text-[var(--bb-text)]"
               }`}
             >
@@ -1459,7 +1402,7 @@ function UpdatesSection() {
                 onClick={() => setViewMode("archive")}
                 className={`px-4 py-0.5 text-[9px] uppercase tracking-wider font-bold transition-colors cursor-pointer ${
                   viewMode === "archive"
-                    ? "bg-[var(--bb-accent)] text-black"
+                    ? "bg-[var(--bb-accent)] text-[var(--bb-on-accent)]"
                     : "text-[var(--bb-dim)] hover:text-[var(--bb-text)]"
                 }`}
               >
@@ -1488,7 +1431,7 @@ function UpdatesSection() {
         )}
 
         {/* Formatted Markdown Content */}
-        <div className="max-h-60 overflow-y-auto bb-scroll p-2 bg-black/40 border border-[var(--bb-line-2)]">
+        <div className="max-h-60 overflow-y-auto bb-scroll p-2 bg-[var(--bb-bg)]/40 border border-[var(--bb-line-2)]">
           {activeDisplayRelease?.body ? (
             <FormattedChangelog body={activeDisplayRelease.body} />
           ) : (
@@ -1633,7 +1576,7 @@ function BackupSection({
 
       <div className="grid grid-cols-2 gap-3">
         {/* Export Column */}
-        <div className="space-y-2 border border-[var(--bb-line-2)] bg-black/40 p-3 flex flex-col justify-between">
+        <div className="space-y-2 border border-[var(--bb-line-2)] bg-[var(--bb-bg)]/40 p-3 flex flex-col justify-between">
           <div>
             <span className="text-[10px] font-bold text-[var(--bb-text)] uppercase tracking-wider block mb-1">
               Export Configuration
@@ -1645,7 +1588,7 @@ function BackupSection({
           <div className="flex flex-col gap-2 pt-2">
             <button
               onClick={handleExportFile}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-4 text-[10px] uppercase tracking-[0.15em] bg-[var(--bb-accent)] text-black font-bold hover:opacity-90 transition-opacity cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-1.5 px-4 text-[10px] uppercase tracking-[0.15em] bg-[var(--bb-accent)] text-[var(--bb-on-accent)] font-bold hover:opacity-90 transition-opacity cursor-pointer"
             >
               <DownloadSimple size={11} weight="bold" />
               <span>Export File (.json)</span>
@@ -1661,7 +1604,7 @@ function BackupSection({
         </div>
 
         {/* Import Column */}
-        <div className="space-y-2 border border-[var(--bb-line-2)] bg-black/40 p-3 flex flex-col justify-between">
+        <div className="space-y-2 border border-[var(--bb-line-2)] bg-[var(--bb-bg)]/40 p-3 flex flex-col justify-between">
           <div>
             <span className="text-[10px] font-bold text-[var(--bb-text)] uppercase tracking-wider block mb-1">
               Import Configuration
@@ -1826,7 +1769,7 @@ function PermissionRow({
 
 function Footer() {
   return (
-    <footer className="border-t border-[var(--bb-line)] bg-black px-6 py-2 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--bb-mute)]">
+    <footer className="border-t border-[var(--bb-line)] bg-[var(--bb-bg)] px-6 py-2 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--bb-mute)]">
       <Lightning size={10} weight="fill" className="text-[var(--bb-accent)]" />
       Changes save automatically
     </footer>
@@ -1858,19 +1801,19 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border border-[var(--bb-line)] bg-[var(--bb-pane)]">
-      <header className="flex items-center justify-between px-5 py-3 border-b border-[var(--bb-line)]">
-        <span className="text-[11px] uppercase tracking-[0.2em] text-[var(--bb-text)] font-bold flex items-center gap-1.5">
+    <section className="bb-setting-section border border-[var(--bb-line)] bg-[var(--bb-pane)]">
+      <header className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-[var(--bb-line)]">
+        <h2 className="text-[11px] uppercase tracking-[0.14em] text-[var(--bb-text)] font-medium flex items-center gap-2">
           {icon}
           {title}
-        </span>
+        </h2>
         {hint && (
-          <span className="text-[10px] text-[var(--bb-dim)] tabular-nums uppercase tracking-wider">
+          <div className="text-[10px] text-[var(--bb-dim)] tabular-nums uppercase tracking-wider">
             {hint}
-          </span>
+          </div>
         )}
       </header>
-      <div className="px-4 py-4">
+      <div className="bb-setting-body px-6 py-5">
         {children}
       </div>
     </section>
@@ -1914,7 +1857,7 @@ function SliderRow({
             const n = Number(e.target.value);
             if (Number.isFinite(n)) onChange(clamp(n));
           }}
-          className="w-14 bg-black border border-[var(--bb-line)] text-[var(--bb-text)] text-[10px] tabular-nums text-right px-1.5 py-1 outline-none focus:border-[var(--bb-accent)]"
+          className="w-14 bg-[var(--bb-bg)] border border-[var(--bb-line)] text-[var(--bb-text)] text-[10px] tabular-nums text-right px-1.5 py-1 outline-none focus:border-[var(--bb-accent)]"
         />
         {!formatValue && unit && <span className="text-[9px] text-[var(--bb-mute)]">{unit}</span>}
       </div>
@@ -1942,13 +1885,13 @@ function Toggle({
       onClick={onToggle}
       role="switch"
       aria-checked={enabled}
-      className="w-full flex items-center justify-between gap-3 py-3.5 px-4 min-h-[48px] group text-left border-b border-[var(--bb-line)]/60 last:border-b-0"
+      className="w-full flex items-center justify-between gap-6 py-4 px-0 min-h-[64px] group text-left border-b border-[var(--bb-line)]/60 last:border-b-0"
     >
-      <div className="flex flex-col leading-tight min-w-0">
-        <span className={`text-[11px] tracking-[0.15em] uppercase ${enabled ? "text-[var(--bb-text)]" : "text-[var(--bb-dim)] group-hover:text-[var(--bb-text)]"}`}>
+      <div className="flex flex-col gap-1.5 leading-relaxed min-w-0">
+        <span className={`text-[12px] tracking-[0.06em] ${enabled ? "text-[var(--bb-text)]" : "text-[var(--bb-dim)] group-hover:text-[var(--bb-text)]"}`}>
           {label}
         </span>
-        <span className="text-[10px] text-[var(--bb-mute)] normal-case tracking-normal">
+        <span className="text-[11px] text-[var(--bb-dim)] normal-case tracking-normal">
           {description}
         </span>
       </div>
@@ -1962,7 +1905,7 @@ function Toggle({
       >
         <span
           className={`absolute top-0.5 w-3.5 h-3.5 transition-all duration-100 ${
-            enabled ? "left-[18px] bg-black" : "left-0.5 bg-[var(--bb-text)]"
+            enabled ? "left-[18px] bg-[var(--bb-bg)]" : "left-0.5 bg-[var(--bb-text)]"
           }`}
         />
       </span>
@@ -2059,7 +2002,7 @@ function IconChromeEditor({
   return (
     <div className={`flex flex-col ${compact ? "gap-3" : "gap-4"}`}>
       {/* Preview */}
-      <div className="flex items-center gap-3 border border-[var(--bb-line)] bg-black p-3">
+      <div className="flex items-center gap-3 border border-[var(--bb-line)] bg-[var(--bb-bg)] p-3">
         <div className="w-12 h-12 flex items-center justify-center shrink-0" style={iconChromeStyle(eff)}>
           <span className="text-[var(--bb-accent)] font-bold text-[15px] tracking-tight">BB</span>
         </div>
@@ -2193,7 +2136,7 @@ function ItemList({
                     if (e.key === "Enter") commit();
                     if (e.key === "Escape") setEditingId(null);
                   }}
-                  className="flex-1 bg-black text-[var(--bb-text)] text-[11px] px-1 py-0.5 outline-none border border-[var(--bb-accent)] min-w-0"
+                  className="flex-1 bg-[var(--bb-bg)] text-[var(--bb-text)] text-[11px] px-1 py-0.5 outline-none border border-[var(--bb-accent)] min-w-0"
                   autoFocus
                 />
               ) : (
@@ -2321,7 +2264,7 @@ function SetList({
                   if (e.key === "Enter") commit();
                   if (e.key === "Escape") setEditingId(null);
                 }}
-                className="flex-1 bg-black text-[var(--bb-text)] text-[11px] px-1 py-0.5 outline-none border border-[var(--bb-accent)] min-w-0"
+                className="flex-1 bg-[var(--bb-bg)] text-[var(--bb-text)] text-[11px] px-1 py-0.5 outline-none border border-[var(--bb-accent)] min-w-0"
                 autoFocus
               />
             ) : (
@@ -2431,18 +2374,18 @@ function ClockList({
                   value={editingCode}
                   onChange={(e) => setEditingCode(e.target.value)}
                   placeholder="Label"
-                  className="w-16 bg-black text-[var(--bb-text)] text-[11px] px-1 py-0.5 outline-none border border-[var(--bb-accent)]"
+                  className="w-16 bg-[var(--bb-bg)] text-[var(--bb-text)] text-[11px] px-1 py-0.5 outline-none border border-[var(--bb-accent)]"
                   maxLength={5}
                 />
                 <input
                   value={editingTz}
                   onChange={(e) => setEditingTz(e.target.value)}
                   placeholder="Timezone"
-                  className="flex-1 bg-black text-[var(--bb-text)] text-[11px] px-1 py-0.5 outline-none border border-[var(--bb-accent)] min-w-0"
+                  className="flex-1 bg-[var(--bb-bg)] text-[var(--bb-text)] text-[11px] px-1 py-0.5 outline-none border border-[var(--bb-accent)] min-w-0"
                 />
                 <button
                   onClick={() => save(clock.id)}
-                  className="px-4 py-0.5 bg-[var(--bb-accent)] text-black text-[10px] font-bold uppercase cursor-pointer"
+                  className="px-4 py-0.5 bg-[var(--bb-accent)] text-[var(--bb-on-accent)] text-[10px] font-bold uppercase cursor-pointer"
                 >
                   Save
                 </button>
