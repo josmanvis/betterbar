@@ -7,10 +7,10 @@ import ExtensionWindowApp from "./ExtensionWindowApp";
 import "./index.css";
 
 const winLabel = getCurrentWindow().label;
-const Root = winLabel === "settings" 
-  ? SettingsApp 
-  : winLabel.startsWith("ext_") 
-    ? ExtensionWindowApp 
+const Root = winLabel === "settings"
+  ? SettingsApp
+  : winLabel.startsWith("ext_")
+    ? ExtensionWindowApp
     : App;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

@@ -4,7 +4,7 @@ import { getMusicInfo } from "../tauri-bridge";
 
 const POLL_MS = 2_000;
 
-export function useMusic(): MusicInfo {
+export function useMusic(enabled = true): MusicInfo {
   const [info, setInfo] = useState<MusicInfo>({
     title: "",
     artist: "",
@@ -15,6 +15,7 @@ export function useMusic(): MusicInfo {
   });
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
 
     async function poll() {
@@ -30,7 +31,7 @@ export function useMusic(): MusicInfo {
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
+  }, [enabled]);
 
   return info;
 }

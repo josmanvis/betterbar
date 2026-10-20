@@ -1,3 +1,5 @@
+import type { Appearance, ExtensionAppearance } from "./appearance";
+
 export type DockPosition = "bottom" | "left" | "right" | "top";
 
 /** Visual chrome for the box behind a dock icon. Every field is optional; a
@@ -137,6 +139,8 @@ export interface BetterBarConfig {
   clocks: ClockConfig[];
   transparentBg: boolean;
   accentColor: string;
+  appearance?: Appearance;
+  extensionAppearance?: Record<string, ExtensionAppearance>;
   preventOverlap: boolean;
   strictOverlap: boolean;
   ungroupedBundleIds: string[];
@@ -150,6 +154,7 @@ export interface BetterBarConfig {
   showDockArea: boolean;
   showExtensions: boolean;
   enabledExtensions: string[];
+  extensionReplacements?: string[];
   showSpaces: boolean;
   showSettingsCog: boolean;
   /** Keep macOS awake (caffeine / sleep inhibitor) */

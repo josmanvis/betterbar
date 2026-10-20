@@ -5,11 +5,14 @@
   "windows": ["main", "settings"],
   "permissions": [
     "core:default",
+    "core:webview:allow-create-webview-window",
     "core:window:allow-get-all-windows",
     "core:window:allow-show",
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
     "opener:default"
   ]
 }

@@ -28,9 +28,13 @@
 
 * {
   box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Preserve the dock's spacing reset; Settings uses Tailwind's spacing layer. */
+:where(*):not(:where(.bb-settings, .bb-settings *)) {
   margin: 0;
   padding: 0;
-  -webkit-font-smoothing: antialiased;
 }
 
 html, body, #root {
@@ -67,6 +71,7 @@ button:disabled, [role="button"][aria-disabled="true"] {
   position: relative;
 }
 .bb-scanlines::after {
+  border-radius: inherit;
   content: "";
   position: absolute;
   inset: 0;
@@ -87,6 +92,37 @@ button:disabled, [role="button"][aria-disabled="true"] {
   50%, 100% { opacity: 0; }
 }
 .bb-caret { animation: bb-blink 1.05s steps(1) infinite; }
+
+/* Settings uses a separate spacing scale so the dock remains compact. */
+.bb-settings { --settings-space: clamp(20px, 3.2vw, 36px); }
+.bb-settings-nav { width: 200px; padding: 20px 0; background: var(--bb-pane); }
+.bb-settings-nav button { min-height: 48px; }
+.bb-settings-nav button:focus-visible { outline: 1px solid var(--bb-accent); outline-offset: -3px; }
+.bb-nav-count { font-size: 10px; padding: 2px 6px; color: var(--bb-accent); border: 1px solid var(--bb-line-2); }
+.bb-settings-content { width: 100%; max-width: 920px; margin: 0 auto; padding: var(--settings-space); }
+.bb-settings-intro { margin-bottom: 28px; }
+.bb-settings-intro h1 { font-size: clamp(23px, 2.6vw, 29px); line-height: 1.3; font-weight: 500; letter-spacing: -.04em; }
+.bb-settings-intro p { font-size: 12px; line-height: 1.7; margin-top: 9px; max-width: 62ch; color: var(--bb-dim); }
+.bb-settings [role="tabpanel"] { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.bb-setting-section { min-width: 0; }
+.bb-setting-body { min-width: 0; }
+.bb-setting-body > p { line-height: 1.7; }
+.bb-setting-body input[type="number"] { min-height: 32px; font-size: 11px; }
+.bb-setting-body input[type="range"] { min-width: 0; }
+.bb-setting-body button[aria-pressed] { min-height: 34px; }
+.bb-extension-list { display: flex; flex-direction: column; gap: 16px; }
+.bb-extension-card { border: 1px solid var(--bb-line-2); min-width: 0; }
+.bb-extension-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px; }
+.bb-extension-options { border-top: 1px solid var(--bb-line); padding: 22px 18px; background: var(--bb-pane-2); }
+@media (max-width: 800px) {
+  .bb-settings-nav { width: 176px; }
+  .bb-settings-nav button { padding-left: 16px; padding-right: 16px; font-size: 11px; }
+  .bb-setting-section > header, .bb-setting-body { padding-left: 18px; padding-right: 18px; }
+  .bb-extension-header { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bb-settings *, .bb-settings *::before, .bb-settings *::after { animation: none !important; transition: none !important; }
+}
 
 /* ── Wiggle (kept for edit-mode icons). ─────────────────────────────────────── */
 @keyframes wiggle {
@@ -123,3 +159,25 @@ input[type="range"].bb-range::-webkit-slider-thumb {
 }
 input[type="range"].bb-range:focus { outline: none; }
 input[type="range"].bb-range:focus::-webkit-slider-thumb { background: var(--bb-accent); }
+
+.bb-appearance-editor { display:flex; flex-direction:column; gap:20px; }
+.bb-style-preview { padding:24px; background-size:24px 24px; border:1px solid var(--bb-line); }
+.bb-appearance-hint { font-size:11px; line-height:1.8; color:var(--bb-dim); }
+.bb-appearance-presets { display:flex; flex-wrap:wrap; gap:10px; }
+.bb-appearance-presets button, .bb-appearance-reset { display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid var(--bb-line); color:var(--bb-text); font-size:11px; }
+.bb-appearance-presets button:hover, .bb-appearance-reset:hover { border-color:var(--bb-accent); }
+.bb-appearance-presets i { display:block; width:18px; height:18px; border:2px solid; }
+.bb-appearance-reset { align-self:flex-start; }
+.bb-appearance-ranges, .bb-color-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:20px 28px; }
+.bb-appearance-range { display:flex; flex-direction:column; gap:12px; font-size:11px; }
+.bb-appearance-range > span { display:flex; justify-content:space-between; gap:16px; }
+.bb-appearance-range output { color:var(--bb-dim); font-variant-numeric:tabular-nums; }
+.bb-appearance-range input { width:100%; accent-color:var(--bb-accent); }
+.bb-appearance-check { display:flex; align-items:center; gap:10px; font-size:11px; }
+.bb-appearance-check input { accent-color:var(--bb-accent); width:15px; height:15px; }
+.bb-appearance-details { border-top:1px solid var(--bb-line); padding-top:16px; }
+.bb-appearance-details summary { cursor:pointer; font-size:12px; color:var(--bb-text); margin-bottom:18px; }
+.bb-extension-options > .bb-appearance-details { margin-bottom:24px; }
+.bb-color-field { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:11px; }
+.bb-color-value { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--bb-dim); }
+.bb-color-value input { width:30px; height:30px; cursor:pointer; background:transparent; border:1px solid var(--bb-line); padding:2px; }

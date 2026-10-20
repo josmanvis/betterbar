@@ -230,7 +230,7 @@ export function TerminalInput({
             {matches.length > 0 && (
               <div
                 style={suggestionsStyle}
-                className="absolute z-[99] bg-black border border-[var(--bb-accent)] font-mono text-xs flex flex-col divide-y divide-[var(--bb-line)] shadow-lg"
+                className="absolute z-[99] bg-[var(--bb-bg)] border border-[var(--bb-accent)] font-mono text-xs flex flex-col divide-y divide-[var(--bb-line)] shadow-lg"
               >
                 <div className="text-[9px] text-[var(--bb-mute)] px-2 py-0.5 uppercase tracking-wider bg-[var(--bb-pane-2)] select-none">
                   Suggestions
@@ -249,7 +249,7 @@ export function TerminalInput({
                         w-full text-left px-2 py-1 cursor-pointer transition-colors duration-75 text-[10px] truncate
                         ${
                           isHighlighted
-                            ? "bg-[var(--bb-accent)] text-black font-bold"
+                            ? "bg-[var(--bb-accent)] text-[var(--bb-on-accent)] font-bold"
                             : "text-[var(--bb-text)] hover:bg-[var(--bb-pane-2)] hover:text-white"
                         }
                       `}
