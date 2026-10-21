@@ -1,6 +1,7 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **BKRD Branch Explorer** — replace the terminal-only shortcut with a dedicated window for live branch data across clones, search and filters, QA/MR status, tickets, unreleased changes, and shared local notes. Add fresh refresh/rescan, safe web links, copy branch, and opening clones in Zed without switching branches. Start the local service when needed, retain snapshots on refresh errors, and preserve the previous terminal action in settings.
 - **Settings usability** — filter extensions by name, purpose, or enabled status; expand only the settings you need; use explicit switches and see reload feedback. Settings remembers the last tab and each tab's scroll position, explains automatic saving, and offers a direct action to enable floating when bar-length controls are locked. Locked controls are now disabled for keyboard users too.
 - **Predictable borders** — hide app icon frames, hover borders, and extension button borders with shared controls and individual overrides, including System Monitor. Border choices survive saving and importing; keyboard focus remains visible. Settings search finds both border controls and opens matching extension settings.
 - **Find settings** — persistent search with ⌘F, keyboard results, aliases, and direct navigation to highlighted controls, including installed extension settings.

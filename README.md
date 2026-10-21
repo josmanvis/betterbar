@@ -47,6 +47,7 @@ Replace your macOS Dock with a minimal, monospace bar that shows pinned apps, ru
 - Third-party React components as bar sections
 - Place a `.tsx` file in `~/.betterbar/extensions/<name>/main.tsx` — no build step required
 - Access to CSS custom properties for consistent styling
+- BKRD Branch Explorer: searchable branch and clone data, QA/MR status, tickets, and local notes in a dedicated window
 
 **Settings Window**
 - Native macOS window with all configuration options

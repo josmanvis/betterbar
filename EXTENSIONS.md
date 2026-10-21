@@ -166,6 +166,18 @@ const win = new WebviewWindow("ext_my_extension", {
 
 Native close destroys the window by default; extensions should recreate it on the next launch. Apps Drawer handles close requests with `preventDefault()`, saves placement, and hides the window for reuse. Extension windows can read visibility, position, size, scale, and available monitors, and listen for move and resize events. When positioning a window beside the bar, use its actual `outerSize()` so any native frame is included in the screen bounds and spacing calculations.
 
+## BKRD Branch Explorer
+
+`extensions/bkrd/main.tsx` turns the BKRD bar shortcut into a dedicated branch explorer. Install the folder at `~/.betterbar/extensions/bkrd/`, restart BetterBar or reload extensions, and enable **BKRD**. This requires a BetterBar build with `get_bkrd_data` and `bkrd_action`; the TSX alone cannot add the native bridge to an older build.
+
+Click **BKRD** on the bar to browse local BKRD data. Search branches, ticket IDs, versions, commit messages, or notes; filter by clone, activity age, QA status, open MR, or notes; sort by date, branch, version, or clone. Select a branch for its commit, author, version, QA status, MR, tickets, unreleased entries, and notes. Arrow keys move through the branch list; ⌘F focuses search. Duplicate branches in different clones remain separate rows.
+
+Ticket and MR actions open web links. **Open clone in Zed** opens the existing clone without checking out a different branch. Branch names can be copied. Notes use BKRD's existing local store and are shared across clones of a branch; deletion requires an inline confirmation. **Refresh data** requests a fresh snapshot. **Rescan clones** invalidates BKRD's discovery/enrichment caches and reloads the data; it does not fetch remotes or switch branches.
+
+The native bridge talks only to the local BKRD service, starting it through the installed `bkrd list --json` CLI if necessary. BetterBar reads the port from `~/.bkrd/config.json` by default, or uses 1212. A custom port is available in the extension settings. No branch snapshots, tokens, or credentials are stored by BetterBar. Backend errors are shown as generic messages; failed refreshes retain the previous in-memory snapshot. Unavailable MR data is distinguished from a branch without an open MR.
+
+Filters and sort choices persist. Refresh is manual by default; optional 30-second, 1-minute, and 5-minute refreshes run only while the explorer is visible. The previous terminal shortcut remains available in extension settings, including its saved `bb-bkrd-command` and BetterBar's default terminal.
+
 ## Owned app shortcuts
 
 `extensions/timesheets/main.tsx` and `extensions/floatnote/main.tsx` provide bar buttons for the locally installed apps. Copy each folder into `~/.betterbar/extensions/`, restart BetterBar or reload extensions, and enable them in Settings → Extensions.

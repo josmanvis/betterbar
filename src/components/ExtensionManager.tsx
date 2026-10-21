@@ -16,6 +16,7 @@ const strings = {
   generic: "Customize this extension’s appearance and options.", count: "{shown} of {total} extensions",
 };
 const descriptions: Record<string, string> = {
+  bkrd: "Explore branches, tickets, merge requests, and local notes across your clones.",
   "apps-drawer": "Find and launch apps, with your favorites close at hand.",
   "apple-calendar": "Upcoming events from your Mac’s calendars.",
   "focus-timer": "A simple timer for focus sessions and breaks.",

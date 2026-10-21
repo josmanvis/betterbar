@@ -1,4 +1,5 @@
 mod extensions;
+mod bkrd;
 mod applications;
 mod integrations;
 #[cfg(target_os = "macos")]
@@ -2391,6 +2392,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            bkrd::get_bkrd_data,
+            bkrd::bkrd_action,
             signature::get_app_signature_status,
             signature::repair_app_signature,
             extensions::fetch_extension_files_from_disk,
