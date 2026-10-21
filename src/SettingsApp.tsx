@@ -2,23 +2,35 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Lightning, Eye, EyeSlash, PencilSimple,
-  Plus, Trash, MagnifyingGlass, ArrowCounterClockwise, Warning, CaretUp, CaretDown,
+  Plus, Trash, MagnifyingGlass, ArrowCounterClockwise, Warning, CaretDown,
   CaretRight, DownloadSimple, UploadSimple, Copy, Check, FileText,
   SquaresFour, PaintBrush, StackSimple, SlidersHorizontal, Sparkle, ShieldCheck, Info, PuzzlePiece
 } from "@phosphor-icons/react";
 import {
    BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
-   AppSet, BarLengthMode, DockItem, DockPosition, IconChrome, IconStyle, ICON_CHROME_PRESETS, TerminalApp, ClockConfig, RunningApp, SectionId, ReleaseInfo,
+   AppSet, BarLengthMode, DockItem, DockPosition, IconChrome, IconStyle, ICON_CHROME_PRESETS, TerminalApp, ClockConfig, RunningApp, ReleaseInfo,
  } from "./types";
  import { iconChromeStyle } from "./iconChrome";
  import { useConfig, DEFAULT_CONFIG, sanitize } from "./store";
  import { getInstalledTerminals, getRunningApps, checkAccessibilityPermissions, requestAccessibilityPermissions, checkScreenRecordingPermission, requestScreenRecordingPermission, getOpenOnLogin, checkForUpdates, getReleaseHistory, installUpdate } from "./tauri-bridge";
  import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useExtensions, useExtensionRegistry } from "./extensions-runtime";
-import { replacementForSection } from "./extension-replacements";
+import { BarOrderEditor } from "./components/BarOrderEditor";
+import { REOPEN_PERMISSIONS_KEY, SignatureRepair } from "./components/SignatureRepair";
+import { SettingsSearch } from "./components/SettingsSearch";
+import type { SettingsSearchEntry } from "./settings-search";
+import { ActiveAppEditor } from "./components/ActiveAppEditor";
+import { getAppleCalendarStatus, requestAppleCalendarAccess } from "./tauri-bridge";
+import { SettingNumberInput } from "./components/SettingNumberInput";
+import { barItems } from "./bar-layout";
 import { getVersion } from "@tauri-apps/api/app";
 import { themeStyle } from "./appearance";
 import { AppearanceEditor, ExtensionAppearanceEditor } from "./components/AppearanceEditor";
+
+const featureStrings = { activeApp: "ACTIVE APP", extensionLabels: "Show extension labels",
+  extensionLabelsHint: "Show optional text beside extension icons. Each extension can override this in Appearance. Tooltips stay available.",
+  calendars: "Calendars", calendarHint: "Optional. Allows the Apple Calendar extension to read upcoming events locally. Event titles stay hidden until enabled in the extension.",
+  connectCalendars: "Connect calendars", barSize: "Bar size", contentScale: "Content scale", barLength: "Bar length" };
 
 const LENGTH_MODES: { value: BarLengthMode; label: string }[] = [
   { value: "edge",   label: "EDGE" },
@@ -30,22 +42,6 @@ const ICON_STYLES: { value: IconStyle; label: string; hint: string }[] = [
   { value: "auto",  label: "APP_ICON", hint: "Real macOS app icon, with glyph fallback" },
   { value: "glyph", label: "GLYPH",    hint: "Always the 2-letter shorthand" },
 ];
-
-const SECTION_LABELS: Record<SectionId, string> = {
-  terminal: "TERMINAL",
-  pin: "PINNED APPS",
-  run: "RUNNING APPS",
-  spacer: "SPACER / GAP",
-  time: "CLOCKS",
-  music: "MUSIC",
-  caffeine: "CAFFEINE",
-  battery: "BATTERY",
-  sets: "SET SWITCHER",
-  sims: "SIMULATORS",
-  cog: "SETTINGS COG",
-  extensions: "EXTENSIONS",
-  spaces: "SPACES",
-};
 
 const POSITIONS: { value: DockPosition; label: string }[] = [
   { value: "bottom", label: "BOTTOM" },
@@ -59,7 +55,7 @@ const NAV = [
   { id: "style",       label: "Style",       Icon: PaintBrush },
   { id: "icons",       label: "Icons",       Icon: StackSimple },
   { id: "sets",        label: "Apps & Sets", Icon: SlidersHorizontal },
-  { id: "sections",    label: "Sections",    Icon: SquaresFour },
+  { id: "sections",    label: "Bar items",    Icon: SquaresFour },
   { id: "extensions",  label: "Extensions",  Icon: PuzzlePiece },
   { id: "behaviour",   label: "Behaviour",   Icon: Sparkle },
   { id: "permissions", label: "Permissions", Icon: ShieldCheck },
@@ -73,7 +69,7 @@ const TAB_DESCRIPTIONS: Record<TabId, string> = {
   style: "Set the tone with color and surface treatments.",
   icons: "Choose how your apps look on the bar.",
   sets: "Organize the apps and shortcuts you reach for most.",
-  sections: "Choose what appears on your bar and in what order.",
+  sections: "Arrange apps, extensions, and features anywhere on your bar.",
   extensions: "Make BetterBar yours. Manage extensions and fine-tune each one here.",
   behaviour: "Adjust how BetterBar fits into your day.",
   permissions: "Manage the macOS access BetterBar needs.",
@@ -122,14 +118,41 @@ export default function SettingsApp() {
     toggleSettingsCog,
     toggleCaffeine,
     toggleExtension,
-    setSectionOrder,
+    setBarOrder,
     setIconChrome,
     resetIconChrome,
     setItemChrome,
     resetItemChrome,
   } = useConfig();
 
-  const [activeTab, setActiveTab] = useState<TabId>("layout");
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    const reopen = localStorage.getItem(REOPEN_PERMISSIONS_KEY) === "1";
+    return reopen ? "permissions" : "layout";
+  });
+  useEffect(() => { localStorage.removeItem(REOPEN_PERMISSIONS_KEY); }, []);
+  const [searchTarget, setSearchTarget] = useState<SettingsSearchEntry | null>(null);
+  useEffect(() => {
+    if (!searchTarget || activeTab !== searchTarget.tab) return;
+    let highlight: Element | null = null;
+    const find = () => {
+      const candidates = Array.from(document.querySelectorAll("main [role=tabpanel] h2, main [role=tabpanel] span, main [role=tabpanel] label, main [role=tabpanel] [aria-label]"));
+      const target = candidates.find(node => (node.getAttribute("aria-label") || node.textContent)?.trim().toLocaleLowerCase() === searchTarget.label.toLocaleLowerCase())
+        || candidates.find(node => node.textContent?.trim().toLocaleLowerCase() === searchTarget.section.toLocaleLowerCase());
+      if (!target) return;
+      highlight = target.closest("label") || target.closest(".bb-setting-section") || target;
+      highlight.scrollIntoView({ block: "center", behavior: "smooth" });
+      highlight.classList.add("bb-search-hit");
+      const control = target.matches("input,button,select") ? target : target.closest("label")?.querySelector("input,button,select");
+      if (control instanceof HTMLElement) control.focus({ preventScroll: true });
+      else if (highlight instanceof HTMLElement) { highlight.tabIndex = -1; highlight.focus({ preventScroll: true }); }
+      observer.disconnect();
+    };
+    const observer = new MutationObserver(find);
+    observer.observe(document.body, { subtree: true, childList: true });
+    find();
+    const timer = window.setTimeout(() => { observer.disconnect(); highlight?.classList.remove("bb-search-hit"); setSearchTarget(null); }, 2400);
+    return () => { observer.disconnect(); window.clearTimeout(timer); highlight?.classList.remove("bb-search-hit"); };
+  }, [activeTab, searchTarget]);
   const [terminals, setTerminals] = useState<TerminalApp[]>([]);
   const [runningApps, setRunningApps] = useState<RunningApp[]>([]);
   const [runningAppsLoading, setRunningAppsLoading] = useState(false);
@@ -146,20 +169,24 @@ export default function SettingsApp() {
 
   const [axGranted, setAxGranted] = useState<boolean | null>(null);
   const [srGranted, setSrGranted] = useState<boolean | null>(null);
+  const [calendarGranted, setCalendarGranted] = useState<boolean | null>(null);
   const [permsLoading, setPermsLoading] = useState(false);
 
   const checkPermissions = useCallback(async () => {
     setPermsLoading(true);
     try {
-      const [ax, sr] = await Promise.all([
+      const [ax, sr, calendar] = await Promise.all([
         checkAccessibilityPermissions(),
         checkScreenRecordingPermission(),
+        getAppleCalendarStatus(),
       ]);
       setAxGranted(ax);
       setSrGranted(sr);
+      setCalendarGranted(calendar === "authorized");
     } catch {
       setAxGranted(false);
       setSrGranted(false);
+      setCalendarGranted(false);
     } finally {
       setPermsLoading(false);
     }
@@ -237,6 +264,7 @@ export default function SettingsApp() {
       className="bb-settings h-screen bg-[var(--bb-bg)] text-[var(--bb-text)] flex flex-col"
     >
       <Header />
+      <SettingsSearch extensions={extensionsList} onSelect={entry => { setActiveTab(entry.tab); setSearchTarget(entry); }} />
 
       <div className="flex-1 min-h-0 flex">
         <nav
@@ -306,6 +334,7 @@ export default function SettingsApp() {
 
                 <Section title="BAR SIZE" hint={`${config.barSize}px`}>
                   <SliderRow
+                    label={featureStrings.barSize}
                     value={config.barSize}
                     min={BAR_SIZE_MIN}
                     max={BAR_SIZE_MAX}
@@ -316,6 +345,7 @@ export default function SettingsApp() {
 
                 <Section title="CONTENT SCALE" hint={`${config.contentScale.toFixed(2)}x`}>
                   <SliderRow
+                    label={featureStrings.contentScale}
                     value={config.contentScale}
                     min={0.5}
                     max={2.0}
@@ -344,6 +374,7 @@ export default function SettingsApp() {
 
                     <div className={config.barLengthMode === "custom" ? "" : "opacity-40 pointer-events-none"}>
                       <SliderRow
+                        label={featureStrings.barLength}
                         value={config.barLength}
                         min={BAR_LENGTH_MIN}
                         max={BAR_LENGTH_MAX}
@@ -385,6 +416,9 @@ export default function SettingsApp() {
                     <AppearanceEditor config={config} update={setConfig} />
 
                   </div>
+                </Section>
+                <Section title={featureStrings.activeApp}>
+                  <ActiveAppEditor config={config} update={setConfig} />
                 </Section>
               </motion.div>
             )}
@@ -625,6 +659,10 @@ export default function SettingsApp() {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.12 }}
               >
+                <Section title="BAR ORDER" hint={`${barItems(config, extensionsList).length} ITEMS`}>
+                  <BarOrderEditor config={config} extensions={extensionsList} onChange={setBarOrder} />
+                </Section>
+
                 <Section title="VISIBLE SECTIONS">
                   <div className="flex flex-col">
                     <SubHead>Dock</SubHead>
@@ -706,47 +744,7 @@ export default function SettingsApp() {
 
 
 
-                <Section title="SECTION ORDER" hint={`${config.sectionOrder.length}`}>
-                  <p className="text-[10px] text-[var(--bb-mute)] mb-2 leading-relaxed normal-case">
-                    Order of regions along the bar. Use the arrows to move a section toward the start or end.
-                  </p>
-                  <div className="flex flex-col divide-y divide-[var(--bb-line)] border border-[var(--bb-line)]">
-                    {config.sectionOrder.map((id, idx) => (
-                      <div key={id} className="flex items-center justify-between px-4 py-3">
-                        <span className="text-[11px] tracking-wider text-[var(--bb-text)] tabular-nums">
-                          <span className="text-[var(--bb-mute)] mr-2">{String(idx + 1).padStart(2, "0")}</span>
-                          {replacementForSection(id, extensionNames)?.label || SECTION_LABELS[id]}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            disabled={idx === 0}
-                            onClick={() => {
-                              const next = [...config.sectionOrder];
-                              [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-                              setSectionOrder(next);
-                            }}
-                            title="Move toward start"
-                            className="p-1 border border-[var(--bb-line)] text-[var(--bb-dim)] enabled:hover:text-[var(--bb-accent)] enabled:hover:border-[var(--bb-accent)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                          >
-                            <CaretUp size={11} weight="bold" />
-                          </button>
-                          <button
-                            disabled={idx === config.sectionOrder.length - 1}
-                            onClick={() => {
-                              const next = [...config.sectionOrder];
-                              [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
-                              setSectionOrder(next);
-                            }}
-                            title="Move toward end"
-                            className="p-1 border border-[var(--bb-line)] text-[var(--bb-dim)] enabled:hover:text-[var(--bb-accent)] enabled:hover:border-[var(--bb-accent)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                          >
-                            <CaretDown size={11} weight="bold" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Section>
+
               </motion.div>
             )}
 
@@ -760,8 +758,11 @@ export default function SettingsApp() {
                 exit={{ opacity: 0, y: -6 }}
               >
                 <Section title="ON YOUR BAR">
+                  <button className="bb-appearance-reset mb-4" onClick={() => setActiveTab("sections")}>Arrange bar items</button>
                   <Toggle label="Show extensions" description="Display your enabled extensions in the bar."
                     enabled={config.showExtensions} onToggle={toggleShowExtensions} />
+                  <Toggle label={featureStrings.extensionLabels} description={featureStrings.extensionLabelsHint}
+                    enabled={config.showExtensionLabels !== false} onToggle={() => setConfig({ showExtensionLabels: config.showExtensionLabels === false })} />
                 </Section>
                 <Section
                   title="YOUR EXTENSIONS"
@@ -843,7 +844,7 @@ export default function SettingsApp() {
                 exit={{ opacity: 0, y: -6 }}
               >
                 <Section title="PERMISSIONS" hint={
-                  axGranted === false || srGranted === false
+                  axGranted === false || srGranted === false || (extensionNames.includes("apple-calendar") && calendarGranted === false)
                     ? "SOME DENIED"
                     : axGranted === null || srGranted === null
                       ? "CHECKING..."
@@ -852,6 +853,9 @@ export default function SettingsApp() {
                   <PermissionsTab
                     axGranted={axGranted}
                     srGranted={srGranted}
+                    calendarGranted={calendarGranted}
+                    showCalendar={extensionNames.includes("apple-calendar")}
+                    onRequestCalendar={() => { void requestAppleCalendarAccess().then(checkPermissions).catch(console.error); }}
                     loading={permsLoading}
                     onCheck={checkPermissions}
                     onRequestAccessibility={requestAccessibilityPermissions}
@@ -1676,6 +1680,7 @@ function LegendContent({ onReset }: { onReset: () => void }) {
 function PermissionsTab({
   axGranted, srGranted, loading, onCheck,
   onRequestAccessibility, onRequestScreenRecording,
+  calendarGranted, showCalendar, onRequestCalendar,
 }: {
   axGranted: boolean | null;
   srGranted: boolean | null;
@@ -1683,6 +1688,9 @@ function PermissionsTab({
   onCheck: () => void;
   onRequestAccessibility: () => void;
   onRequestScreenRecording: () => void;
+  calendarGranted: boolean | null;
+  showCalendar: boolean;
+  onRequestCalendar: () => void;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -1705,6 +1713,8 @@ function PermissionsTab({
         granted={srGranted}
         onRequest={onRequestScreenRecording}
       />
+      {showCalendar && <PermissionRow name={featureStrings.calendars} description={featureStrings.calendarHint}
+        granted={calendarGranted} onRequest={onRequestCalendar} requestLabel={featureStrings.connectCalendars} />}
 
       <button
         onClick={onCheck}
@@ -1714,17 +1724,19 @@ function PermissionsTab({
         <ArrowCounterClockwise size={11} weight="bold" className={loading ? "animate-spin" : ""} />
         <span className="font-bold">Re-check Permissions</span>
       </button>
+      <SignatureRepair />
     </div>
   );
 }
 
 function PermissionRow({
-  name, description, granted, onRequest,
+  name, description, granted, onRequest, requestLabel = "Open System Settings",
 }: {
   name: string;
   description: string;
   granted: boolean | null;
   onRequest: () => void;
+  requestLabel?: string;
 }) {
   const statusText =
     granted === null ? "CHECKING..." :
@@ -1757,7 +1769,7 @@ function PermissionRow({
             className="flex items-center gap-2 px-3 py-1.5 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-warn)]/40 text-[var(--bb-warn)] hover:bg-[var(--bb-warn)]/10 hover:border-[var(--bb-warn)] transition-colors cursor-pointer"
           >
             <Warning size={11} weight="bold" />
-            <span className="font-semibold">Open System Settings</span>
+            <span className="font-semibold">{requestLabel}</span>
           </button>
         )}
       </div>
@@ -1823,21 +1835,22 @@ function Section({
 // ── Slider row ─────────────────────────────────────────────────────────────────
 
 function SliderRow({
-  value, min, max, step, onChange, formatValue, unit = "px",
+  value, min, max, step, onChange, formatValue, unit = "px", label,
 }: {
   value: number; min: number; max: number; step: number;
   onChange: (v: number) => void;
   lo?: string; hi?: string;
   formatValue?: (v: number) => string;
   unit?: string;
+  label?: string;
 }) {
   const fillPct = ((value - min) / (max - min)) * 100;
-  const clamp = (n: number) => Math.max(min, Math.min(max, n));
 
   return (
     <div className="flex items-center gap-3">
       <input
         type="range"
+        aria-label={label}
         className="bb-range flex-1"
         min={min}
         max={max}
@@ -1847,18 +1860,7 @@ function SliderRow({
         style={{ ["--fill" as string]: `${fillPct}%` }}
       />
       <div className="flex items-center gap-1 shrink-0">
-        <input
-          type="number"
-          min={min}
-          max={max}
-          step={step}
-          value={formatValue ? formatValue(value) : value}
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (Number.isFinite(n)) onChange(clamp(n));
-          }}
-          className="w-14 bg-[var(--bb-bg)] border border-[var(--bb-line)] text-[var(--bb-text)] text-[10px] tabular-nums text-right px-1.5 py-1 outline-none focus:border-[var(--bb-accent)]"
-        />
+        <SettingNumberInput value={value} min={min} max={max} step={step} formatValue={formatValue} onChange={onChange} label={label ? `${label} value` : undefined} />
         {!formatValue && unit && <span className="text-[9px] text-[var(--bb-mute)]">{unit}</span>}
       </div>
     </div>

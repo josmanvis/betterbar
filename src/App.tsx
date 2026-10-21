@@ -5,7 +5,7 @@ export default function App() {
   const {
     config,
     activeSet,
-    reorderItems,
+    setBarOrder,
     removeItem,
     addItem,
     renameItem,
@@ -27,7 +27,7 @@ export default function App() {
     <DockBar
       config={config}
       activeSet={activeSet}
-      onReorder={reorderItems}
+      onSetBarOrder={setBarOrder}
       onRemove={removeItem}
       onAddItem={addItem}
       onRenameItem={renameItem}

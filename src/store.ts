@@ -5,9 +5,11 @@ import {
   IconChrome, IconStyle, SectionId, SectionPadding, SectionStyleConfig,
 } from "./types";
 import { setOpenOnLogin as tauriSetOpenOnLogin } from "./tauri-bridge";
-import { color, sanitizeAppearance, sanitizeExtensionAppearance, themeStyle } from "./appearance";
+import { activeAppSettings, color, sanitizeAppearance, sanitizeExtensionAppearance, themeStyle } from "./appearance";
 import { useExtensionRegistry } from "./extensions-runtime";
 import { migrateExtensionReplacements } from "./extension-replacements";
+import { applyBarOrder, migrateBarOrder, sanitizeBarOrder } from "./bar-layout";
+import type { BarItemId } from "./types";
 
 export const DEFAULT_CONFIG = TYPES_DEFAULT_CONFIG;
 
@@ -46,6 +48,8 @@ export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     accentColor: color(cfg.accentColor, DEFAULT_CONFIG.accentColor),
     appearance: sanitizeAppearance(cfg.appearance, cfg.transparentBg),
     extensionAppearance: sanitizeExtensionAppearance(cfg.extensionAppearance),
+    showExtensionLabels: cfg.showExtensionLabels !== false,
+    ...activeAppSettings(cfg),
     preventOverlap: cfg.preventOverlap === undefined ? DEFAULT_CONFIG.preventOverlap : !!cfg.preventOverlap,
     strictOverlap: cfg.strictOverlap === undefined ? DEFAULT_CONFIG.strictOverlap : !!cfg.strictOverlap,
     ungroupedBundleIds: Array.isArray(cfg.ungroupedBundleIds) ? cfg.ungroupedBundleIds : [],
@@ -65,6 +69,7 @@ export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     showCaffeine: cfg.showCaffeine === undefined ? DEFAULT_CONFIG.showCaffeine : !!cfg.showCaffeine,
     openOnLogin: cfg.openOnLogin === undefined ? DEFAULT_CONFIG.openOnLogin : !!cfg.openOnLogin,
     sectionOrder: normalizeSectionOrder(cfg.sectionOrder),
+    barOrder: sanitizeBarOrder(cfg.barOrder),
     sectionStyles: sanitizeSectionStyles(cfg.sectionStyles),
     iconChrome: sanitizeIconChrome(cfg.iconChrome),
     sets: Array.isArray(cfg.sets)
@@ -189,7 +194,8 @@ export function useConfig() {
   useEffect(() => {
     if (!registry.ready) return;
     setConfigState(previous => {
-      const next = migrateExtensionReplacements(previous, registry.extensions.map(extension => extension.name));
+      const names = registry.extensions.map(extension => extension.name);
+      const next = migrateBarOrder(migrateExtensionReplacements(previous, names), names);
       if (next !== previous) saveConfig(next);
       return next;
     });
@@ -409,6 +415,7 @@ export function useConfig() {
   const setBarSize = useCallback((barSize: number) => setConfig({ barSize }), [setConfig]);
   const setBarLength = useCallback((barLength: number) => setConfig({ barLength }), [setConfig]);
   const setSectionOrder = useCallback((sectionOrder: SectionId[]) => setConfig({ sectionOrder }), [setConfig]);
+  const setBarOrder = useCallback((barOrder: BarItemId[]) => setConfig(previous => applyBarOrder(previous, barOrder)), [setConfig]);
   const setBarLengthMode = useCallback(
     (barLengthMode: BarLengthMode) => setConfig({ barLengthMode }),
     [setConfig]
@@ -571,6 +578,7 @@ export function useConfig() {
     setItemForceGlyph,
     setItemForceNative,
     setSectionOrder,
+    setBarOrder,
     setItemShowLabel,
     setItemDisplayType,
     switchSet,

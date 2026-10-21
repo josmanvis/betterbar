@@ -15,6 +15,13 @@ export interface ExtensionAppearance {
   colors?: Partial<Palette> & { accent?: string };
   opacity?: number;
   iconScale?: number;
+  showLabels?: boolean;
+}
+export const ACTIVE_APP_STYLES = ["edge", "halo", "spotlight", "pill", "underline", "lift", "none"] as const;
+export type ActiveAppStyle = (typeof ACTIVE_APP_STYLES)[number];
+export function activeAppSettings(config: Partial<BetterBarConfig>) {
+  return { activeAppStyle: ACTIVE_APP_STYLES.includes(config.activeAppStyle as ActiveAppStyle) ? config.activeAppStyle! : "edge" as ActiveAppStyle,
+    activeAppStrength: clamp(config.activeAppStrength, 75, 20, 100), activeAppPulse: config.activeAppPulse === true, dimInactiveApps: config.dimInactiveApps === true };
 }
 export const color = (value: unknown, fallback: string) => typeof value === "string" && /^#[\da-f]{6}$/i.test(value) ? value : fallback;
 const clamp = (value: unknown, fallback: number, min: number, max: number) => typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
@@ -32,7 +39,8 @@ export function sanitizeExtensionAppearance(value: unknown): Record<string, Exte
     const v = raw as ExtensionAppearance;
     const colors = v.colors && typeof v.colors === "object" ? Object.fromEntries(Object.entries(v.colors)
       .filter(([k,c]) => (k === "accent" || k in PALETTE) && typeof c === "string" && /^#[\da-f]{6}$/i.test(c))) : undefined;
-    return [key, { colors, opacity: clamp(v.opacity, 100, 0, 100), iconScale: clamp(v.iconScale, 1, .5, 1.5) }];
+    return [key, { colors, opacity: clamp(v.opacity, 100, 0, 100), iconScale: clamp(v.iconScale, 1, .5, 1.5),
+      ...(typeof v.showLabels === "boolean" ? { showLabels: v.showLabels } : {}) }];
   }));
 }
 

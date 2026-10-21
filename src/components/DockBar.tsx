@@ -9,7 +9,6 @@ import {
   SortableContext,
   verticalListSortingStrategy,
   horizontalListSortingStrategy,
-  arrayMove,
 } from "@dnd-kit/sortable";
 import {
   GearSix,
@@ -18,6 +17,7 @@ import {
   Menu, MenuItem, CheckMenuItem, PredefinedMenuItem,
 } from "@tauri-apps/api/menu";
 import { DockIcon } from "./DockIcon";
+import { appFocusProps } from "./ActiveAppEditor";
 import { TerminalInput } from "./TerminalInput";
 import { WorldClock } from "./WorldClock";
 import { BatteryIndicator } from "./BatteryIndicator";
@@ -27,7 +27,7 @@ import { WindowPreview } from "./WindowPreview";
 import { DEVICE_GLYPHS } from "./deviceIcons";
 import {
   AppSet, BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
-  BetterBarConfig, DockItem, FLOAT_DRAG_EDGE, IconChrome, IconStyle, RunningApp, DockPosition, SectionId,
+  BarItemId, BetterBarConfig, DockItem, FLOAT_DRAG_EDGE, IconChrome, IconStyle, RunningApp, DockPosition, SectionId,
 } from "../types";
 import { hasChrome, iconChromeStyle } from "../iconChrome";
 import { useRunningApps } from "../hooks/useRunningApps";
@@ -50,6 +50,8 @@ import {
 } from "../tauri-bridge";
 import { useExtensions, useExtensionRegistry, type LoadedExtension } from "../extensions-runtime";
 import { installedReplacements } from "../extension-replacements";
+import { appItemId, appMatchesDockItem, barItems, barItemStyle, extensionItemId, moveBarItem, resolveBarOrder } from "../bar-layout";
+import { SortableBarItem } from "./SortableBarItem";
 import { appearanceFor, barSurface, themeStyle } from "../appearance";
 import { useSpaces, SpacesIndicator } from "./SpacesIndicator";
 
@@ -119,7 +121,7 @@ async function handleSimulatorMenu() {
 interface DockBarProps {
   config: BetterBarConfig;
   activeSet: AppSet;
-  onReorder: (items: DockItem[]) => void;
+  onSetBarOrder: (items: BarItemId[]) => void;
   onRemove: (id: string) => void;
   onSetBarSize: (size: number) => void;
   onSetBarLength: (length: number) => void;
@@ -140,7 +142,7 @@ interface DockBarProps {
 
 export function DockBar({
   config, activeSet,
-  onReorder, onRemove, onSetBarSize, onSetBarLength,
+  onSetBarOrder, onRemove, onSetBarSize, onSetBarLength,
   onSwitchSet,
   onFloatPositionChange, onSetFreeFloat,
   onRenameItem, onSetItemHidden,
@@ -166,7 +168,8 @@ export function DockBar({
   const runningApps = useRunningApps();
   const runningWindows = useRunningWindows();
   const extensions = useExtensions(config.showExtensions ? config.enabledExtensions : []);
-  const extraExtensions = extensions.filter(extension => !replacements.some(replacement => replacement.name === extension.name));
+  const layoutOrder = resolveBarOrder(config, registry.extensions.map(extension => extension.name));
+  const layoutItems = barItems(config, registry.extensions);
   const spaces = useSpaces();
 
   const [customExpandedSize, setCustomExpandedSize] = useState<number | undefined>(undefined);
@@ -185,12 +188,14 @@ export function DockBar({
   const displayEdge: BarEdge | null = resizing?.edge ?? hoverEdge;
 
   // Icons fit inside the bar's thickness. Slot = iconSize + 8 (4px gutter each side).
-  const iconSize = Math.max(20, config.barSize - 20);
+  const iconSize = Math.max(48, config.barSize) - 20;
+  const compactScale = Math.min(1, config.barSize / 48);
+  const availableCross = Math.max(4, config.barSize - appearanceFor(config).borderWidth * 2 - 2);
 
   // Running apps that aren't already in the pinned set (matched by bundle id or
   // name, since some items omit bundleId).
   const pinnedBundleIds = new Set(activeSet.items.map((i) => i.bundleId).filter(Boolean));
-  const pinnedNames = new Set(activeSet.items.map((i) => i.name.toLowerCase()));
+  const pinnedNames = new Set(activeSet.items.filter(item => !item.bundleId).map((i) => i.name.toLowerCase()));
   const runningUnpinned = config.showRunningApps
     ? runningApps.filter((app) => {
         if (
@@ -286,43 +291,31 @@ export function DockBar({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
 
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-      const oldIdx = sortedItems.findIndex((i) => i.id === active.id);
-      const newIdx = sortedItems.findIndex((i) => i.id === over.id);
-      onReorder(
-        arrayMove(sortedItems, oldIdx, newIdx).map((item, idx) => ({ ...item, order: idx }))
-      );
-    },
-    [sortedItems, onReorder]
-  );
+  const [layoutAnnouncement, setLayoutAnnouncement] = useState("");
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || !onSetBarOrder) return;
+    const next = moveBarItem(layoutOrder, active.id as BarItemId, over.id as BarItemId);
+    if (next === layoutOrder) return;
+    onSetBarOrder(next);
+    const moved = layoutItems.find(item => item.id === active.id);
+    setLayoutAnnouncement(`Moved ${moved?.label || "item"}.`);
+  }
 
   function isRunning(item: DockItem) {
-    return runningApps.some(
-      (app) =>
-        app.name.toLowerCase() === item.name.toLowerCase() ||
-        (item.bundleId && app.bundle_id.includes(item.name.toLowerCase()))
-    );
+    return runningApps.some(app => appMatchesDockItem(item, app));
   }
 
   function findRunningApp(item: DockItem) {
-    return runningApps.find(
-      (app) =>
-        app.name.toLowerCase() === item.name.toLowerCase() ||
-        (item.bundleId && app.bundle_id.includes(item.name.toLowerCase()))
-    );
+    return runningApps.find(app => appMatchesDockItem(item, app));
   }
 
   const activeApp = runningApps.find((app) => app.is_active);
+  const activeWindowId = activeApp ? runningWindows.find(window => window.pid === activeApp.pid)?.id : undefined;
 
   function isActiveItem(item: DockItem) {
     if (!activeApp) return false;
-    return (
-      activeApp.name.toLowerCase() === item.name.toLowerCase() ||
-      (item.bundleId !== undefined && activeApp.bundle_id === item.bundleId)
-    );
+    return appMatchesDockItem(item, activeApp);
   }
 
   // ── Two-finger swipe to change sets ────────────────────────────────────────
@@ -542,15 +535,15 @@ export function DockBar({
 
   // ── Reorderable sections ────────────────────────────────────────────────
   // Each visible region of the bar is a node here; they render in
-  // `config.sectionOrder` and can be reordered by ⌘-dragging on the bar.
-  const sectionNodes: Partial<Record<SectionId, React.ReactNode>> = {};
+  // independent bar order and can be reordered by ⌘-dragging on the bar.
+  const sectionNodes: Partial<Record<BarItemId, React.ReactNode>> = {};
   function extensionNode(ext: LoadedExtension) {
-    return <div key={ext.name} className="flex items-center justify-center shrink-0"
+    const showLabels = config.extensionAppearance?.[ext.name]?.showLabels ?? config.showExtensionLabels !== false;
+    return <div key={ext.name} className="flex items-center justify-center shrink-0" data-extension-labels={showLabels ? "visible" : "hidden"}
       style={{ ...themeStyle(config, ext.name), opacity: (config.extensionAppearance?.[ext.name]?.opacity ?? 100) / 100,
-        zoom: config.extensionAppearance?.[ext.name]?.iconScale ?? 1,
         "--bb-extension-icon-size": `${iconSize}px`, "--bb-extension-slot-size": `${iconSize + 8}px`,
       } as React.CSSProperties}>
-      <ext.Component isVertical={isVertical} config={config} barSize={config.barSize} iconSize={iconSize} slotSize={iconSize + 8} />
+      <ext.Component isVertical={isVertical} config={config} barSize={config.barSize} iconSize={iconSize} slotSize={iconSize + 8} showLabels={showLabels} />
     </div>;
   }
 
@@ -566,129 +559,92 @@ export function DockBar({
     );
   }
 
-  if (config.showDockArea) {
-    sectionNodes.pin = (
-      <>
-        {sortedItems.length > 0 && (
-          <Divider isVertical={isVertical} label="PIN" zoom={config.contentScale} />
-        )}
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext
-            items={sortedItems.map((i) => i.id)}
-            strategy={isVertical ? verticalListSortingStrategy : horizontalListSortingStrategy}
-          >
-            <div
-              className={`
-                flex ${isVertical ? "flex-col" : "flex-row"} items-stretch
-                ${isVertical ? "w-full pt-1 gap-px" : "h-full pl-1 gap-px"}
-              `}
-              onDragOver={(e) => {
-                if (e.dataTransfer.types.includes('text/x-betterbar-id')) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'copy';
-              }}
-              onDrop={(e) => {
-                if (e.dataTransfer.types.includes('text/x-betterbar-id')) return;
-                e.preventDefault();
-                const files = Array.from(e.dataTransfer.files);
-                for (const file of files) {
-                  const filePath = (file as any).path;
-                  if (!filePath) continue;
-                  const name = filePath.split('/').pop() || 'File';
-                  onAddItem({
-                    id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                    name,
-                    path: filePath,
-                    order: sortedItems.length,
-                  });
-                }
-              }}
-            >
-              {sortedItems.map((item) => {
-                // Native icon is used when the item explicitly opts in via
-                // "Default (native)" (forceNative) or when the global style is
-                // AUTO. In GLYPH mode untouched items fall through to the glyph.
-                const wantsNative = item.forceNative || config.iconStyle === "auto";
-                const resolvedIcon =
-                  item.deviceIcon || item.forceGlyph
-                    ? undefined
-                    : (item.icon ?? (wantsNative && item.bundleId ? appIcons[item.bundleId] : undefined));
+  function pinnedItem(item: DockItem) {
+    // Native icon is used when the item explicitly opts in via
+    // "Default (native)" (forceNative) or when the global style is
+    // AUTO. In GLYPH mode untouched items fall through to the glyph.
+    const wantsNative = item.forceNative || config.iconStyle === "auto";
+    const resolvedIcon =
+      item.deviceIcon || item.forceGlyph
+        ? undefined
+        : (item.icon ?? (wantsNative && item.bundleId ? appIcons[item.bundleId] : undefined));
 
-                const appWindows = runningWindows.filter(
-                  (w) =>
-                    (item.bundleId && w.bundle_id === item.bundleId) ||
-                    w.owner_name.toLowerCase() === item.name.toLowerCase()
-                );
-                const isUngrouped = item.bundleId && config.ungroupedBundleIds?.includes(item.bundleId);
-                const itemWindows = isUngrouped ? appWindows : [];
-
-                if (isUngrouped && itemWindows.length > 0) {
-                  return itemWindows.map((win) => (
-                    <DockIcon
-                      key={`${item.id}-win-${win.id}`}
-                      item={{
-                        ...item,
-                        id: `${item.id}-win-${win.id}`,
-                        name: win.title || item.name,
-                        icon: resolvedIcon,
-                      }}
-                      isRunning={true}
-                      runningPid={win.pid}
-                      windowId={win.id}
-                      windowTitle={win.title}
-                      iconSize={iconSize}
-                      showLabel={config.showLabels}
-                      position={config.position}
-                      iconStyle={config.iconStyle}
-                      grayscaleIdle={config.grayscaleIdle}
-                      iconChrome={config.iconChrome}
-                      onRemove={onRemove}
-                      onRename={onRenameItem}
-                      onHide={(id) => onSetItemHidden(id, true)}
-                      onToggleGrouping={onToggleGrouping}
-                      onSetItemIcon={onSetItemIcon}
-                      onSetItemDeviceIcon={onSetItemDeviceIcon}
-                      onSetItemForceGlyph={onSetItemForceGlyph}
-                      onSetItemForceNative={onSetItemForceNative}
-                      onSetItemDisplayType={onSetItemDisplayType}
-                      ungroupedBundleIds={config.ungroupedBundleIds}
-                      isActive={isActiveItem(item)}
-                    />
-                  ));
-                }
-
-                return (
-                  <DockIcon
-                    key={item.id}
-                    item={resolvedIcon ? { ...item, icon: resolvedIcon } : item}
-                    isRunning={isRunning(item)}
-                    isActive={isActiveItem(item)}
-                    runningPid={findRunningApp(item)?.pid}
-                    windows={appWindows}
-                    iconSize={iconSize}
-                    showLabel={config.showLabels}
-                    position={config.position}
-                    iconStyle={config.iconStyle}
-                    grayscaleIdle={config.grayscaleIdle}
-                    iconChrome={config.iconChrome}
-                    onRemove={onRemove}
-                    onRename={onRenameItem}
-                    onHide={(id) => onSetItemHidden(id, true)}
-                    onToggleGrouping={onToggleGrouping}
-                    onSetItemIcon={onSetItemIcon}
-                    onSetItemDeviceIcon={onSetItemDeviceIcon}
-                    onSetItemForceGlyph={onSetItemForceGlyph}
-                    onSetItemForceNative={onSetItemForceNative}
-                    onSetItemDisplayType={onSetItemDisplayType}
-                    ungroupedBundleIds={config.ungroupedBundleIds}
-                  />
-                );
-              })}
-            </div>
-          </SortableContext>
-        </DndContext>
-      </>
+    const appWindows = runningWindows.filter(
+      (w) =>
+        (item.bundleId && w.bundle_id === item.bundleId) ||
+        w.owner_name.toLowerCase() === item.name.toLowerCase()
     );
+    const isUngrouped = item.bundleId && config.ungroupedBundleIds?.includes(item.bundleId);
+    const itemWindows = isUngrouped ? appWindows : [];
+
+    if (isUngrouped && itemWindows.length > 0) {
+      return itemWindows.map((win) => (
+        <DockIcon
+          sortable={false}
+          focusAppearance={config}
+          key={`${item.id}-win-${win.id}`}
+          item={{
+            ...item,
+            id: `${item.id}-win-${win.id}`,
+            name: win.title || item.name,
+            icon: resolvedIcon,
+          }}
+          isRunning={true}
+          runningPid={win.pid}
+          windowId={win.id}
+          windowTitle={win.title}
+          iconSize={iconSize}
+          showLabel={config.showLabels}
+          position={config.position}
+          iconStyle={config.iconStyle}
+          grayscaleIdle={config.grayscaleIdle}
+          iconChrome={config.iconChrome}
+          onRemove={onRemove}
+          onRename={onRenameItem}
+          onHide={(id) => onSetItemHidden(id, true)}
+          onToggleGrouping={onToggleGrouping}
+          onSetItemIcon={onSetItemIcon}
+          onSetItemDeviceIcon={onSetItemDeviceIcon}
+          onSetItemForceGlyph={onSetItemForceGlyph}
+          onSetItemForceNative={onSetItemForceNative}
+          onSetItemDisplayType={onSetItemDisplayType}
+          ungroupedBundleIds={config.ungroupedBundleIds}
+          isActive={isActiveItem(item) && (activeWindowId === undefined || win.id === activeWindowId)}
+        />
+      ));
+    }
+
+    return (
+      <DockIcon
+        sortable={false}
+        focusAppearance={config}
+        key={item.id}
+        item={resolvedIcon ? { ...item, icon: resolvedIcon } : item}
+        isRunning={isRunning(item)}
+        isActive={isActiveItem(item)}
+        runningPid={findRunningApp(item)?.pid}
+        windows={appWindows}
+        iconSize={iconSize}
+        showLabel={config.showLabels}
+        position={config.position}
+        iconStyle={config.iconStyle}
+        grayscaleIdle={config.grayscaleIdle}
+        iconChrome={config.iconChrome}
+        onRemove={onRemove}
+        onRename={onRenameItem}
+        onHide={(id) => onSetItemHidden(id, true)}
+        onToggleGrouping={onToggleGrouping}
+        onSetItemIcon={onSetItemIcon}
+        onSetItemDeviceIcon={onSetItemDeviceIcon}
+        onSetItemForceGlyph={onSetItemForceGlyph}
+        onSetItemForceNative={onSetItemForceNative}
+        onSetItemDisplayType={onSetItemDisplayType}
+        ungroupedBundleIds={config.ungroupedBundleIds}
+      />
+    );
+  }
+  if (config.showDockArea) {
+    for (const item of sortedItems) sectionNodes[appItemId(activeSet.id, item.id)] = pinnedItem(item);
   }
 
   if (config.showDockArea && config.showRunningApps && runningUnpinned.length > 0) {
@@ -704,7 +660,8 @@ export function DockBar({
           {displayRunningUnpinned.map((item) => (
             <RunningAppIcon
               key={item.key}
-              app={item.app}
+              app={item.windowId === undefined ? item.app : { ...item.app, is_active: item.app.is_active && (activeWindowId === undefined || item.windowId === activeWindowId) }}
+              focusAppearance={config}
               windowId={item.windowId}
               windowTitle={item.windowTitle}
               position={config.position}
@@ -816,30 +773,11 @@ export function DockBar({
     );
   }
 
-  for (const replacement of replacements) {
-    const extension = extensions.find(extension => extension.name === replacement.name);
-    if (extension) sectionNodes[replacement.section] = <>
-      <Divider isVertical={isVertical} label={replacement.label} />
+  for (const extension of extensions) {
+    sectionNodes[extensionItemId(extension.name)] = <>
+      <Divider isVertical={isVertical} />
       {extensionNode(extension)}
     </>;
-  }
-
-  if (config.showExtensions && extraExtensions.length > 0) {
-    sectionNodes.extensions = (
-      <>
-        <Divider isVertical={isVertical} label="EXT" />
-        <div
-          className={`flex ${isVertical ? "flex-col" : "flex-row"} items-center ${isVertical ? "w-full gap-px" : "h-full gap-px"}`}
-          style={{
-            "--bb-extension-icon-size": `${iconSize}px`,
-            "--bb-extension-slot-size": `${iconSize + 8}px`,
-          } as React.CSSProperties}
-        >
-          {extraExtensions.map(extensionNode)}
-        </div>
-        <Divider isVertical={isVertical} />
-      </>
-    );
   }
 
   if (config.showSpaces && spaces.length > 0) {
@@ -871,13 +809,33 @@ export function DockBar({
     );
   }
 
-  const scaledSections = new Set<SectionId>(["time", "music", "caffeine", "battery", "sets", "sims", "cog", "extensions", "spaces"]);
-  const orderedSections = config.sectionOrder.filter((id) => sectionNodes[id] !== undefined);
+  const orderedItems = layoutItems.filter(item => item.enabled && sectionNodes[item.id] !== undefined);
 
   return (
-    <>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={orderedItems.map(item => item.id)} strategy={isVertical ? verticalListSortingStrategy : horizontalListSortingStrategy}>
       <div
         ref={barRef}
+        onDragOver={event => {
+          if (event.dataTransfer.types.includes("text/x-betterbar-id") || !event.dataTransfer.types.includes("Files")) return;
+          event.preventDefault(); event.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={event => {
+          if (event.dataTransfer.types.includes("text/x-betterbar-id") || !event.dataTransfer.files.length) return;
+          event.preventDefault();
+          const target = (event.target as HTMLElement).closest("[data-bb-item]")?.getAttribute("data-bb-item") as BarItemId | undefined;
+          let next = [...layoutOrder];
+          for (const file of Array.from(event.dataTransfer.files)) {
+            const path = (file as File & { path?: string }).path;
+            if (!path) continue;
+            const id = `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+            onAddItem({ id, name: path.split("/").pop() || file.name, path, order: activeSet.items.length });
+            const key = appItemId(activeSet.id, id);
+            const index = target ? next.indexOf(target) : next.indexOf("pin");
+            next.splice(index < 0 ? next.length : index, 0, key);
+          }
+          if (next.length !== layoutOrder.length) onSetBarOrder?.(next);
+        }}
         onMouseMove={handleBarMouseMove}
         onMouseLeave={() => { if (!resizing) setHoverEdge(null); }}
         onContextMenu={handleBarContextMenu}
@@ -906,32 +864,23 @@ export function DockBar({
           />
         )}
 
-        {/* Bar sections, rendered in config.sectionOrder (reordered in Settings) */}
-        {orderedSections.map((id) => {
-          if (id === "spacer") return <div key={id} className="flex-1" />;
-          const scaled = scaledSections.has(id);
-          const customStyle = config.sectionStyles?.[id];
+        {orderedItems.map(item => {
+          const customStyle = barItemStyle(config, item.id);
           const pad = customStyle?.padding;
-          const sectionScale = (customStyle?.contentScale ?? 1.0) * (scaled ? config.contentScale : 1.0);
-
-          const styleObj: React.CSSProperties = {
-            ...(sectionScale !== 1.0 ? ({ zoom: sectionScale } as any) : {}),
-            paddingTop: pad?.top !== undefined ? `${pad.top}px` : undefined,
-            paddingRight: pad?.right !== undefined ? `${pad.right}px` : undefined,
-            paddingBottom: pad?.bottom !== undefined ? `${pad.bottom}px` : undefined,
-            paddingLeft: pad?.left !== undefined ? `${pad.left}px` : undefined,
+          const extensionScale = item.kind === "extension" ? config.extensionAppearance?.[item.extension || ""]?.iconScale ?? 1 : 1;
+          const sectionScale = compactScale * (customStyle?.contentScale ?? 1) * config.contentScale * extensionScale;
+          const style: React.CSSProperties = {
+            zoom: sectionScale,
+            paddingTop: pad?.top, paddingRight: pad?.right, paddingBottom: pad?.bottom, paddingLeft: pad?.left,
           };
-
-          return (
-            <div
-              key={id}
-              style={styleObj}
-              className={`flex ${isVertical ? "flex-col" : "flex-row"} ${scaled ? "items-center justify-center" : "items-stretch"}`}
-            >
-              {sectionNodes[id]}
-            </div>
-          );
+          return <SortableBarItem key={item.id} id={item.id} label={item.label} vertical={isVertical}
+            normalDrag={item.kind === "app" && !!item.app?.path.endsWith(".app")} spacer={item.id === "spacer"} style={style}
+            textScale={compactScale}
+            maxCross={item.id === "terminal" && terminalExpanded && isVertical ? effectiveExpandedSize ?? 320 : availableCross}>
+            {sectionNodes[item.id]}
+          </SortableBarItem>;
         })}
+        <span className="sr-only" aria-live="polite">{layoutAnnouncement}</span>
 
         {/* Swipe label toast */}
         <AnimatePresence>
@@ -955,7 +904,8 @@ export function DockBar({
           )}
         </AnimatePresence>
       </div>
-    </>
+      </SortableContext>
+    </DndContext>
   );
 }
 
@@ -963,10 +913,11 @@ export function DockBar({
 // Right-click shows native context menu: Pin to Dock, Group/Ungroup toggle.
 
 function RunningAppIcon({
-  app, iconSize, iconStyle, grayscaleIdle, iconChrome, iconUrl, isVertical, windowId, windowTitle, position,
+  app, iconSize, iconStyle, grayscaleIdle, iconChrome, iconUrl, isVertical, windowId, windowTitle, position, focusAppearance,
   onPin, onToggleGrouping, ungroupedBundleIds, activeSetItemCount,
 }: {
   app: RunningApp;
+  focusAppearance?: Partial<BetterBarConfig>;
   iconSize: number;
   iconStyle: IconStyle;
   grayscaleIdle: boolean;
@@ -1045,16 +996,11 @@ function RunningAppIcon({
 
   return (
     <div
+      {...appFocusProps(focusAppearance, app.is_active, position)}
       className={`relative flex flex-col items-center justify-center ${isVertical ? "w-full" : "h-full"}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Active app gets a chartreuse running stripe on the inner edge */}
-      {app.is_active && (
-        <div className={`absolute z-10 bg-[var(--bb-accent)] ${
-          isVertical ? "left-0 top-0 bottom-0 w-[2px]" : "top-0 left-0 right-0 h-[2px]"
-        }`} />
-      )}
       <button
         onClick={handleClick}
         onContextMenu={handleContextMenu}
@@ -1070,7 +1016,7 @@ function RunningAppIcon({
           style={{
             width: iconSize,
             height: iconSize,
-            filter: !grayscaleIdle || hovered ? "none" : "grayscale(60%) brightness(0.95)",
+            filter: !grayscaleIdle || hovered || app.is_active ? "none" : "grayscale(60%) brightness(0.95)",
             transition: "filter 120ms linear",
             ...iconChromeStyle(iconChrome || {}),
           }}
@@ -1088,7 +1034,7 @@ function RunningAppIcon({
               className={`w-full h-full flex items-center justify-center text-[var(--bb-accent)] font-bold tracking-tight ${
                 hasChrome(iconChrome || {}) ? "" : "bg-[var(--bb-pane-2)] border border-[var(--bb-line-2)]"
               }`}
-              style={{ fontSize: Math.max(10, iconSize * 0.32) }}
+              style={{ fontSize: `max(${Math.max(10, iconSize * 0.32)}px, var(--bb-font-floor, 8px))` }}
             >
               {initials}
             </div>
@@ -1104,6 +1050,7 @@ function RunningAppIcon({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.08 }}
+            style={{ zoom: "var(--bb-tooltip-scale, 1)" }}
             className={`absolute z-50 bg-[var(--bb-bg)] border border-[var(--bb-line-2)] shadow-[3px_3px_0_0_rgba(0,0,0,1)] ${tooltipClass(position)} ${
               windowId !== undefined ? "p-1.5" : "px-2 py-1 pointer-events-none whitespace-nowrap"
             }`}

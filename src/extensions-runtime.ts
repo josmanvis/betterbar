@@ -92,9 +92,9 @@ function evaluateExtension(tsxCode: string, name: string) {
     f(exports, module, require_fn, React, invoke);
 
     return module.exports;
-  } catch (err) {
-    console.error(`[extensions] Failed to evaluate "${name}":`, err);
-    throw err;
+  } catch {
+    // Parser errors can contain excerpts of private extension source.
+    throw new Error(`[extensions] Failed to evaluate "${name}".`);
   }
 }
 
@@ -127,8 +127,8 @@ export function useExtensions(enabled: string[]): LoadedExtension[] {
               Settings: mod.Settings,
             });
           }
-        } catch (e) {
-          console.error(`[extensions] Failed to load "${ext.name}":`, e);
+        } catch {
+          console.error(`[extensions] Failed to load "${ext.name}".`);
         }
       }
       if (!cancelled) setLoaded(results);

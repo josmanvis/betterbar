@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>NSCalendarsUsageDescription</key>
+  <string>BetterBar shows upcoming events in the Apple Calendar extension when you connect your calendars.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>BetterBar reads upcoming events for your local agenda. It does not create, edit, or upload calendar events.</string>
+</dict></plist>

@@ -1,5 +1,8 @@
 mod extensions;
 mod applications;
+mod integrations;
+#[cfg(target_os = "macos")]
+mod signature;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime, WindowEvent};
 
@@ -2388,11 +2391,18 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            signature::get_app_signature_status,
+            signature::repair_app_signature,
             extensions::fetch_extension_files_from_disk,
             extensions::read_standup_file,
             extensions::open_timesheets,
             extensions::open_floatnote,
             applications::get_installed_apps,
+            integrations::get_apple_calendar_status,
+            integrations::request_apple_calendar_access,
+            integrations::get_apple_calendar_agenda,
+            integrations::open_apple_calendar,
+            integrations::get_system_stats,
             get_running_apps,
             get_installed_terminals,
             execute_terminal_command,
@@ -2436,6 +2446,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                signature::reopen_after_repair(app.handle());
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.set_visible_on_all_workspaces(true);
                     let _ = macos::set_window_level(&window, "floating");

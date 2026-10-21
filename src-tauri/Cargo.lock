@@ -230,6 +230,7 @@ name = "betterbar"
 version = "0.11.0"
 dependencies = [
  "base64 0.22.1",
+ "block",
  "chrono",
  "cocoa",
  "core-foundation",

@@ -7,6 +7,7 @@ const strings = {
   shadow: "Inner shadow", scanlines: "Scanline texture", colors: "Colors", accent: "Accent", reset: "Reset bar appearance",
   appearance: "Appearance", extensionHint: "Colors apply to this extension’s bar button and window. Extensions that draw their own colors may keep their own palette.",
   buttonOpacity: "{name} button opacity", iconSize: "{name} content size", customColors: "Use custom colors", resetExtension: "Reset extension appearance",
+  labels: "Extension labels", inherit: "Follow shared setting", show: "Show", hide: "Hide",
 };
 const labels: Record<keyof Palette, string> = {
   background: "Background", surface: "Panels", elevated: "Raised surfaces", text: "Primary text", secondary: "Secondary text",
@@ -73,6 +74,10 @@ export function ExtensionAppearanceEditor({ config, name, label = name, update }
   return <details className="bb-appearance-details"><summary>{strings.appearance}</summary>
     <div className="bb-appearance-editor">
       <p className="bb-appearance-hint">{strings.extensionHint}</p>
+      <label className="bb-extension-label-choice">{strings.labels}<select aria-label={`${label} ${strings.labels.toLowerCase()}`} value={value.showLabels === undefined ? "inherit" : value.showLabels ? "show" : "hide"}
+        onChange={event => patch({ showLabels: event.target.value === "inherit" ? undefined : event.target.value === "show" })}>
+        <option value="inherit">{strings.inherit}</option><option value="show">{strings.show}</option><option value="hide">{strings.hide}</option>
+      </select></label>
       <div className="bb-appearance-ranges">
         <RangeField label={strings.buttonOpacity.replace("{name}", label)} value={value.opacity ?? 100} max={100} unit="%" onChange={opacity => patch({ opacity })} />
         <RangeField label={strings.iconSize.replace("{name}", label)} value={(value.iconScale ?? 1) * 100} min={50} max={150} unit="%" onChange={scale => patch({ iconScale: scale / 100 })} />

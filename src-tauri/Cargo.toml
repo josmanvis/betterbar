@@ -25,4 +25,5 @@ chrono = "0.4.45"
 objc = "0.2"
 cocoa = "0.26"
 core-foundation = "0.10"
+block = "0.1.6"
 

@@ -49,6 +49,27 @@ export async function requestAccessibilityPermissions(): Promise<void> {
   return invoke("request_accessibility_permissions");
 }
 
+export async function getAppleCalendarStatus(): Promise<string> { return invoke("get_apple_calendar_status"); }
+export async function requestAppleCalendarAccess(): Promise<string> { return invoke("request_apple_calendar_access"); }
+
+export interface AppSignatureStatus {
+  valid: boolean;
+  identifier: string | null;
+  kind: "local" | "unsigned" | "certificate" | "development";
+  repairAvailable: boolean;
+  reason: string | null;
+  lastResult: "success" | "failed" | "pending" | null;
+  logPath: string;
+}
+
+export async function getAppSignatureStatus(): Promise<AppSignatureStatus> {
+  return invoke("get_app_signature_status");
+}
+
+export async function repairAppSignature(): Promise<void> {
+  return invoke("repair_app_signature");
+}
+
 export async function setScreenInset(
   position: string,
   barSize: number,

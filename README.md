@@ -99,18 +99,28 @@ npm run tauri build
 npm run build-and-install
 ```
 
+### Repair macOS permission access
+
+Open **Settings → Permissions** to check Accessibility, Screen Recording, and the app's code signature. **Re-sign & restart** prepares a verified local signature, restarts BetterBar, and returns to this panel. If access is still denied, remove BetterBar from the corresponding list in **System Settings → Privacy & Security**, add the installed app again, and enable access.
+
+The repair preserves bar settings and extensions and does not reset or grant macOS permissions. It is available for locally signed or unsigned builds in a writable app folder. Certificate-signed builds must be reinstalled with the same developer's signature. Repair details are saved to `~/Library/Caches/com.betterbar.app/signature-repair.log`.
+
+Source builds sign the complete app bundle locally by default. Local signatures can still require new permission grants when the executable changes; use a consistent developer signing identity across releases for a lasting identity. See [Apple's code signing guidance](https://developer.apple.com/library/archive/technotes/tn2206/_index.html).
+
 ## Configuration
 
 The bar is configured entirely through the **Settings** window (click the `[BB]` cog on the bar, or right-click the bar and select *BetterBar Settings…*).
 
 Key configuration is persisted to `localStorage` and synced across windows via `StorageEvent`.
 
+Use **Search settings** or **⌘F** to find controls, including installed extensions. Select a result to open its tab and highlight the matching setting. **Style → Active app** offers edge, halo, spotlight, soft tile, underline, lift, and no highlight, with strength, optional pulse, and inactive-app dimming. Motion respects Reduce Motion. **Extensions → Show extension labels** applies across bundled extensions, with a per-extension override under Appearance.
+
 ### Bar Position & Appearance
 
 | Setting | Options | Default |
 |---------|---------|---------|
 | Position | bottom, left, right, top | left |
-| Bar Size | 48–200px | 68px |
+| Bar Size | 24–200px | 68px |
 | Free Float | on/off | off |
 | Bar Length Mode | edge, auto, custom | custom |
 | Icon Style | auto (native), glyph | auto |

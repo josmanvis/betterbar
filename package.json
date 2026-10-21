@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm run audit:extensions && tsc && vite build",
+    "audit:extensions": "node scripts/audit-extension-privacy.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "build:universal": "tauri build --target universal-apple-darwin",
