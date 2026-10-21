@@ -8,6 +8,7 @@ const strings = {
   appearance: "Appearance", extensionHint: "Colors apply to this extension’s bar button and window. Extensions that draw their own colors may keep their own palette.",
   buttonOpacity: "{name} button opacity", iconSize: "{name} content size", customColors: "Use custom colors", resetExtension: "Reset extension appearance",
   labels: "Extension labels", inherit: "Follow shared setting", show: "Show", hide: "Hide",
+  borderVisible: "Button border",
 };
 const labels: Record<keyof Palette, string> = {
   background: "Background", surface: "Panels", elevated: "Raised surfaces", text: "Primary text", secondary: "Secondary text",
@@ -76,6 +77,10 @@ export function ExtensionAppearanceEditor({ config, name, label = name, update }
       <p className="bb-appearance-hint">{strings.extensionHint}</p>
       <label className="bb-extension-label-choice">{strings.labels}<select aria-label={`${label} ${strings.labels.toLowerCase()}`} value={value.showLabels === undefined ? "inherit" : value.showLabels ? "show" : "hide"}
         onChange={event => patch({ showLabels: event.target.value === "inherit" ? undefined : event.target.value === "show" })}>
+        <option value="inherit">{strings.inherit}</option><option value="show">{strings.show}</option><option value="hide">{strings.hide}</option>
+      </select></label>
+      <label className="bb-extension-label-choice">{strings.borderVisible}<select aria-label={`${label} ${strings.borderVisible.toLowerCase()}`} value={value.showBorder === undefined ? "inherit" : value.showBorder ? "show" : "hide"}
+        onChange={event => patch({ showBorder: event.target.value === "inherit" ? undefined : event.target.value === "show" })}>
         <option value="inherit">{strings.inherit}</option><option value="show">{strings.show}</option><option value="hide">{strings.hide}</option>
       </select></label>
       <div className="bb-appearance-ranges">

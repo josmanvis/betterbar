@@ -38,7 +38,7 @@ Standup Update reads local Markdown only when its window opens. It renders forma
 
 ### Default Export (required)
 
-Your default export must be a React component. On the bar it receives `isVertical`, `config`, `barSize`, `iconSize`, `slotSize`, and `showLabels`. In an extension window it receives `isWindowMode: true`.
+Your default export must be a React component. On the bar it receives `isVertical`, `config`, `barSize`, `iconSize`, `slotSize`, `showLabels`, and `showBorder`. In an extension window it receives `isWindowMode: true`.
 
 ```tsx
 export default function MyWidget() {
@@ -90,6 +90,8 @@ For text, use `fontSize: "max(10px, var(--bb-font-floor, 8px))"` to keep small t
 ### Labels
 
 **Settings → Extensions → Show extension labels** controls optional text for every extension. Each extension's **Appearance → Extension labels** can follow the shared setting, show labels, or hide them. The resolved boolean is passed as `showLabels`. Respect it when rendering captions or secondary details, and mark optional text with `data-bb-extension-label` as a host fallback. Keep an icon or essential value visible when labels are hidden. Keep accessible names and tooltips available; a clock's time or a calendar icon's day number is essential content.
+
+**Show extension borders** controls button frames on the bar. Each extension's **Settings → Appearance → Button border** can follow the shared setting, show its frame, or hide it. The resolved boolean is passed as `showBorder`; respect it when rendering a custom frame. The host also hides border colors on buttons, elements with `role="button"`, and custom wrappers marked `data-bb-extension-button`. Window content and keyboard focus outlines retain their own styles. Extension cards can be filtered by name, purpose, and enabled status; their settings expand on demand or when selected from Settings search.
 
 ```tsx
 export default function MyExtension({ iconSize, slotSize, showLabels = true }) {

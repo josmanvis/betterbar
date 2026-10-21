@@ -103,3 +103,57 @@ test('numeric settings allow partial edits, clamp on commit, and cancel with Esc
   input = render(); input.props.onFocus(); input = render(); input.props.onChange({ target: { value: '75' } }); input = render();
   const count = changed.length; input.props.onKeyDown({ key: 'Escape', preventDefault() {}, currentTarget: { blur: () => input.props.onBlur() } }); assert.equal(changed.length, count);
 });
+
+test('border choices preserve explicit zero, per-item overrides, and extension inheritance across saves', () => {
+  const replacements = evaluate('src/extension-replacements.ts');
+  const layout = evaluate('src/bar-layout.ts', { './types': types, './extension-replacements': replacements });
+  const store = evaluate('src/store.ts', { react: React, './types': types, './appearance': appearance, './extensions-runtime': {}, './extension-replacements': replacements, './bar-layout': layout, './tauri-bridge': {} });
+  const chrome = evaluate('src/iconChrome.ts');
+  const legacy = store.sanitize(types.DEFAULT_CONFIG);
+  assert.equal(legacy.showExtensionBorders, true);
+  assert.equal(chrome.iconBordersVisible(legacy.iconChrome), true);
+  const config = store.sanitize({ ...legacy, iconChrome: { showBorder: false, borderWidth: 3 }, showExtensionBorders: false,
+    extensionAppearance: { 'system-monitor': { showBorder: true }, time: { showBorder: false }, media: {} } });
+  const saved = store.sanitize(JSON.parse(JSON.stringify(config)));
+  assert.equal(chrome.iconBordersVisible(saved.iconChrome), false);
+  assert.equal(chrome.iconChromeStyle(saved.iconChrome).borderColor, 'transparent');
+  assert.equal(chrome.iconBordersVisible(chrome.mergeChrome(saved.iconChrome, { showBorder: true })), true);
+  assert.equal(chrome.iconBordersVisible({ borderWidth: 0, borderColor: '#ff0000' }), false);
+  assert.equal(chrome.iconChromeStyle({ borderWidth: 0 }).border, '0px solid transparent');
+  assert.equal(appearance.extensionBorderVisible(saved, 'system-monitor'), true);
+  assert.equal(appearance.extensionBorderVisible(saved, 'media'), false);
+  assert.equal(appearance.extensionBorderVisible({ ...saved, showExtensionBorders: true }, 'time'), false);
+  const entries = search.settingsSearchEntries([{ name: 'system-monitor', displayName: 'System Monitor' }]);
+  assert.equal(search.searchSettings('icon borders', entries)[0].label, 'Show icon borders');
+  assert.equal(search.searchSettings('extension borders', entries)[0].label, 'Show extension borders');
+  assert.equal(search.searchSettings('ram', entries)[0].label, 'System Monitor');
+});
+
+test('extensions filter by purpose and status, disclose settings, and report reload failures', async () => {
+  let states = [], cursor = 0, toggled, reloadFails = true;
+  const hooks = { ...React, useState: initial => { const i = cursor++; if (!(i in states)) states[i] = initial; return [states[i], value => { states[i] = typeof value === 'function' ? value(states[i]) : value; }]; }, useEffect: () => {} };
+  const { ExtensionManager, filterExtensions } = evaluate('src/components/ExtensionManager.tsx', {
+    react: hooks, '@phosphor-icons/react': { CaretDown: () => null, MagnifyingGlass: () => null, PuzzlePiece: () => null },
+    '../extensions-runtime': { reloadExtensions: async () => { if (reloadFails) throw Error('private detail'); } }, './AppearanceEditor': { ExtensionAppearanceEditor: () => null },
+  });
+  const extensions = [{ name: 'time', displayName: 'Time' }, { name: 'system-monitor', displayName: 'System Monitor' }];
+  assert.deepEqual(filterExtensions(extensions, ['time'], 'CPU', 'all').map(ext => ext.name), ['system-monitor']);
+  assert.deepEqual(filterExtensions(extensions, ['time'], '', 'enabled').map(ext => ext.name), ['time']);
+  assert.deepEqual(filterExtensions(extensions, ['time'], '', 'disabled').map(ext => ext.name), ['system-monitor']);
+  const props = { config: { ...types.DEFAULT_CONFIG, enabledExtensions: ['time'], showExtensions: false }, extensions, ready: true,
+    loaded: [{ name: 'time', displayName: 'Time', Settings: () => null }], toggle: name => { toggled = name; }, update: () => {} };
+  function nodes(node) { return !node || typeof node !== 'object' ? [] : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)]; }
+  function render() { cursor = 0; return ExtensionManager(props); }
+  let tree = render();
+  assert.equal(nodes(tree).find(node => node.props['aria-label'] === 'Configure Time').props['aria-expanded'], false);
+  assert.ok(nodes(tree).some(node => node.type === 'small' && node.props.children === 'Enabled · hidden from bar'));
+  nodes(tree).find(node => node.props['aria-label'] === 'Configure Time').props.onClick(); tree = render();
+  assert.equal(nodes(tree).find(node => node.props['aria-label'] === 'Configure Time').props['aria-expanded'], true);
+  nodes(tree).find(node => node.props['aria-label'] === 'Enable System Monitor').props.onClick(); assert.equal(toggled, 'system-monitor');
+  let reload = nodes(tree).find(node => node.type === 'button' && node.props.children === 'Reload extensions');
+  await reload.props.onClick(); tree = render();
+  assert.ok(nodes(tree).some(node => node.props.role === 'alert' && !String(node.props.children).includes('private detail')));
+  reloadFails = false; reload = nodes(tree).find(node => node.type === 'button' && node.props.children === 'Reload extensions');
+  await reload.props.onClick(); tree = render();
+  assert.ok(nodes(tree).some(node => node.props.role === 'status' && node.props.children === 'Extensions reloaded.'));
+});

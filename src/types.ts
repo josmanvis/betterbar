@@ -6,6 +6,7 @@ export type DockPosition = "bottom" | "left" | "right" | "top";
  *  per-item override falls back to the global `BetterBarConfig.iconChrome`,
  *  which in turn falls back to the plain (chrome-less) default. */
 export interface IconChrome {
+  showBorder?: boolean;
   background?: string;   // css color, or "transparent"
   borderColor?: string;  // css color, or "transparent"
   borderWidth?: number;  // 0–4 px
@@ -109,6 +110,7 @@ export interface BetterBarConfig {
   autoHide: boolean;
   showLabels: boolean;
   showExtensionLabels?: boolean;
+  showExtensionBorders?: boolean;
   activeAppStyle?: ActiveAppStyle;
   activeAppStrength?: number;
   activeAppPulse?: boolean;
@@ -274,6 +276,7 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   autoHide: false,
   showLabels: false,
   showExtensionLabels: true,
+  showExtensionBorders: true,
   activeAppStyle: "edge",
   activeAppStrength: 75,
   activeAppPulse: false,

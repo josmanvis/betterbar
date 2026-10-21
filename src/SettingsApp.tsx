@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Lightning, Eye, EyeSlash, PencilSimple,
@@ -21,26 +21,33 @@ import { SettingsSearch } from "./components/SettingsSearch";
 import type { SettingsSearchEntry } from "./settings-search";
 import { ActiveAppEditor } from "./components/ActiveAppEditor";
 import { getAppleCalendarStatus, requestAppleCalendarAccess } from "./tauri-bridge";
+import { ExtensionManager } from "./components/ExtensionManager";
 import { SettingNumberInput } from "./components/SettingNumberInput";
 import { barItems } from "./bar-layout";
 import { getVersion } from "@tauri-apps/api/app";
 import { themeStyle } from "./appearance";
-import { AppearanceEditor, ExtensionAppearanceEditor } from "./components/AppearanceEditor";
+import { AppearanceEditor } from "./components/AppearanceEditor";
 
 const featureStrings = { activeApp: "ACTIVE APP", extensionLabels: "Show extension labels",
+  iconBorders: "Show icon borders", iconBordersHint: "Show frames around app icons, including hover and running states. Active-app highlights are controlled in Style.",
+  extensionBorders: "Show extension borders", extensionBordersHint: "Show frames around extension buttons on the bar. Each extension can override this in Appearance.",
   extensionLabelsHint: "Show optional text beside extension icons. Each extension can override this in Appearance. Tooltips stay available.",
   calendars: "Calendars", calendarHint: "Optional. Allows the Apple Calendar extension to read upcoming events locally. Event titles stay hidden until enabled in the extension.",
-  connectCalendars: "Connect calendars", barSize: "Bar size", contentScale: "Content scale", barLength: "Bar length" };
+  connectCalendars: "Connect calendars", barSize: "Bar size", contentScale: "Content scale", barLength: "Bar length", iconBorderWidth: "Icon border width", arrange: "Arrange bar items", hiddenExtensions: "Your extensions are enabled but hidden from the bar. Turn on Show extensions to display them.",
+  enableFloat: "Enable floating bar", lengthLocked: "A docked bar fills the screen edge. Enable floating to choose its length.",
+  fullEdge: "Full edge", fitContent: "Fit content", customLength: "Custom", appIcons: "App icons", letterIcons: "Letter icons",
+  edgeHint: "Fill the screen edge while keeping the bar free to move.", autoHint: "Fit the bar to its apps and extensions.", customHint: "Choose an exact length in pixels.",
+  sizeHint: "Bar thickness. Content scales down automatically to fit.", scaleHint: "Adjust the content inside the bar. Large items stay within the bar’s edges." };
 
 const LENGTH_MODES: { value: BarLengthMode; label: string }[] = [
-  { value: "edge",   label: "EDGE" },
-  { value: "auto",   label: "AUTO" },
-  { value: "custom", label: "CUSTOM" },
+  { value: "edge",   label: featureStrings.fullEdge },
+  { value: "auto",   label: featureStrings.fitContent },
+  { value: "custom", label: featureStrings.customLength },
 ];
 
 const ICON_STYLES: { value: IconStyle; label: string; hint: string }[] = [
-  { value: "auto",  label: "APP_ICON", hint: "Real macOS app icon, with glyph fallback" },
-  { value: "glyph", label: "GLYPH",    hint: "Always the 2-letter shorthand" },
+  { value: "auto",  label: featureStrings.appIcons, hint: "Real macOS app icon, with letter fallback" },
+  { value: "glyph", label: featureStrings.letterIcons, hint: "Always the 2-letter shorthand" },
 ];
 
 const POSITIONS: { value: DockPosition; label: string }[] = [
@@ -127,8 +134,15 @@ export default function SettingsApp() {
 
   const [activeTab, setActiveTab] = useState<TabId>(() => {
     const reopen = localStorage.getItem(REOPEN_PERMISSIONS_KEY) === "1";
-    return reopen ? "permissions" : "layout";
+    const last = localStorage.getItem("betterbar-settings-tab");
+    return reopen ? "permissions" : NAV.find(tab => tab.id === last)?.id || "layout";
   });
+  const main = useRef<HTMLElement>(null);
+  const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
+  useLayoutEffect(() => {
+    if (main.current) main.current.scrollTop = scrollPositions.current[activeTab] || 0;
+    localStorage.setItem("betterbar-settings-tab", activeTab);
+  }, [activeTab]);
   useEffect(() => { localStorage.removeItem(REOPEN_PERMISSIONS_KEY); }, []);
   const [searchTarget, setSearchTarget] = useState<SettingsSearchEntry | null>(null);
   useEffect(() => {
@@ -139,8 +153,8 @@ export default function SettingsApp() {
       const target = candidates.find(node => (node.getAttribute("aria-label") || node.textContent)?.trim().toLocaleLowerCase() === searchTarget.label.toLocaleLowerCase())
         || candidates.find(node => node.textContent?.trim().toLocaleLowerCase() === searchTarget.section.toLocaleLowerCase());
       if (!target) return;
-      highlight = target.closest("label") || target.closest(".bb-setting-section") || target;
-      highlight.scrollIntoView({ block: "center", behavior: "smooth" });
+      highlight = target.closest("label") || target.closest(".bb-extension-card") || target.closest(".bb-setting-section") || target;
+      highlight.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
       highlight.classList.add("bb-search-hit");
       const control = target.matches("input,button,select") ? target : target.closest("label")?.querySelector("input,button,select");
       if (control instanceof HTMLElement) control.focus({ preventScroll: true });
@@ -161,7 +175,7 @@ export default function SettingsApp() {
     onConfirm: () => void;
   } | null>(null);
 
-  const { extensions: extensionsList } = useExtensionRegistry();
+  const { extensions: extensionsList, ready: extensionsReady } = useExtensionRegistry();
   const extensionNames = extensionsList.map(extension => extension.name);
   const loadedExtensions = useExtensions(config.enabledExtensions);
 
@@ -307,7 +321,7 @@ export default function SettingsApp() {
           })}
         </nav>
 
-        <main className="flex-1 min-w-0 min-h-0 overflow-y-auto bb-scroll" key={activeTab}>
+        <main ref={main} onScroll={event => { scrollPositions.current[activeTab] = event.currentTarget.scrollTop; }} className="flex-1 min-w-0 min-h-0 overflow-y-auto bb-scroll" key={activeTab}>
           <div className="bb-settings-content">
             <div className="bb-settings-intro">
               <h1>{NAV.find(tab => tab.id === activeTab)?.label}</h1>
@@ -333,6 +347,7 @@ export default function SettingsApp() {
                 </Section>
 
                 <Section title="BAR SIZE" hint={`${config.barSize}px`}>
+                  <p className="bb-layout-hint">{featureStrings.sizeHint}</p>
                   <SliderRow
                     label={featureStrings.barSize}
                     value={config.barSize}
@@ -344,6 +359,7 @@ export default function SettingsApp() {
                 </Section>
 
                 <Section title="CONTENT SCALE" hint={`${config.contentScale.toFixed(2)}x`}>
+                  <p className="bb-layout-hint">{featureStrings.scaleHint}</p>
                   <SliderRow
                     label={featureStrings.contentScale}
                     value={config.contentScale}
@@ -365,14 +381,14 @@ export default function SettingsApp() {
                         : config.barLengthMode.toUpperCase()
                   }
                 >
-                  <div className={config.freeFloat ? "space-y-3" : "space-y-3 opacity-40 pointer-events-none"}>
+                  <fieldset disabled={!config.freeFloat} className={`space-y-3 ${config.freeFloat ? "" : "opacity-40"}`}>
                     <PillSelector
                       options={LENGTH_MODES.map((m) => ({ value: m.value, label: m.label }))}
                       value={config.barLengthMode}
                       onChange={(v) => setBarLengthMode(v as BarLengthMode)}
                     />
 
-                    <div className={config.barLengthMode === "custom" ? "" : "opacity-40 pointer-events-none"}>
+                    <fieldset disabled={config.barLengthMode !== "custom"} className={config.barLengthMode === "custom" ? "" : "opacity-40"}>
                       <SliderRow
                         label={featureStrings.barLength}
                         value={config.barLength}
@@ -381,21 +397,20 @@ export default function SettingsApp() {
                         step={20}
                         onChange={setBarLength}
                       />
-                    </div>
+                    </fieldset>
 
                     <p className="text-[10px] text-[var(--bb-mute)] normal-case leading-relaxed">
                       {config.barLengthMode === "edge"
-                        && "Bar spans the full screen edge — same length as a docked bar, but free to move."}
+                        && featureStrings.edgeHint}
                       {config.barLengthMode === "auto"
-                        && "Bar shrinks to wrap its icons and indicators."}
+                        && featureStrings.autoHint}
                       {config.barLengthMode === "custom"
-                        && "Drag the slider to set an exact length in pixels."}
+                        && featureStrings.customHint}
                     </p>
-                  </div>
+                  </fieldset>
                   {!config.freeFloat && (
-                    <p className="mt-2 text-[10px] text-[var(--bb-mute)] uppercase tracking-[0.15em]">
-                      &gt; Turn on FREE FLOAT (Behaviour) to use this control
-                    </p>
+                    <div className="bb-layout-unlock"><p>{featureStrings.lengthLocked}</p>
+                      <button className="bb-appearance-reset" onClick={() => setConfig({ freeFloat: true })}>{featureStrings.enableFloat}</button></div>
                   )}
                 </Section>
               </motion.div>
@@ -758,78 +773,19 @@ export default function SettingsApp() {
                 exit={{ opacity: 0, y: -6 }}
               >
                 <Section title="ON YOUR BAR">
-                  <button className="bb-appearance-reset mb-4" onClick={() => setActiveTab("sections")}>Arrange bar items</button>
+                  <button className="bb-appearance-reset mb-4" onClick={() => setActiveTab("sections")}>{featureStrings.arrange}</button>
                   <Toggle label="Show extensions" description="Display your enabled extensions in the bar."
                     enabled={config.showExtensions} onToggle={toggleShowExtensions} />
                   <Toggle label={featureStrings.extensionLabels} description={featureStrings.extensionLabelsHint}
                     enabled={config.showExtensionLabels !== false} onToggle={() => setConfig({ showExtensionLabels: config.showExtensionLabels === false })} />
+                  <Toggle label={featureStrings.extensionBorders} description={featureStrings.extensionBordersHint}
+                    enabled={config.showExtensionBorders !== false} onToggle={() => setConfig({ showExtensionBorders: config.showExtensionBorders === false })} />
+                  {!config.showExtensions && config.enabledExtensions.length > 0 && <p className="bb-extension-hidden-notice" role="status">{featureStrings.hiddenExtensions}</p>}
                 </Section>
-                <Section
-                  title="YOUR EXTENSIONS"
-                  hint={
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span>{`${config.enabledExtensions.length}/${extensionsList.length} ENABLED`}</span>
-                      <button
-                        onClick={() => {
-                          import("./extensions-runtime").then(m => {
-                            m.reloadExtensions().catch(console.error);
-                          });
-                        }}
-                        className="px-3 py-2 text-[10px] uppercase border border-[var(--bb-line)] text-[var(--bb-text)] hover:bg-[var(--bb-line)]/50 transition-colors pointer-events-auto cursor-pointer"
-                      >
-                        RELOAD
-                      </button>
-                    </div>
-                  }
-                >
-                  {extensionsList.length === 0 ? (
-                    <div className="text-[11px] text-[var(--bb-dim)] py-4 text-center">
-                      No extensions found in ~/.betterbar/extensions
-                    </div>
-                  ) : (
-                    <div className="bb-extension-list">
-                      {[...extensionsList].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((ext) => {
-                        const enabled = config.enabledExtensions.includes(ext.name);
-                        const loaded = loadedExtensions.find(e => e.name === ext.name);
-                        const SettingsComponent = loaded?.Settings;
-
-                        return (
-                          <div
-                            key={ext.name}
-                            className="bb-extension-card"
-                          >
-                            <div className="bb-extension-header">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <PuzzlePiece size={20} className={enabled ? "text-[var(--bb-accent)] shrink-0" : "text-[var(--bb-dim)] shrink-0"} />
-                                <h2 className="text-[13px] font-medium">{loaded?.displayName || ext.displayName.replace(/\b\w/g, c => c.toUpperCase())}</h2>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => toggleExtension(ext.name)}
-                                  aria-label={`${enabled ? "Disable" : "Enable"} ${loaded?.displayName || ext.displayName}`}
-                                  aria-pressed={enabled}
-                                  className={`px-3 py-2 text-[10px] tracking-[0.08em] uppercase border transition-colors cursor-pointer font-bold shrink-0 ${
-                                    enabled
-                                      ? "border-[var(--bb-accent)] text-[var(--bb-accent)] hover:bg-[var(--bb-accent)]/10"
-                                      : "border-[var(--bb-line)] text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:border-[var(--bb-dim)]"
-                                  }`}
-                                >
-                                  {enabled ? "ENABLED" : "DISABLED"}
-                                </button>
-                              </div>
-                            </div>
-
-                            {enabled && (
-                              <div className="bb-extension-options">
-                                <ExtensionAppearanceEditor config={config} name={ext.name} label={loaded?.displayName || ext.displayName} update={setConfig} />
-                                {SettingsComponent && <SettingsComponent config={config} updateConfig={setConfig} />}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                <Section title="YOUR EXTENSIONS">
+                  <ExtensionManager config={config} extensions={extensionsList} loaded={loadedExtensions} ready={extensionsReady}
+                    update={setConfig} toggle={toggleExtension}
+                    revealName={searchTarget?.tab === "extensions" ? extensionsList.find(ext => `extension-${ext.name}` === searchTarget.id || ext.displayName.toLocaleLowerCase() === searchTarget.section.toLocaleLowerCase())?.name : undefined}/>
                 </Section>
               </motion.div>
             )}
@@ -2016,6 +1972,8 @@ function IconChromeEditor({
       </div>
 
       {/* Presets */}
+      <Toggle label={featureStrings.iconBorders} description={featureStrings.iconBordersHint}
+        enabled={eff.showBorder !== false && eff.borderWidth !== 0} onToggle={() => onChange({ showBorder: !(eff.showBorder !== false && eff.borderWidth !== 0), ...(eff.borderWidth === 0 ? { borderWidth: 1 } : {}) })} />
       <div className="flex flex-wrap gap-1.5">
         {ICON_CHROME_PRESETS.map((p) => (
           <button
@@ -2024,6 +1982,7 @@ function IconChromeEditor({
               background: p.chrome.background,
               borderColor: p.chrome.borderColor,
               borderWidth: p.chrome.borderWidth,
+              showBorder: undefined,
               radius: p.chrome.radius,
               padding: p.chrome.padding,
             })}
@@ -2049,8 +2008,8 @@ function IconChromeEditor({
 
       <div className="flex flex-col gap-1.5">
         <span className="text-[9px] tracking-[0.18em] uppercase text-[var(--bb-dim)]">Border width</span>
-        <SliderRow value={eff.borderWidth ?? 0} min={0} max={4} step={1}
-          onChange={(v) => onChange({ borderWidth: v === 0 ? undefined : v })} />
+        <SliderRow label={featureStrings.iconBorderWidth} value={eff.borderWidth ?? 1} min={0} max={4} step={1}
+          onChange={(v) => onChange({ borderWidth: v, showBorder: v > 0 })} />
       </div>
       <div className="flex flex-col gap-1.5">
         <span className="text-[9px] tracking-[0.18em] uppercase text-[var(--bb-dim)]">Corner radius</span>

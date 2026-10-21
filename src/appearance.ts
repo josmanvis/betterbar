@@ -16,6 +16,7 @@ export interface ExtensionAppearance {
   opacity?: number;
   iconScale?: number;
   showLabels?: boolean;
+  showBorder?: boolean;
 }
 export const ACTIVE_APP_STYLES = ["edge", "halo", "spotlight", "pill", "underline", "lift", "none"] as const;
 export type ActiveAppStyle = (typeof ACTIVE_APP_STYLES)[number];
@@ -40,11 +41,15 @@ export function sanitizeExtensionAppearance(value: unknown): Record<string, Exte
     const colors = v.colors && typeof v.colors === "object" ? Object.fromEntries(Object.entries(v.colors)
       .filter(([k,c]) => (k === "accent" || k in PALETTE) && typeof c === "string" && /^#[\da-f]{6}$/i.test(c))) : undefined;
     return [key, { colors, opacity: clamp(v.opacity, 100, 0, 100), iconScale: clamp(v.iconScale, 1, .5, 1.5),
-      ...(typeof v.showLabels === "boolean" ? { showLabels: v.showLabels } : {}) }];
+      ...(typeof v.showLabels === "boolean" ? { showLabels: v.showLabels } : {}),
+      ...(typeof v.showBorder === "boolean" ? { showBorder: v.showBorder } : {}) }];
   }));
 }
 
 export const appearanceFor = (config: BetterBarConfig) => sanitizeAppearance(config.appearance, config.transparentBg);
+
+export const extensionBorderVisible = (config: BetterBarConfig, name: string) =>
+  config.extensionAppearance?.[name]?.showBorder ?? config.showExtensionBorders !== false;
 
 export function themeStyle(config: BetterBarConfig, extension?: string): CSSProperties {
   const own = extension ? config.extensionAppearance?.[extension]?.colors : undefined;

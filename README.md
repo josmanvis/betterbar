@@ -52,6 +52,9 @@ Replace your macOS Dock with a minimal, monospace bar that shows pinned apps, ru
 - Native macOS window with all configuration options
 - Changes sync live between settings and bar
 - Item management (rename, hide/show, reorder)
+- Search settings with ⌘F, or filter extensions by name, purpose, and enabled status
+- Expand an extension's Settings to customize it; Appearance includes label and border overrides
+- Hide app frames in **Icons → Icon Box → Show icon borders**; hide widget frames in **Extensions → Show extension borders**
 
 **Screen Space Reservation**
 - Uses `CGSSetScreenInsets` (the same private API the Dock uses) so maximized windows don't overlap the bar

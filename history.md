@@ -1,6 +1,8 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **Settings usability** — filter extensions by name, purpose, or enabled status; expand only the settings you need; use explicit switches and see reload feedback. Settings remembers the last tab and each tab's scroll position, explains automatic saving, and offers a direct action to enable floating when bar-length controls are locked. Locked controls are now disabled for keyboard users too.
+- **Predictable borders** — hide app icon frames, hover borders, and extension button borders with shared controls and individual overrides, including System Monitor. Border choices survive saving and importing; keyboard focus remains visible. Settings search finds both border controls and opens matching extension settings.
 - **Find settings** — persistent search with ⌘F, keyboard results, aliases, and direct navigation to highlighted controls, including installed extension settings.
 - **Consistent presentation** — shared extension-label visibility with per-extension overrides, seven active-app treatments with strength/pulse/idle dimming, and a 24 px minimum bar with proportional scaling and measured fitting across apps and widgets.
 - **New extensions** — Apple Calendar adds a native local agenda with explicit permission and hidden event titles by default; Focus Timer adds persistent focus/break sessions; System Monitor adds CPU/memory readouts and a graph without collecting process names or saving samples.

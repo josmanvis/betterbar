@@ -49,6 +49,7 @@ export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     appearance: sanitizeAppearance(cfg.appearance, cfg.transparentBg),
     extensionAppearance: sanitizeExtensionAppearance(cfg.extensionAppearance),
     showExtensionLabels: cfg.showExtensionLabels !== false,
+    showExtensionBorders: cfg.showExtensionBorders !== false,
     ...activeAppSettings(cfg),
     preventOverlap: cfg.preventOverlap === undefined ? DEFAULT_CONFIG.preventOverlap : !!cfg.preventOverlap,
     strictOverlap: cfg.strictOverlap === undefined ? DEFAULT_CONFIG.strictOverlap : !!cfg.strictOverlap,
@@ -104,6 +105,7 @@ export function sanitizeIconChrome(v: unknown): IconChrome {
   if (!v || typeof v !== "object") return {};
   const src = v as Record<string, unknown>;
   const out: IconChrome = {};
+  if (typeof src.showBorder === "boolean") out.showBorder = src.showBorder;
   for (const key of CHROME_COLOR_KEYS) {
     const raw = src[key];
     if (typeof raw === "string" && raw.trim()) out[key] = raw.trim();

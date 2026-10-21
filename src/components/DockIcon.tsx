@@ -4,7 +4,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Menu, MenuItem, CheckMenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { DockItem, DockPosition, IconChrome, IconStyle, WindowDetails } from "../types";
-import { hasChrome, iconChromeStyle, mergeChrome } from "../iconChrome";
+import { hasChrome, iconChromeStyle, mergeChrome, iconBordersVisible } from "../iconChrome";
 import { launchApp, focusApp, focusWindow, hideApp, quitApp, zoomAppWindow } from "../tauri-bridge";
 import { WindowPreview } from "./WindowPreview";
 import { DEVICE_GLYPHS } from "./deviceIcons";
@@ -388,6 +388,7 @@ export function DockIcon({
     <div
       ref={setNodeRef}
       {...appFocusProps(focusAppearance, !!isActive, position)}
+      data-bb-icon-borders={iconBordersVisible(effChrome) ? "visible" : "hidden"}
       style={{ ...style, ...appFocusProps(focusAppearance, !!isActive, position).style }}
       draggable={isFileItem}
       onDragStart={isFileItem ? (e: React.DragEvent) => {

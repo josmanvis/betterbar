@@ -16,6 +16,7 @@ const groups: [SettingsTab, string, string, string][] = [
   ["icons", "ICON SOURCE", "Show running", "running unpinned apps"],
   ["icons", "ICON SOURCE", "Hide self", "hide betterbar own icon"],
   ["icons", "ICON BOX", "Icon box", "chrome background tile border padding corner preset outline soft contrast"],
+  ["icons", "ICON BOX", "Show icon borders", "hide remove disable border frame outline icons hover running"],
   ["sets", "SETS", "Apps and sets", "app add remove rename hide sets groups switch"],
   ["sets", "PINNED APPS", "Pinned apps", "pin app add remove rename custom icon display label hide order"],
   ["sets", "TIMEZONES", "Clocks and timezones", "clock time date timezone seconds 12 24 hour format labels"],
@@ -23,6 +24,7 @@ const groups: [SettingsTab, string, string, string][] = [
   ["sections", "VISIBLE SECTIONS", "Visible bar items", "show hide visibility features sections dock terminal music clock power battery caffeine awake settings cog simulator spaces"],
   ["extensions", "ON YOUR BAR", "Show extensions", "enable disable extensions widgets plugins"],
   ["extensions", "ON YOUR BAR", "Show extension labels", "extension names labels text hide caption icons"],
+  ["extensions", "ON YOUR BAR", "Show extension borders", "hide remove disable border frame outline widget cpu monitor"],
   ["behaviour", "GENERAL", "Free float", "float free window drag move reserve position"],
   ["behaviour", "GENERAL", "Auto-hide", "auto hide reveal mouse pointer"],
   ["behaviour", "GENERAL", "Show labels", "app names labels text captions"],
@@ -46,7 +48,7 @@ export function settingsSearchEntries(extensions: { name: string; displayName: s
   const aliases: Record<string, string> = { "apps-drawer": "launcher library launch panel pins favorites recents columns density", "apple-calendar": "calendar agenda events schedule days calendars permission titles",
     "focus-timer": "focus pomodoro timer minutes break session duration", "system-monitor": "cpu memory ram metrics performance graph refresh", time: "clock timezone format seconds date labels spacing" };
   for (const ext of extensions) entries.push({ id: `extension-${ext.name}`, tab: "extensions", section: ext.displayName, label: ext.displayName,
-    keywords: `extension widget plugin appearance color opacity size labels ${ext.name} ${aliases[ext.name] || ""}` });
+    keywords: `extension widget plugin appearance color opacity size labels border ${ext.name} ${aliases[ext.name] || ""}` });
   return entries;
 }
 
@@ -57,6 +59,7 @@ export function searchSettings(query: string, entries: SettingsSearchEntry[]) {
     const label = entry.label.toLocaleLowerCase();
     const labelWords = label.split(/[^\p{L}\p{N}]+/u);
     const haystack = `${label} ${entry.keywords} ${entry.tab}`.toLocaleLowerCase();
-    return { entry, score: words.every(word => haystack.includes(word)) ? words.reduce((score, word) => score + (labelWords.includes(word) ? 6 : label.includes(word) ? 3 : 1), 0) : 0 };
+    const tokens = haystack.split(/[^\p{L}\p{N}]+/u);
+    return { entry, score: words.every(word => haystack.includes(word)) ? words.reduce((score, word) => score + (labelWords.includes(word) ? 8 : label.includes(word) ? 4 : tokens.includes(word) ? 3 : 1), 0) : 0 };
   }).filter(result => result.score > 0).sort((a, b) => b.score - a.score).map(result => result.entry);
 }

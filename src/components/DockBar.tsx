@@ -29,7 +29,7 @@ import {
   AppSet, BAR_LENGTH_MAX, BAR_LENGTH_MIN, BAR_SIZE_MAX, BAR_SIZE_MIN,
   BarItemId, BetterBarConfig, DockItem, FLOAT_DRAG_EDGE, IconChrome, IconStyle, RunningApp, DockPosition, SectionId,
 } from "../types";
-import { hasChrome, iconChromeStyle } from "../iconChrome";
+import { hasChrome, iconChromeStyle, iconBordersVisible } from "../iconChrome";
 import { useRunningApps } from "../hooks/useRunningApps";
 import { useRunningWindows } from "../hooks/useRunningWindows";
 import { useWindowPosition } from "../hooks/useWindowPosition";
@@ -52,7 +52,7 @@ import { useExtensions, useExtensionRegistry, type LoadedExtension } from "../ex
 import { installedReplacements } from "../extension-replacements";
 import { appItemId, appMatchesDockItem, barItems, barItemStyle, extensionItemId, moveBarItem, resolveBarOrder } from "../bar-layout";
 import { SortableBarItem } from "./SortableBarItem";
-import { appearanceFor, barSurface, themeStyle } from "../appearance";
+import { appearanceFor, barSurface, themeStyle, extensionBorderVisible } from "../appearance";
 import { useSpaces, SpacesIndicator } from "./SpacesIndicator";
 
 async function handleOpenSettings() {
@@ -539,11 +539,13 @@ export function DockBar({
   const sectionNodes: Partial<Record<BarItemId, React.ReactNode>> = {};
   function extensionNode(ext: LoadedExtension) {
     const showLabels = config.extensionAppearance?.[ext.name]?.showLabels ?? config.showExtensionLabels !== false;
+    const showBorder = extensionBorderVisible(config, ext.name);
     return <div key={ext.name} className="flex items-center justify-center shrink-0" data-extension-labels={showLabels ? "visible" : "hidden"}
+      data-extension-borders={showBorder ? "visible" : "hidden"}
       style={{ ...themeStyle(config, ext.name), opacity: (config.extensionAppearance?.[ext.name]?.opacity ?? 100) / 100,
         "--bb-extension-icon-size": `${iconSize}px`, "--bb-extension-slot-size": `${iconSize + 8}px`,
       } as React.CSSProperties}>
-      <ext.Component isVertical={isVertical} config={config} barSize={config.barSize} iconSize={iconSize} slotSize={iconSize + 8} showLabels={showLabels} />
+      <ext.Component isVertical={isVertical} config={config} barSize={config.barSize} iconSize={iconSize} slotSize={iconSize + 8} showLabels={showLabels} showBorder={showBorder} />
     </div>;
   }
 
@@ -997,6 +999,7 @@ function RunningAppIcon({
   return (
     <div
       {...appFocusProps(focusAppearance, app.is_active, position)}
+      data-bb-icon-borders={iconBordersVisible(iconChrome) ? "visible" : "hidden"}
       className={`relative flex flex-col items-center justify-center ${isVertical ? "w-full" : "h-full"}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
