@@ -8,6 +8,7 @@ mod applications;
 mod dock_targets;
 mod extension_installer;
 mod integrations;
+mod wifi_status;
 #[cfg(target_os = "macos")]
 mod signature;
 use serde::{Deserialize, Serialize};
@@ -2414,6 +2415,9 @@ pub fn run() {
             integrations::get_apple_calendar_agenda,
             integrations::open_apple_calendar,
             integrations::get_system_stats,
+            wifi_status::get_wifi_status,
+            wifi_status::test_wifi_speed,
+            wifi_status::open_wifi_status_app,
             get_running_apps,
             get_installed_terminals,
             execute_terminal_command,

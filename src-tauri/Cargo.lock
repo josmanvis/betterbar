@@ -235,6 +235,7 @@ dependencies = [
  "cocoa",
  "core-foundation",
  "dirs 7.0.0",
+ "libc",
  "objc",
  "regex",
  "semver",
