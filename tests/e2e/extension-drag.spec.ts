@@ -57,7 +57,7 @@ for (const layout of ["library", "panel"]) {
     });
     await page.addInitScript(layout => localStorage.setItem("bb-apps-drawer-settings", JSON.stringify({ layout, dismissOnBlur: true })), layout);
     await page.goto("/?ext=apps-drawer");
-    const search = page.getByRole("searchbox", { name: "Search apps and folders" }); await search.fill("Example");
+    const search = page.getByRole("searchbox", { name: "Search apps, files and folders" }); await search.fill("Example");
     const app = page.getByRole("button", { name: "Example", exact: true }); await expect(app).toBeVisible();
     const box = await app.boundingBox();
     await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2); await page.mouse.down();

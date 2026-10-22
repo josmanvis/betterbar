@@ -1,6 +1,20 @@
 //! Native copy-only drags from extension windows to the bar or other applications.
 use std::path::PathBuf;
 
+/// Keep a drop destination open while a drag starts in another application.
+/// This reads button state only; it does not install a global event monitor.
+#[tauri::command]
+pub fn is_primary_mouse_button_down() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use objc::{class, msg_send, sel, sel_impl};
+        let buttons: u64 = unsafe { msg_send![class!(NSEvent), pressedMouseButtons] };
+        buttons & 1 != 0
+    }
+    #[cfg(not(target_os = "macos"))]
+    { false }
+}
+
 fn drag_paths(inputs: Vec<String>) -> Result<Vec<PathBuf>, String> {
     if inputs.is_empty() || inputs.len() > 64 {
         return Err("Choose between 1 and 64 items to drag.".into());

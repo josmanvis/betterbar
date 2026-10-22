@@ -2424,6 +2424,7 @@ pub fn run() {
             execute_terminal_command,
             launch_app,
             extension_installer::inspect_bar_drop,
+            extension_drag::is_primary_mouse_button_down,
             extension_drag::start_extension_drag,
             extension_installer::install_dropped_extension,
             extension_installer::discard_dropped_extension,
