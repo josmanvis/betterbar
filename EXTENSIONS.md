@@ -125,6 +125,8 @@ cp extensions/apps-drawer/main.tsx ~/.betterbar/extensions/apps-drawer/main.tsx
 
 In the dedicated **Settings → Extensions** tab, click **RELOAD**, enable **Apps Drawer**, and turn on **Show extensions**. Click the grid icon on the bar to open it. Type a name and press Enter, or use Down followed by the arrow keys to browse. Escape clears a search, then dismisses the drawer.
 
+**Double-tap Command to toggle** is enabled by default. Press and release either ⌘ key twice quickly to show or hide the drawer, including while another app is focused. Typing, clicks, other modifiers, long holds, and normal Command shortcuts cancel the gesture. The shortcut is active while the Apps Drawer bar extension is mounted; disabling the extension or its shortcut switch unregisters the native monitors. Global key monitoring requires BetterBar's macOS Accessibility access. Its settings include an **Accessibility settings** button, and the shortcut detects a newly granted permission without an app restart. Existing builds need the native `set_apps_drawer_shortcut` command as well as the updated local extension. Normal input is observed without being consumed, and typed characters are never read or saved.
+
 The Apps Drawer settings offer two layouts:
 
 - **Library** (default): the original centered icon grid.
@@ -165,6 +167,16 @@ const win = new WebviewWindow("ext_my_extension", {
 ```
 
 Native close destroys the window by default; extensions should recreate it on the next launch. Apps Drawer handles close requests with `preventDefault()`, saves placement, and hides the window for reuse. Extension windows can read visibility, position, size, scale, and available monitors, and listen for move and resize events. When positioning a window beside the bar, use its actual `outerSize()` so any native frame is included in the screen bounds and spacing calculations.
+
+## BKR Pipelines
+
+`extensions/bkr-pipelines/main.tsx` adds a warning for failing pipelines in `on24/videoservices/conf_client_opentok_react` only. Copy the folder into `~/.betterbar/extensions/`, reload extensions, and enable **BKR Pipelines**. The native `get_bkr_pipeline_status` command requires the matching BetterBar build.
+
+The bar shows a red warning triangle and failure count whenever a latest branch or tag pipeline is failed, across all authors. Successful replacement pipelines clear their earlier failures. Counts above 99 display `99+`; the tooltip and details window retain the full count. A successful check with no failures shows a checkmark. A failed check shows an unknown status or retains the previous warning with an explicit stale marker.
+
+Click to open the failure list, search branch/tag names or pipeline IDs, and open an individual pipeline in GitLab. Right-click the bar indicator to refresh. Checks run every 60 seconds by default, including while the details window is closed; choose 30 seconds, 1 minute, 5 minutes, or 10 minutes in settings. **Failure activity** defaults to all latest failures, with optional 24-hour, 7-day, 30-day, and 90-day filters. Older failures can remain until replaced, so the activity filter can help focus on current work.
+
+The integration uses the authenticated `glab` CLI and its default hostname, with an optional hostname override. It uses GitLab's latest-per-ref branch/tag scopes, follows pagination, and never retries or modifies pipelines. Child failures are represented by their parent pipeline's status. Credentials and pipeline snapshots are not persisted; local preferences contain only the hostname, interval, and activity filter.
 
 ## BKRD Branch Explorer
 
@@ -222,3 +234,11 @@ Install `extensions/focus-timer/main.tsx` and enable **Focus Timer**. The decora
 ## System Monitor
 
 Install `extensions/system-monitor/main.tsx` and enable **System Monitor**. Show CPU, memory, or both; optionally show a CPU graph; choose a 2, 5, 10, or 30 second refresh. Click to open Activity Monitor. Metrics come from local CPU counters and macOS memory statistics; no process names, account data, or app activity are queried. Graph samples stay in memory. Memory is the sum of active, wired, and compressed pages and may differ from other tools' definitions of used memory. Labels follow the shared setting while the graph/icon remains visible.
+
+## GitLab MR count
+
+Install `extensions/gitlab-mrs/main.tsx` at `~/.betterbar/extensions/gitlab-mrs/main.tsx`, reload extensions, and enable **GitLab MRs**. Requires a BetterBar build with `get_gitlab_mr_count` and the existing `bkrd_action` web-link action. Install and authenticate `glab` first using `glab auth login`.
+
+The indicator defaults to open MRs authored by you across projects on your configured GitLab host, refreshing every minute. Settings also offers assigned MRs, review requests, 30/60/300/600-second refreshes, and an optional hostname override. Empty hostname uses `glab config get host`. Click to open the matching GitLab dashboard; right-click to refresh. Zero, loading, and failure are distinct. Failed refreshes retain the previous count with a warning; changing scope or host clears the previous count. The compact badge caps at 99+ while its accessible name and tooltip retain the exact count and last successful check time.
+
+The native bridge runs fixed read-only `glab api` requests without a shell, with a timeout and response size limit. Credentials stay with glab; MR payloads and counts are never persisted by BetterBar. Pagination headers supply the total, with page counting when totals are omitted. Only hostname, scope, and refresh interval are saved in extension preferences.

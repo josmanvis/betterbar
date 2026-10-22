@@ -45,7 +45,7 @@ export function settingsSearchEntries(extensions: { name: string; displayName: s
   const entries = groups.map(([tab, section, label, keywords], index) => ({ id: `setting-${index}`, tab, section, label, keywords }));
   const time = extensions.find(ext => ext.name === "time");
   if (time) Object.assign(entries.find(entry => entry.section === "TIMEZONES")!, { tab: "extensions", section: time.displayName, label: "Clocks and timezones" });
-  const aliases: Record<string, string> = { "apps-drawer": "launcher library launch panel pins favorites recents columns density", "apple-calendar": "calendar agenda events schedule days calendars permission titles",
+  const aliases: Record<string, string> = { "bkr-pipelines": "bkr gitlab pipeline failed failing failure warning build ci branches tags refresh glab", "gitlab-mrs": "gitlab merge requests mr count badge authored assigned reviewer refresh host glab", "apps-drawer": "launcher library launch panel pins favorites recents columns density", "apple-calendar": "calendar agenda events schedule days calendars permission titles",
     "focus-timer": "focus pomodoro timer minutes break session duration", "system-monitor": "cpu memory ram metrics performance graph refresh", time: "clock timezone format seconds date labels spacing" };
   for (const ext of extensions) entries.push({ id: `extension-${ext.name}`, tab: "extensions", section: ext.displayName, label: ext.displayName,
     keywords: `extension widget plugin appearance color opacity size labels border ${ext.name} ${aliases[ext.name] || ""}` });

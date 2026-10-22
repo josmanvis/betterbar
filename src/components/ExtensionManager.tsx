@@ -16,6 +16,8 @@ const strings = {
   generic: "Customize this extension’s appearance and options.", count: "{shown} of {total} extensions",
 };
 const descriptions: Record<string, string> = {
+  "bkr-pipelines": "Warning when any latest BKR branch or tag pipeline fails, with links and automatic checks.",
+  "gitlab-mrs": "Your open GitLab merge request count, assignments, and review requests.",
   bkrd: "Explore branches, tickets, merge requests, and local notes across your clones.",
   "apps-drawer": "Find and launch apps, with your favorites close at hand.",
   "apple-calendar": "Upcoming events from your Mac’s calendars.",
