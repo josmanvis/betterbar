@@ -1,6 +1,7 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **Extension windows and labels** — extension content and native title bars follow the selected window appearance; running app icons now honor Show labels. Add ⌘, access to Settings when the cog is hidden and local Standup reader refresh, copy, retry, and empty-state coverage.
 - **Next UI** — keep the current taskbar and combine it with the compact macOS Settings design: native sidebar material and window chrome, system typography and symbols, independent Automatic/Light/Dark settings appearance, keyboard navigation, search, and accessible confirmation dialogs. Add Chromium/WebKit end-to-end and performance checks, portable unit coverage, and macOS CI.
 - **Apps Drawer shortcut** — double-tap either Command key to show or hide the drawer from any app. Enable by default with an extension setting, cancel on typing, clicks, other modifiers, or long holds, and preserve normal keyboard shortcuts and drawer placement.
 - **BKR pipeline warning** — a separate extension warns in red when a latest BKR branch or tag pipeline fails, refreshes every minute, and opens searchable failure details with direct pipeline links. Reuse glab authentication, paginate all results, offer activity filters, and preserve clearly marked warnings when a check fails.

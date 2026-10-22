@@ -12,7 +12,7 @@ test("native sidebar supports keyboard navigation, persistence, and all settings
   await layout.focus();
   await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("tab", { name: "Style", exact: true })).toBeFocused();
-  await expect(page.getByRole("group", { name: "Settings appearance" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Window appearance" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("tab", { name: "Style", exact: true })).toHaveAttribute("aria-selected", "true");
   for (const name of ["Icons", "Apps & Sets", "Bar items", "Extensions", "Behaviour", "Permissions", "About"]) {
@@ -45,7 +45,7 @@ test("search reveals saved bar controls and supports keyboard selection, no resu
 test("settings Light and Dark persist without changing the taskbar palette or layout", async ({ page }, testInfo) => {
   const before = await savedConfig(page);
   await page.getByRole("tab", { name: "Style", exact: true }).click();
-  const group = page.getByRole("group", { name: "Settings appearance" });
+  const group = page.getByRole("group", { name: "Window appearance" });
   for (const [name, mode, color] of [["Dark", "dark", "rgb(31, 32, 35)"], ["Light", "light", "rgb(245, 245, 247)"]] as const) {
     await group.getByRole("button", { name, exact: true }).click();
     await expect(group.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");

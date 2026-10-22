@@ -404,6 +404,7 @@ export function DockIcon({
       onMouseLeave={handleMouseLeave}
     >
       <motion.button
+        aria-label={item.name}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         animate={{ scale: pressed ? 0.92 : 1 }}
@@ -485,7 +486,7 @@ export function DockIcon({
             )}
 
             {effectiveShowLabel && (
-              <span style={{ fontSize: "max(9px, var(--bb-font-floor, 8px))", maxWidth: isVertical ? "100%" : undefined }} className={`
+              <span data-bb-app-label style={{ fontSize: "max(9px, var(--bb-font-floor, 8px))", maxWidth: isVertical ? "100%" : undefined }} className={`
                 text-[9px] uppercase tracking-wider leading-none truncate font-medium
                 ${isVertical ? "max-w-[58px] text-center" : "max-w-[120px] text-left"}
                 ${isRunning ? "text-[var(--bb-accent)]" : "text-[var(--bb-dim)]"}

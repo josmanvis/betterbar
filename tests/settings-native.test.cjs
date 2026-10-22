@@ -52,6 +52,29 @@ test('settings resolves semantic system tokens without inheriting taskbar or ext
   }
 });
 
+test('extension windows inherit the window theme and retain explicit per-extension overrides', () => {
+  for (const mode of ['system', 'light', 'dark']) {
+    const config = { ...types.DEFAULT_CONFIG, settingsAppearance: mode };
+    assert.deepEqual(appearance.extensionThemeStyle(config, 'sample'), appearance.settingsThemeStyle(config));
+    const custom = { ...config, extensionAppearance: { sample: { colors: { accent: '#ff0000', surface: '#123456' } }, other: { colors: { text: '#abcdef' } } } };
+    const style = appearance.extensionThemeStyle(custom, 'sample');
+    assert.equal(style['--bb-accent'], '#ff0000');
+    assert.equal(style['--bb-pane'], '#123456');
+    assert.equal(style['--bb-text'], appearance.settingsThemeStyle(config)['--bb-text']);
+    assert.equal(appearance.themeStyle(config)['--bb-accent'], types.DEFAULT_CONFIG.accentColor);
+  }
+});
+
+test('shared native colors stay scoped to native windows and extensions can set their titlebar theme', () => {
+  const css = require('postcss').parse(fs.readFileSync(path.join(root, 'src/native-theme.css'), 'utf8'));
+  css.walkRules(rule => {
+    for (const selector of rule.selectors) assert.ok(selector.includes('.bb-native-surface'), selector);
+  });
+  const capability = JSON.parse(fs.readFileSync(path.join(root, 'src-tauri/capabilities/extensions.json')));
+  assert.deepEqual(capability.windows, ['ext_*']);
+  assert.ok(capability.permissions.includes('core:window:allow-set-theme'));
+});
+
 function nodes(node) {
   if (!node || typeof node !== 'object') return [];
   return [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
@@ -103,15 +126,15 @@ test('native Settings appearance refreshes on focus and removes listeners on unm
     addEventListener: (key, fn) => listeners.set(key, fn), removeEventListener: key => listeners.delete(key),
     matchMedia: () => ({ addEventListener: (key, fn) => media.set(key, fn), removeEventListener: key => media.delete(key) }),
   };
-  global.document = { documentElement: { dataset, style: {} }, querySelector: selector => { assert.equal(selector, '.bb-settings'); return { style: { setProperty: (key, value) => css.set(key, value) } }; } };
+  global.document = { documentElement: { dataset, style: {} }, querySelector: selector => { assert.equal(selector, '.bb-native-surface'); return { style: { setProperty: (key, value) => css.set(key, value) } }; } };
   try {
-    const { SettingsAppearance } = evaluate('src/components/SettingsAppearance.tsx', {
+    const { WindowAppearance } = evaluate('src/components/WindowAppearance.tsx', {
       react: { useEffect: (fn, dependencies) => { effect = fn; deps = dependencies; } },
       '@tauri-apps/api/window': { getCurrentWindow: () => ({ setTheme: async mode => themes.push(mode) }) },
       '../appearance': appearance,
       '../tauri-bridge': { getMacosPreferences: async () => { requests++; return { accent: '#ff00ff', reduce_transparency: true, increase_contrast: true, reduce_motion: true }; } },
     });
-    SettingsAppearance({ config: { ...types.DEFAULT_CONFIG, settingsAppearance: 'dark' } });
+    WindowAppearance({ config: { ...types.DEFAULT_CONFIG, settingsAppearance: 'dark' } });
     assert.deepEqual(deps, ['dark'], 'bar geometry and palette edits must not reload native preferences');
     cleanup = effect();
     await new Promise(resolve => setImmediate(resolve));

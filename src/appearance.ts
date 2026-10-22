@@ -90,3 +90,21 @@ export function settingsThemeStyle(config: BetterBarConfig): CSSProperties {
     color: "var(--bb-text)", colorScheme: mode === "light" || mode === "dark" ? mode : "light dark",
   } as CSSProperties;
 }
+
+export function extensionThemeStyle(config: BetterBarConfig, extension: string): CSSProperties {
+  const style = settingsThemeStyle(config) as Record<string, string>;
+  const colors = config.extensionAppearance?.[extension]?.colors;
+  const variables: Record<keyof Palette, string> = {
+    background: "--bb-bg", surface: "--bb-pane", elevated: "--bb-pane-2", text: "--bb-text",
+    secondary: "--bb-dim", muted: "--bb-mute", border: "--bb-line", strongBorder: "--bb-line-2",
+    warning: "--bb-warn", danger: "--bb-bad",
+  };
+  for (const [key, variable] of Object.entries(variables)) {
+    if (colors?.[key as keyof Palette]) style[variable] = colors[key as keyof Palette]!;
+  }
+  if (colors?.accent) {
+    style["--bb-accent"] = style["--bb-accent-d"] = colors.accent;
+    style["--bb-on-accent"] = (themeStyle(config, extension) as Record<string, string>)["--bb-on-accent"];
+  }
+  return style as CSSProperties;
+}

@@ -9,12 +9,13 @@ AppKit, native traffic lights, a draggable title area, sidebar material, aligned
 preference rows, segmented controls, switches, and keyboard-accessible dialogs.
 The webview controls remain React/HTML.
 
-Style → Settings appearance offers Automatic, Light, and Dark. The preference
-persists as `settingsAppearance` and affects only Settings. Style → Bar colors
-and effects retains the existing taskbar customization controls. Settings search
+Style → Window appearance offers Automatic, Light, and Dark. The preference
+persists as `settingsAppearance` and applies to Settings and all extension
+windows, including native title bars. Style → Bar colors and effects retains the existing taskbar customization controls. Settings search
 opens that disclosure when a matching bar appearance control is selected.
-Settings styling is scoped to `.bb-settings`; the existing taskbar palette,
-IBM Plex Mono typography, scanlines, icon chrome, layout, and extension appearance
+Shared native colors are scoped to `.bb-native-surface` and Settings layout to
+`.bb-settings`; the existing taskbar palette, IBM Plex Mono typography, scanlines,
+icon chrome, layout, and per-extension color overrides
 remain available. Window entry points load independently to avoid loading the
 Settings UI and its stylesheet in the taskbar window.
 
@@ -31,8 +32,10 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
 
 `npm run test:all` runs the portable unit suite, type checks, production build,
-all browser scenarios, performance budgets, and Rust tests. The Chromium project uses an installed Chrome on macOS when available; CI uses
-Playwright’s Chromium. Set `PLAYWRIGHT_CHROME_CHANNEL` to override that choice. `npm run test:extensions` additionally runs the pre-existing
+all browser scenarios, performance budgets, and Rust tests. The Chromium project
+uses an installed Chrome on macOS when available; CI uses Playwright’s Chromium.
+Set `PLAYWRIGHT_CHROME_CHANNEL` to override that choice. `npm run test:extensions`
+additionally runs the pre-existing
 local extension tests; those require the user's local extension sources and are
 not part of clean-checkout CI.
 
@@ -71,3 +74,15 @@ Screenshots, traces on failure, and performance measurements are available in
 
 The Tests GitHub Actions workflow runs on macOS for pull requests and `next`
 pushes. Builds and portable tests do not require installed private extensions.
+
+
+## Standup and app labels
+
+The local Standup Update extension has a reading layout, Refresh (⌘R), Copy
+Markdown, last-update feedback, and retry/empty states. Failed refreshes keep the
+previous note visible. Source remains in the local extension registry; its unit
+and browser checks use synthetic notes and skip when local source is unavailable.
+
+The Show labels switch controls both pinned and running apps. Explicit per-item
+Icon / Icon + Label / Label choices retain precedence. With the settings cog
+hidden, ⌘, opens Settings while the taskbar is focused.

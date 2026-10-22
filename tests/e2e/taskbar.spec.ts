@@ -1,4 +1,4 @@
-import { test, expect, installRuntime, savedConfig } from "./fixtures";
+import { test, expect, installRuntime, savedConfig, seed } from "./fixtures";
 
 test("current taskbar retains its font, chrome, palette, and settings action", async ({ page }, testInfo) => {
   await installRuntime(page, { label: "main" });
@@ -68,4 +68,13 @@ test("Settings uses the Mac accent and accessibility preferences on its scoped s
   await page.getByRole("tab", { name: "Style", exact: true }).click();
   await page.getByRole("button", { name: "Dark", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Style", exact: true })).toHaveCSS("background-color", "rgb(170, 0, 204)");
+});
+
+
+test("Settings stays accessible with the cog hidden through the standard preferences shortcut", async ({ page }) => {
+  await installRuntime(page, { label: "main", config: { ...seed, showSettingsCog: false } });
+  await page.goto("/");
+  await expect(page.locator(".bb-scanlines").first()).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+,");
+  await expect.poll(() => page.evaluate(() => (window as any).__ipcCalls.filter((call: any) => call.cmd === "open_settings_window").length)).toBe(1);
 });

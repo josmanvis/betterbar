@@ -3,8 +3,8 @@ import type { BetterBarConfig } from "../types";
 import { AppearanceEditor } from "./AppearanceEditor";
 
 const strings = {
-  appearance: "Settings appearance", system: "Automatic", light: "Light", dark: "Dark",
-  hint: "Automatic follows your Mac’s Light or Dark appearance. This choice applies to Settings.",
+  appearance: "Window appearance", system: "Automatic", light: "Light", dark: "Dark",
+  hint: "Automatic follows your Mac’s Light or Dark appearance. Settings and extension windows update together.",
   barControls: "Bar colors and effects", barHint: "Customize your taskbar’s saved colors, transparency, and borders.",
 };
 

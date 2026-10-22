@@ -1,6 +1,7 @@
 import { SystemSymbol } from "./components/SystemSymbol";
-import { SettingsAppearance } from "./components/SettingsAppearance";
+import { WindowAppearance } from "./components/WindowAppearance";
 import "./settings-native.css";
+import "./native-theme.css";
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { AnimatePresence, motion, MotionConfig, useReducedMotion } from "framer-motion";
 import {
@@ -291,9 +292,9 @@ function SettingsContent() {
         if (!confirmDialog) dialogReturnFocus.current = (event.target as HTMLElement).closest("button");
       }}
       style={settingsThemeStyle(config)}
-      className="bb-settings h-screen bg-[var(--bb-bg)] text-[var(--bb-text)] flex flex-col"
+      className="bb-settings bb-native-surface h-screen bg-[var(--bb-bg)] text-[var(--bb-text)] flex flex-col"
     >
-      <SettingsAppearance config={config}/>
+      <WindowAppearance config={config}/>
       <div className="bb-settings-titlebar" data-tauri-drag-region/>
       <div className="bb-settings-shell flex-1 min-h-0 flex" inert={!!confirmDialog}>
         <aside className="bb-settings-sidebar">
@@ -392,7 +393,7 @@ function SettingsContent() {
               >
                 <Section title="THEME">
                   <div className="flex flex-col gap-3">
-                    <SettingsAppearanceEditor config={config} update={setConfig} revealCustom={searchTarget?.tab === "style" && searchTarget.section === "THEME" && searchTarget.label !== "Settings appearance"} />
+                    <SettingsAppearanceEditor config={config} update={setConfig} revealCustom={searchTarget?.tab === "style" && searchTarget.section === "THEME" && searchTarget.label !== "Window appearance"} />
 
                   </div>
                 </Section>
@@ -483,7 +484,7 @@ function SettingsContent() {
                     />
                     <Toggle
                       label="SHOW LABELS"
-                      description="Render app names beneath icons"
+                      description="Show names for pinned and running apps. Individual display choices still apply."
                       enabled={config.showLabels}
                       onToggle={toggleLabels}
                     />

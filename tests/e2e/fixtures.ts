@@ -34,7 +34,10 @@ export const seed: BetterBarConfig = {
 };
 
 export async function installRuntime(page: Page, options: {
-  label?: "main" | "settings"; config?: BetterBarConfig; emptyApps?: boolean;
+  label?: "main" | "settings" | `ext_${string}`; config?: BetterBarConfig; emptyApps?: boolean;
+  registryExtensions?: { name: string; display_name: string; content: string }[];
+  standupResponses?: { text?: string; error?: boolean; delayMs?: number }[];
+  runningApps?: { name: string; bundle_id: string; pid: number; is_active: boolean }[];
   nativeFailure?: boolean; nativeAccent?: string; reduceTransparency?: boolean; increaseContrast?: boolean;
 } = {}) {
   const initialize = ({ initial, options }: { initial: BetterBarConfig; options: any }) => {
@@ -45,6 +48,7 @@ export async function installRuntime(page: Page, options: {
       name: "sample-clock", display_name: "Sample Clock",
       content: 'export default function Clock() { return <button title="Sample clock">09:41</button>; } export function Settings() { return <label>Sample clock label<input aria-label="Sample clock label" defaultValue="Local time" /></label>; }',
     };
+    let standupRead = 0;
     win.mockWindows(options.label || "settings");
     win.mockIPC((cmd: string, args: any) => {
       win.__ipcCalls.push({ cmd, args });
@@ -52,7 +56,12 @@ export async function installRuntime(page: Page, options: {
       switch (cmd) {
         case "get_system_symbols": return {};
         case "get_macos_preferences": return { accent: options.nativeAccent || "#007aff", reduce_transparency: !!options.reduceTransparency, increase_contrast: !!options.increaseContrast, reduce_motion: true };
-        case "fetch_extension_files_from_disk": return [extension];
+        case "fetch_extension_files_from_disk": return options.registryExtensions || [extension];
+        case "read_standup_file": {
+          const responses = options.standupResponses || [{ text: "# Standup" }];
+          const response = responses[Math.min(standupRead++, responses.length - 1)];
+          return new Promise((resolve, reject) => setTimeout(() => response.error ? reject(new Error("Read failed")) : resolve(response.text || ""), response.delayMs || 0));
+        }
         case "get_installed_terminals": return [];
         case "get_open_on_login": return false;
         case "check_for_updates": return { has_update: false, current_version: "0.11.0", latest_version: "0.11.0" };
@@ -69,7 +78,7 @@ export async function installRuntime(page: Page, options: {
         case "clear_screen_insets":
         case "update_bar_geometry":
         case "open_settings_window": return null;
-        case "get_running_apps": return options.emptyApps ? [] : [{ name: "Notes", bundleId: "com.apple.Notes", pid: 101, isActive: true }];
+        case "get_running_apps": return options.emptyApps ? [] : options.runningApps || [{ name: "Notes", bundle_id: "com.apple.Notes", pid: 101, is_active: true }];
         case "get_on_screen_windows":
         case "get_spaces": return [];
         case "get_app_icon": return null;

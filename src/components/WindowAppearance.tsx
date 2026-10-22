@@ -4,7 +4,7 @@ import type { BetterBarConfig } from "../types";
 import { getMacosPreferences } from "../tauri-bridge";
 import { themeStyle } from "../appearance";
 
-export function SettingsAppearance({ config }: { config: BetterBarConfig }) {
+export function WindowAppearance({ config }: { config: BetterBarConfig }) {
   useEffect(() => {
     const mode = config.settingsAppearance;
     document.documentElement.dataset.macosAppearance = mode === "light" || mode === "dark" ? mode : "system";
@@ -21,10 +21,10 @@ export function SettingsAppearance({ config }: { config: BetterBarConfig }) {
         root.dataset.nativeReduceMotion = String(prefs.reduce_motion);
         if (/^#[\da-f]{6}$/i.test(prefs.accent)) {
           const contrast = themeStyle({ ...config, accentColor: prefs.accent }) as Record<string, string>;
-          const settings = document.querySelector<HTMLElement>(".bb-settings");
+          const surface = document.querySelector<HTMLElement>(".bb-native-surface");
           for (const prefix of ["--mac", "--mac-light", "--mac-dark"]) {
-            settings?.style.setProperty(`${prefix}-accent`, prefs.accent);
-            settings?.style.setProperty(`${prefix}-on-accent`, contrast["--bb-on-accent"]);
+            surface?.style.setProperty(`${prefix}-accent`, prefs.accent);
+            surface?.style.setProperty(`${prefix}-on-accent`, contrast["--bb-on-accent"]);
           }
         }
       } catch { /* CSS system defaults remain available outside the native runtime. */ }

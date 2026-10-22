@@ -668,6 +668,7 @@ export function DockBar({
               windowTitle={item.windowTitle}
               position={config.position}
               iconSize={iconSize}
+              showLabel={config.showLabels}
               iconStyle={config.iconStyle}
               grayscaleIdle={config.grayscaleIdle}
               iconChrome={config.iconChrome}
@@ -915,10 +916,11 @@ export function DockBar({
 // Right-click shows native context menu: Pin to Dock, Group/Ungroup toggle.
 
 function RunningAppIcon({
-  app, iconSize, iconStyle, grayscaleIdle, iconChrome, iconUrl, isVertical, windowId, windowTitle, position, focusAppearance,
+  app, iconSize, showLabel, iconStyle, grayscaleIdle, iconChrome, iconUrl, isVertical, windowId, windowTitle, position, focusAppearance,
   onPin, onToggleGrouping, ungroupedBundleIds, activeSetItemCount,
 }: {
   app: RunningApp;
+  showLabel: boolean;
   focusAppearance?: Partial<BetterBarConfig>;
   iconSize: number;
   iconStyle: IconStyle;
@@ -1007,9 +1009,10 @@ function RunningAppIcon({
       <button
         onClick={handleClick}
         onContextMenu={handleContextMenu}
-        style={{ width: iconSize + 8, height: iconSize + 8 }}
+        aria-label={windowTitle || app.name}
+        style={showLabel ? (isVertical ? { width: iconSize + 8 } : { height: iconSize + 8 }) : { width: iconSize + 8, height: iconSize + 8 }}
         className={`
-          relative flex items-center justify-center rounded-none focus:outline-none
+          relative flex ${showLabel && !isVertical ? "flex-row px-3" : "flex-col"} gap-2 items-center justify-center rounded-none focus:outline-none
           select-none cursor-pointer shrink-0
           border ${hovered ? "border-[var(--bb-line-2)] bg-[var(--bb-pane)]" : "border-transparent"}
           transition-colors duration-75
@@ -1043,6 +1046,10 @@ function RunningAppIcon({
             </div>
           )}
         </div>
+        {showLabel && <span data-bb-app-label style={{ fontSize: "max(9px, var(--bb-font-floor, 8px))", maxWidth: isVertical ? "100%" : 120 }}
+          className={`uppercase tracking-wider leading-none truncate font-medium px-1 ${isVertical ? "text-center" : "text-left"} text-[var(--bb-accent)]`}>
+          {windowTitle || app.name}
+        </span>}
       </button>
 
       {/* Tooltip / Window Preview */}
