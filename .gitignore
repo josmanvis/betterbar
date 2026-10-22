@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 release_dist
 release-assets
+
+# BetterBar extensions are local only. Never commit or publish extension source.
+/extensions/
