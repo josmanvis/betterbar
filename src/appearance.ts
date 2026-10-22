@@ -76,3 +76,17 @@ export function barSurface(config: BetterBarConfig): CSSProperties {
     borderRadius: a.radius, borderWidth: a.borderWidth, borderStyle: "solid", borderColor: a.palette.border,
     boxShadow: a.shadow ? `inset 0 0 18px rgba(0,0,0,${a.shadow / 100})` : "none" };
 }
+
+/** Settings follows macOS independently of the saved taskbar palette. */
+export function settingsThemeStyle(config: BetterBarConfig): CSSProperties {
+  const mode = config.settingsAppearance;
+  const prefix = mode === "light" || mode === "dark" ? `--mac-${mode}` : "--mac";
+  return {
+    "--bb-bg": `var(${prefix}-background)`, "--bb-pane": `var(${prefix}-surface)`, "--bb-pane-2": `var(${prefix}-elevated)`,
+    "--bb-text": `var(${prefix}-text)`, "--bb-dim": `var(${prefix}-secondary)`, "--bb-mute": `var(${prefix}-muted)`,
+    "--bb-line": `var(${prefix}-border)`, "--bb-line-2": `var(${prefix}-strongBorder)`,
+    "--bb-warn": `var(${prefix}-warning)`, "--bb-bad": `var(${prefix}-danger)`,
+    "--bb-accent": `var(${prefix}-accent)`, "--bb-accent-d": `var(${prefix}-accent)`, "--bb-on-accent": `var(${prefix}-on-accent)`,
+    color: "var(--bb-text)", colorScheme: mode === "light" || mode === "dark" ? mode : "light dark",
+  } as CSSProperties;
+}

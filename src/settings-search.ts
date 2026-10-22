@@ -2,6 +2,7 @@ export type SettingsTab = "layout" | "style" | "icons" | "sets" | "sections" | "
 export interface SettingsSearchEntry { id: string; tab: SettingsTab; label: string; section: string; keywords: string; }
 
 const groups: [SettingsTab, string, string, string][] = [
+  ["style", "THEME", "Settings appearance", "automatic light dark system macos settings appearance"],
   ["layout", "POSITION", "Bar position", "top bottom left right edge dock placement"],
   ["layout", "BAR SIZE", "Bar size", "height width thickness size"],
   ["layout", "CONTENT SCALE", "Content scale", "zoom size text icons"],

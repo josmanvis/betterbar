@@ -1,6 +1,7 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **Next UI** — keep the current taskbar and combine it with the compact macOS Settings design: native sidebar material and window chrome, system typography and symbols, independent Automatic/Light/Dark settings appearance, keyboard navigation, search, and accessible confirmation dialogs. Add Chromium/WebKit end-to-end and performance checks, portable unit coverage, and macOS CI.
 - **Apps Drawer shortcut** — double-tap either Command key to show or hide the drawer from any app. Enable by default with an extension setting, cancel on typing, clicks, other modifiers, or long holds, and preserve normal keyboard shortcuts and drawer placement.
 - **BKR pipeline warning** — a separate extension warns in red when a latest BKR branch or tag pipeline fails, refreshes every minute, and opens searchable failure details with direct pipeline links. Reuse glab authentication, paginate all results, offer activity filters, and preserve clearly marked warnings when a check fails.
 - **GitLab MR indicator** — show your open merge request count on the bar, refresh automatically, and open the matching GitLab list. Choose authored, assigned, or review-requested MRs and a custom host. Reuse glab authentication without storing credentials; retain and mark stale counts when refresh fails.

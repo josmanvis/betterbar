@@ -104,6 +104,7 @@ export interface ClockConfig {
 }
 
 export interface BetterBarConfig {
+  settingsAppearance?: "system" | "light" | "dark";
   position: DockPosition;
   iconSize: number; // 32–96
   barSize: number;  // 24–200, thickness of the bar

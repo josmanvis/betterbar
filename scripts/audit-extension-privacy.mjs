@@ -43,11 +43,17 @@ export function scanDirectory(root) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const roots = args.filter(arg => arg !== "--installed");
+  const repositoryDefault = roots.length === 0;
   if (!roots.length) roots.push(path.join(repository, "extensions"));
   if (args.includes("--installed")) roots.push(path.join(os.homedir(), ".betterbar/extensions"));
   let count = 0;
   for (const [index, root] of roots.entries()) {
-    if (!fs.existsSync(root)) { console.error(`Extension source ${index + 1}: directory unavailable.`); count++; continue; }
+    if (!fs.existsSync(root)) {
+      // A clean checkout has no local-only extension sources to audit. Explicit
+      // paths and installed-source audits still fail when unavailable.
+      if (repositoryDefault && root === path.join(repository, "extensions")) continue;
+      console.error(`Extension source ${index + 1}: directory unavailable.`); count++; continue;
+    }
     for (const finding of scanDirectory(root)) {
       console.error(`Extension source ${index + 1}: ${finding.file}:${finding.line} [${finding.rule}]`);
       count++;

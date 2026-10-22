@@ -1,5 +1,8 @@
+import { SystemSymbol } from "./components/SystemSymbol";
+import { SettingsAppearance } from "./components/SettingsAppearance";
+import "./settings-native.css";
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, MotionConfig, useReducedMotion } from "framer-motion";
 import {
   Lightning, Eye, EyeSlash, PencilSimple,
   Plus, Trash, MagnifyingGlass, ArrowCounterClockwise, Warning, CaretDown,
@@ -25,10 +28,11 @@ import { ExtensionManager } from "./components/ExtensionManager";
 import { SettingNumberInput } from "./components/SettingNumberInput";
 import { barItems } from "./bar-layout";
 import { getVersion } from "@tauri-apps/api/app";
-import { themeStyle } from "./appearance";
-import { AppearanceEditor } from "./components/AppearanceEditor";
+import { settingsThemeStyle } from "./appearance";
+import { SettingsAppearanceEditor } from "./components/SettingsAppearanceEditor";
 
 const featureStrings = { activeApp: "ACTIVE APP", extensionLabels: "Show extension labels",
+  barPosition: "Bar position", lengthMode: "Bar length mode",
   iconBorders: "Show icon borders", iconBordersHint: "Show frames around app icons, including hover and running states. Active-app highlights are controlled in Style.",
   extensionBorders: "Show extension borders", extensionBordersHint: "Show frames around extension buttons on the bar. Each extension can override this in Appearance.",
   extensionLabelsHint: "Show optional text beside extension icons. Each extension can override this in Appearance. Tooltips stay available.",
@@ -84,6 +88,12 @@ const TAB_DESCRIPTIONS: Record<TabId, string> = {
 };
 
 export default function SettingsApp() {
+  return <MotionConfig reducedMotion="user"><SettingsContent /></MotionConfig>;
+}
+
+function SettingsContent() {
+  const reduceMotion = useReducedMotion();
+  const dialogReturnFocus = useRef<HTMLElement | null>(null);
   const {
     config,
     activeSet,
@@ -153,7 +163,7 @@ export default function SettingsApp() {
       const target = candidates.find(node => (node.getAttribute("aria-label") || node.textContent)?.trim().toLocaleLowerCase() === searchTarget.label.toLocaleLowerCase())
         || candidates.find(node => node.textContent?.trim().toLocaleLowerCase() === searchTarget.section.toLocaleLowerCase());
       if (!target) return;
-      highlight = target.closest("label") || target.closest(".bb-extension-card") || target.closest(".bb-setting-section") || target;
+      highlight = target.closest("label") || target.closest(".bb-preference-row") || target.closest(".bb-extension-card") || target.closest(".bb-setting-section") || target;
       highlight.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
       highlight.classList.add("bb-search-hit");
       const control = target.matches("input,button,select") ? target : target.closest("label")?.querySelector("input,button,select");
@@ -173,6 +183,7 @@ export default function SettingsApp() {
   const [confirmDialog, setConfirmDialog] = useState<{
     message: string;
     onConfirm: () => void;
+    confirmLabel?: string;
   } | null>(null);
 
   const { extensions: extensionsList, ready: extensionsReady } = useExtensionRegistry();
@@ -238,16 +249,18 @@ export default function SettingsApp() {
       .catch(() => {});
   }, []);
 
-  // Fetch running apps on-demand when behaviour tab activates
+  // Fetch once per visit, including an empty result. State updates must not
+  // restart the request while the Behaviour page remains open.
   useEffect(() => {
-    if (activeTab === "behaviour" && runningApps.length === 0 && !runningAppsLoading) {
-      setRunningAppsLoading(true);
-      getRunningApps()
-        .then(setRunningApps)
-        .catch(console.error)
-        .finally(() => setRunningAppsLoading(false));
-    }
-  }, [activeTab, runningApps.length, runningAppsLoading]);
+    if (activeTab !== "behaviour") return;
+    let cancelled = false;
+    setRunningAppsLoading(true);
+    getRunningApps()
+      .then(apps => { if (!cancelled) setRunningApps(apps); })
+      .catch(console.error)
+      .finally(() => { if (!cancelled) setRunningAppsLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab]);
 
   // Keyboard navigation for the sidebar
   const handleTabKeyDown = useCallback((e: React.KeyboardEvent, tabId: TabId) => {
@@ -274,18 +287,23 @@ export default function SettingsApp() {
 
   return (
     <div
-      style={themeStyle(config)}
+      onClickCapture={event => {
+        if (!confirmDialog) dialogReturnFocus.current = (event.target as HTMLElement).closest("button");
+      }}
+      style={settingsThemeStyle(config)}
       className="bb-settings h-screen bg-[var(--bb-bg)] text-[var(--bb-text)] flex flex-col"
     >
-      <Header />
-      <SettingsSearch extensions={extensionsList} onSelect={entry => { setActiveTab(entry.tab); setSearchTarget(entry); }} />
-
-      <div className="flex-1 min-h-0 flex">
+      <SettingsAppearance config={config}/>
+      <div className="bb-settings-titlebar" data-tauri-drag-region/>
+      <div className="bb-settings-shell flex-1 min-h-0 flex" inert={!!confirmDialog}>
+        <aside className="bb-settings-sidebar">
+          <Header />
+          <SettingsSearch extensions={extensionsList} onSelect={entry => { setActiveTab(entry.tab); setSearchTarget(entry); }} />
         <nav
           role="tablist"
           aria-orientation="vertical"
           aria-label="Settings"
-          className="bb-settings-nav shrink-0 border-r border-[var(--bb-line)] overflow-y-auto bb-scroll"
+          className="bb-settings-nav shrink-0 overflow-y-auto bb-scroll"
         >
           {NAV.map((tab) => {
             const isActive = activeTab === tab.id;
@@ -308,18 +326,15 @@ export default function SettingsApp() {
                     : "border-transparent text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:bg-[var(--bb-pane)]/50"}
                 `}
               >
-                <tab.Icon
-                  size={17}
-                  weight={isActive ? "fill" : "regular"}
-                  className={isActive ? "text-[var(--bb-accent)] shrink-0" : "shrink-0"}
-                />
+                <span className="bb-sidebar-icon"><SystemSymbol name={({layout:"layout",style:"appearance",icons:"icons",sets:"sets",sections:"order",extensions:"extensions",behaviour:"behavior",permissions:"permissions",about:"about"} as const)[tab.id]} size={17} fallback={<tab.Icon size={17} weight="regular"/>}/></span>
                 <span className="flex-1 text-left">{tab.label}</span>
-                {tab.id === "extensions" && config.enabledExtensions.length > 0 && <span className="bb-nav-count">{config.enabledExtensions.length}</span>}
+                {tab.id === "extensions" && config.enabledExtensions.length > 0 && <span className="bb-nav-count" aria-hidden="true">{config.enabledExtensions.length}</span>}
                 {showDot && <span className="w-1.5 h-1.5 bg-[var(--bb-accent)] shrink-0" />}
               </button>
             );
           })}
         </nav>
+        </aside>
 
         <main ref={main} onScroll={event => { scrollPositions.current[activeTab] = event.currentTarget.scrollTop; }} className="flex-1 min-w-0 min-h-0 overflow-y-auto bb-scroll" key={activeTab}>
           <div className="bb-settings-content">
@@ -333,85 +348,34 @@ export default function SettingsApp() {
                 key="layout"
                 id="panel-layout"
                 role="tabpanel"
-                initial={{ opacity: 0, y: 6 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.12 }}
+                transition={{ duration: reduceMotion ? 0 : 0.12 }}
               >
-                <Section title="POSITION" hint={config.position.toUpperCase()}>
-                  <PillSelector
-                    options={POSITIONS.map((p) => ({ value: p.value, label: p.label }))}
-                    value={config.position}
-                    onChange={(v) => setPosition(v as DockPosition)}
-                  />
-                </Section>
-
-                <Section title="BAR SIZE" hint={`${config.barSize}px`}>
-                  <p className="bb-layout-hint">{featureStrings.sizeHint}</p>
-                  <SliderRow
-                    label={featureStrings.barSize}
-                    value={config.barSize}
-                    min={BAR_SIZE_MIN}
-                    max={BAR_SIZE_MAX}
-                    step={2}
-                    onChange={setBarSize}
-                  />
-                </Section>
-
-                <Section title="CONTENT SCALE" hint={`${config.contentScale.toFixed(2)}x`}>
-                  <p className="bb-layout-hint">{featureStrings.scaleHint}</p>
-                  <SliderRow
-                    label={featureStrings.contentScale}
-                    value={config.contentScale}
-                    min={0.5}
-                    max={2.0}
-                    step={0.05}
-                    onChange={setContentScale}
-                    formatValue={(v) => v.toFixed(2)}
-                  />
-                </Section>
-
-                <Section
-                  title="BAR LENGTH"
-                  hint={
-                    !config.freeFloat
-                      ? "DISABLED"
-                      : config.barLengthMode === "custom"
-                        ? `${config.barLength}px`
-                        : config.barLengthMode.toUpperCase()
-                  }
-                >
-                  <fieldset disabled={!config.freeFloat} className={`space-y-3 ${config.freeFloat ? "" : "opacity-40"}`}>
-                    <PillSelector
-                      options={LENGTH_MODES.map((m) => ({ value: m.value, label: m.label }))}
-                      value={config.barLengthMode}
-                      onChange={(v) => setBarLengthMode(v as BarLengthMode)}
-                    />
-
-                    <fieldset disabled={config.barLengthMode !== "custom"} className={config.barLengthMode === "custom" ? "" : "opacity-40"}>
-                      <SliderRow
-                        label={featureStrings.barLength}
-                        value={config.barLength}
-                        min={BAR_LENGTH_MIN}
-                        max={BAR_LENGTH_MAX}
-                        step={20}
-                        onChange={setBarLength}
-                      />
-                    </fieldset>
-
-                    <p className="text-[10px] text-[var(--bb-mute)] normal-case leading-relaxed">
-                      {config.barLengthMode === "edge"
-                        && featureStrings.edgeHint}
-                      {config.barLengthMode === "auto"
-                        && featureStrings.autoHint}
-                      {config.barLengthMode === "custom"
-                        && featureStrings.customHint}
-                    </p>
-                  </fieldset>
-                  {!config.freeFloat && (
-                    <div className="bb-layout-unlock"><p>{featureStrings.lengthLocked}</p>
-                      <button className="bb-appearance-reset" onClick={() => setConfig({ freeFloat: true })}>{featureStrings.enableFloat}</button></div>
-                  )}
+                <Section title="Bar layout">
+                  <div className="bb-setting-rows">
+                    <SettingRow label={featureStrings.barPosition}>
+                      <select aria-label={featureStrings.barPosition} value={config.position} onChange={event => setPosition(event.target.value as DockPosition)}>
+                        {POSITIONS.map(position => <option key={position.value} value={position.value}>{position.label.charAt(0) + position.label.slice(1).toLowerCase()}</option>)}
+                      </select>
+                    </SettingRow>
+                    <SettingRow label={featureStrings.barSize}>
+                      <SliderRow label={featureStrings.barSize} value={config.barSize} min={BAR_SIZE_MIN} max={BAR_SIZE_MAX} step={2} onChange={setBarSize}/>
+                    </SettingRow>
+                    <SettingRow label={featureStrings.contentScale}>
+                      <SliderRow label={featureStrings.contentScale} value={config.contentScale} min={0.5} max={2} step={0.05} onChange={setContentScale} formatValue={value => value.toFixed(2)}/>
+                    </SettingRow>
+                    <SettingRow label={featureStrings.barLength}>
+                      <fieldset disabled={!config.freeFloat}>
+                        <select aria-label={featureStrings.lengthMode} value={config.barLengthMode} onChange={event => setBarLengthMode(event.target.value as BarLengthMode)}>
+                          {LENGTH_MODES.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
+                        </select>
+                        {config.barLengthMode === "custom" && <SliderRow label={featureStrings.barLength} value={config.barLength} min={BAR_LENGTH_MIN} max={BAR_LENGTH_MAX} step={20} onChange={setBarLength}/>}
+                      </fieldset>
+                    </SettingRow>
+                    {!config.freeFloat && <div className="bb-preference-note"><p>{featureStrings.lengthLocked}</p><button className="bb-default-button" onClick={() => setConfig({freeFloat:true})}>{featureStrings.enableFloat}</button></div>}
+                  </div>
                 </Section>
               </motion.div>
             )}
@@ -421,14 +385,14 @@ export default function SettingsApp() {
                 key="style"
                 id="panel-style"
                 role="tabpanel"
-                initial={{ opacity: 0, y: 6 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.12 }}
+                transition={{ duration: reduceMotion ? 0 : 0.12 }}
               >
                 <Section title="THEME">
                   <div className="flex flex-col gap-3">
-                    <AppearanceEditor config={config} update={setConfig} />
+                    <SettingsAppearanceEditor config={config} update={setConfig} revealCustom={searchTarget?.tab === "style" && searchTarget.section === "THEME" && searchTarget.label !== "Settings appearance"} />
 
                   </div>
                 </Section>
@@ -443,10 +407,10 @@ export default function SettingsApp() {
                 key="icons"
                 id="panel-icons"
                 role="tabpanel"
-                initial={{ opacity: 0, y: 6 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.12 }}
+                transition={{ duration: reduceMotion ? 0 : 0.12 }}
               >
                 <Section
                   title="ICON SOURCE"
@@ -498,10 +462,10 @@ export default function SettingsApp() {
                 key="behaviour"
                 id="panel-behaviour"
                 role="tabpanel"
-                initial={{ opacity: 0, y: 6 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.12 }}
+                transition={{ duration: reduceMotion ? 0 : 0.12 }}
               >
                 <Section title="GENERAL">
                   <div className="flex flex-col">
@@ -609,10 +573,10 @@ export default function SettingsApp() {
                 key="sets"
                 id="panel-sets"
                 role="tabpanel"
-                initial={{ opacity: 0, y: 6 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.12 }}
+                transition={{ duration: reduceMotion ? 0 : 0.12 }}
               >
                 <Section
                   title="SETS"
@@ -669,10 +633,10 @@ export default function SettingsApp() {
                 key="sections"
                 id="panel-sections"
                 role="tabpanel"
-                initial={{ opacity: 0, y: 6 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.12 }}
+                transition={{ duration: reduceMotion ? 0 : 0.12 }}
               >
                 <Section title="BAR ORDER" hint={`${barItems(config, extensionsList).length} ITEMS`}>
                   <BarOrderEditor config={config} extensions={extensionsList} onChange={setBarOrder} />
@@ -768,7 +732,7 @@ export default function SettingsApp() {
                 key="extensions"
                 id="panel-extensions"
                 role="tabpanel"
-                initial={{ opacity: 0, y: 6 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
               >
@@ -795,7 +759,7 @@ export default function SettingsApp() {
                 key="permissions"
                 id="panel-permissions"
                 role="tabpanel"
-                initial={{ opacity: 0, y: 6 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
               >
@@ -826,10 +790,10 @@ export default function SettingsApp() {
                 key="about"
                 id="panel-about"
                 role="tabpanel"
-                initial={{ opacity: 0, y: 6 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.12 }}
+                transition={{ duration: reduceMotion ? 0 : 0.12 }}
               >
                 <Section title="SOFTWARE UPDATE">
                   <UpdatesSection />
@@ -843,6 +807,7 @@ export default function SettingsApp() {
                   <LegendContent onReset={() => {
                     setConfirmDialog({
                       message: "Reset all settings to defaults? This cannot be undone.",
+                      confirmLabel: "Reset settings",
                       onConfirm: () => setConfig(DEFAULT_CONFIG),
                     });
                   }} />
@@ -854,11 +819,11 @@ export default function SettingsApp() {
         </main>
       </div>
 
-      <Footer />
-
       {confirmDialog && (
         <ConfirmDialog
+          returnFocus={dialogReturnFocus.current}
           message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
           onConfirm={() => {
             confirmDialog.onConfirm();
             setConfirmDialog(null);
@@ -876,39 +841,55 @@ function ConfirmDialog({
   message,
   onConfirm,
   onCancel,
+  confirmLabel = "Delete",
+  returnFocus,
 }: {
   message: string;
   onConfirm: () => void;
   onCancel: () => void;
+  confirmLabel?: string;
+  returnFocus: HTMLElement | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const previous = returnFocus || document.activeElement as HTMLElement | null;
+    ref.current?.querySelector<HTMLButtonElement>("button")?.focus();
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
+      if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+      if (e.key === "Tab") {
+        const buttons = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>("button") || []);
+        const first = buttons[0], last = buttons[buttons.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }
     };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    return () => { window.removeEventListener("keydown", handler); previous?.focus(); };
   }, [onCancel]);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+      className="bb-native-dialog-scrim fixed inset-0 z-50 flex items-center justify-center"
       onClick={onCancel}
     >
       <div
         ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        aria-describedby="confirm-dialog-message"
         onClick={(e) => e.stopPropagation()}
-        className="bg-[var(--bb-pane)] border border-[var(--bb-line)] shadow-lg max-w-xs w-full"
+        className="bb-native-dialog bg-[var(--bb-pane)] max-w-xs w-full"
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--bb-line)]">
           <Warning size={14} weight="fill" className="text-[var(--bb-bad)]" />
-          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--bb-text)]">
+          <span id="confirm-dialog-title" className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--bb-text)]">
             Confirm
           </span>
         </div>
         <div className="px-5 py-5">
-          <p className="text-[11px] text-[var(--bb-dim)] leading-relaxed">{message}</p>
+          <p id="confirm-dialog-message" className="text-[11px] text-[var(--bb-dim)] leading-relaxed">{message}</p>
         </div>
         <div className="flex border-t border-[var(--bb-line)]">
           <button
@@ -921,7 +902,7 @@ function ConfirmDialog({
             onClick={onConfirm}
             className="flex-1 py-2.5 text-[10px] uppercase tracking-[0.18em] font-bold text-[var(--bb-bad)] hover:bg-[var(--bb-bad)]/10 transition-colors cursor-pointer"
           >
-            Delete
+            {confirmLabel}
           </button>
         </div>
       </div>
@@ -941,7 +922,7 @@ function PillSelector<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div className="flex border border-[var(--bb-line)] divide-x divide-[var(--bb-line)] text-[11px] uppercase w-full">
+    <div className="bb-segmented">
       {options.map((opt) => {
         const active = value === opt.value;
         return (
@@ -957,7 +938,7 @@ function PillSelector<T extends string>({
                 : "text-[var(--bb-dim)] hover:text-[var(--bb-text)] hover:bg-[var(--bb-pane-2)]"}
             `}
           >
-            {opt.label}
+            {opt.label === opt.label.toUpperCase() ? opt.label.charAt(0) + opt.label.slice(1).toLowerCase() : opt.label}
           </button>
         );
       })}
@@ -1083,21 +1064,7 @@ function Header() {
   const [version, setVersion] = useState("");
   useEffect(() => { getVersion().then(setVersion).catch(console.error); }, []);
   return (
-    <header className="border-b border-[var(--bb-line)] bg-[var(--bb-bg)]">
-      <div className="flex items-center justify-between px-6 py-4">
-        <div className="flex items-baseline gap-2 text-[13px] tracking-[0.2em] uppercase">
-          <span className="text-[var(--bb-accent)] font-bold">&gt;</span>
-          <span className="text-[var(--bb-text)] font-bold">betterbar</span>
-          <span className="text-[var(--bb-dim)]">/</span>
-          <span className="text-[var(--bb-dim)]">settings</span>
-          <span className="bb-caret text-[var(--bb-accent)]">▍</span>
-        </div>
-        <div className="text-[11px] text-[var(--bb-dim)] tabular-nums">
-          {version && `v${version}`}
-        </div>
-      </div>
-      <div className="h-px bg-[var(--bb-accent)]/60" />
-    </header>
+    <header className="bb-settings-identity"><span>BetterBar</span>{version && <small>{version}</small>}</header>
   );
 }
 
@@ -1733,17 +1700,6 @@ function PermissionRow({
   );
 }
 
-// ── Footer / status line ───────────────────────────────────────────────────────
-
-function Footer() {
-  return (
-    <footer className="border-t border-[var(--bb-line)] bg-[var(--bb-bg)] px-6 py-2 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--bb-mute)]">
-      <Lightning size={10} weight="fill" className="text-[var(--bb-accent)]" />
-      Changes save automatically
-    </footer>
-  );
-}
-
 // ── Small caps sub-header (used to group rows inside a Section) ─────────────────
 
 function SubHead({ children }: { children: React.ReactNode }) {
@@ -1752,6 +1708,10 @@ function SubHead({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
+}
+
+function SettingRow({label, children}: {label: string; children: React.ReactNode}) {
+  return <div className="bb-preference-row"><span>{label}</span><div className="bb-preference-control">{children}</div></div>;
 }
 
 // ── Section ────────────────────────────────────────────────────────────────────
@@ -1769,11 +1729,11 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="bb-setting-section border border-[var(--bb-line)] bg-[var(--bb-pane)]">
-      <header className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-[var(--bb-line)]">
+    <section className="bb-setting-section">
+      <header className="bb-section-heading">
         <h2 className="text-[11px] uppercase tracking-[0.14em] text-[var(--bb-text)] font-medium flex items-center gap-2">
           {icon}
-          {title}
+          {title === title.toUpperCase() ? title.charAt(0) + title.slice(1).toLowerCase() : title}
         </h2>
         {hint && (
           <div className="text-[10px] text-[var(--bb-dim)] tabular-nums uppercase tracking-wider">
@@ -1781,7 +1741,7 @@ function Section({
           </div>
         )}
       </header>
-      <div className="bb-setting-body px-6 py-5">
+      <div className="bb-setting-body">
         {children}
       </div>
     </section>
@@ -1843,7 +1803,7 @@ function Toggle({
       onClick={onToggle}
       role="switch"
       aria-checked={enabled}
-      className="w-full flex items-center justify-between gap-6 py-4 px-0 min-h-[64px] group text-left border-b border-[var(--bb-line)]/60 last:border-b-0"
+      className="bb-toggle group"
     >
       <div className="flex flex-col gap-1.5 leading-relaxed min-w-0">
         <span className={`text-[12px] tracking-[0.06em] ${enabled ? "text-[var(--bb-text)]" : "text-[var(--bb-dim)] group-hover:text-[var(--bb-text)]"}`}>
@@ -1853,20 +1813,7 @@ function Toggle({
           {description}
         </span>
       </div>
-      <span
-        aria-hidden
-        className={`relative shrink-0 w-9 h-5 border transition-colors duration-100 ${
-          enabled
-            ? "bg-[var(--bb-accent)] border-[var(--bb-accent)]"
-            : "bg-[var(--bb-line-2)] border-[var(--bb-line-2)]"
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 w-3.5 h-3.5 transition-all duration-100 ${
-            enabled ? "left-[18px] bg-[var(--bb-bg)]" : "left-0.5 bg-[var(--bb-text)]"
-          }`}
-        />
-      </span>
+      <span aria-hidden="true" className="bb-switch-track"><span/></span>
     </button>
   );
 }

@@ -1,0 +1,35 @@
+name: Tests
+
+on:
+  push:
+    branches: [next]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: npx playwright install chromium webkit
+      - run: npm run test:unit
+      - run: npm run test:typecheck
+      - run: npm run build
+      - run: npx playwright test
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-test-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14

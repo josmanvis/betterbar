@@ -1,4 +1,5 @@
 mod extensions;
+mod macos_settings;
 mod bkrd;
 mod gitlab;
 mod bkr_pipelines;
@@ -2395,6 +2396,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            macos_settings::get_macos_preferences,
+            macos_settings::get_system_symbols,
             gitlab::get_gitlab_mr_count,
             bkr_pipelines::get_bkr_pipeline_status,
             drawer_shortcut::set_apps_drawer_shortcut,
@@ -2466,6 +2469,7 @@ pub fn run() {
                     });
                 }
                 if let Some(settings_win) = app.get_webview_window("settings") {
+                    macos_settings::install_settings_material(&settings_win);
                     let settings_clone = settings_win.clone();
                     settings_win.on_window_event(move |event| {
                         if let WindowEvent::CloseRequested { api, .. } = event {

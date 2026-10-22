@@ -31,6 +31,7 @@ export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     : DEFAULT_CONFIG.iconStyle;
   return {
     ...cfg,
+    settingsAppearance: cfg.settingsAppearance === "light" || cfg.settingsAppearance === "dark" ? cfg.settingsAppearance : "system",
     barSize: Math.max(BAR_SIZE_MIN, Math.min(BAR_SIZE_MAX, barSize)),
     iconSize: Number.isFinite(cfg.iconSize) ? cfg.iconSize : DEFAULT_CONFIG.iconSize,
     barLength: Math.max(BAR_LENGTH_MIN, Math.min(BAR_LENGTH_MAX, barLength)),
