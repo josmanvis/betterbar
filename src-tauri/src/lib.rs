@@ -1152,7 +1152,16 @@ end tell"#,
     }
 
     pub fn request_accessibility() {
-        // Open System Settings → Privacy & Security → Accessibility
+        use core_foundation::{base::TCFType, boolean::CFBoolean, dictionary::{CFDictionary, CFDictionaryRef}, string::{CFString, CFStringRef}};
+        #[link(name = "ApplicationServices", kind = "framework")]
+        extern "C" {
+            fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> bool;
+            static kAXTrustedCheckOptionPrompt: CFStringRef;
+        }
+        let key = unsafe { CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt) };
+        let options = CFDictionary::from_CFType_pairs(&[(key, CFBoolean::true_value())]);
+        if unsafe { AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef()) } { return; }
+        // Register the current signed executable before opening its permission pane.
         let _ = Command::new("open")
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
             .spawn();
@@ -1263,6 +1272,7 @@ end tell"#,
     }
 
     pub fn request_screen_recording() {
+        if unsafe { CGRequestScreenCaptureAccess() } { return; }
         let _ = Command::new("open")
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
             .spawn();

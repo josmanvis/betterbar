@@ -1,6 +1,7 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **Permission registration** — request Accessibility and Screen Recording through the macOS APIs before opening System Settings, so the installed executable is registered for its grants.
 - **Finder drop installation** — pin apps, files, and folders directly; install and enable dropped TSX extensions immediately. Review and confirm version upgrades, downgrades, identical versions, and legacy replacements, with backups, conflict detection, validation, and live reload. Show installed extension versions and support core/event API imports.
 - **Native app discovery and picker** — replace recurring AppleScript app discovery with NSWorkspace, retaining active-app state without an Automation grant. Keep native file selection asynchronous so the host event loop remains responsive.
 - **WiFi Status** — add a local extension with independent download, upload, IP, network name, signal, and link-rate display options; live Wi-Fi traffic, selectable Mbps/MB/s, and manual download/upload tests in a details window. Include the native bridge and a shortcut to WiFiStatusApp.

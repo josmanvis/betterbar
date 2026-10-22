@@ -142,3 +142,9 @@ running. Running apps now come from `NSWorkspace.runningApplications`, replacing
 a recurring AppleScript subprocess and reporting actual foreground-app state.
 App discovery no longer requires an Automation grant. Window focus and previews
 still use their normal macOS Accessibility and Screen Recording permissions.
+
+Permission requests now call AXIsProcessTrustedWithOptions and
+CGRequestScreenCaptureAccess before opening their System Settings panes. This
+registers the current signed executable. Builds remain locally signed unless a
+valid developer identity is available; macOS may require fresh grants after an
+updated local signature. Permission changes go through the standard macOS UI.
