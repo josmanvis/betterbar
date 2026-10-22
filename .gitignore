@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# BetterBar extensions are local only. Never commit or publish extension source.
+/extensions/
