@@ -1,6 +1,7 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **Drawer folders** — rename Apps Drawer to Drawer, add Finder folder shortcuts in both layouts, include active bar folders in search, pins and recents, and preserve existing drawer preferences.
 
 ## 0.11.1 — 2026-10-22
 - **Update review startup** — pick up pending extension reviews that arrive while Settings is mounting, and make browser tests wait for native listener readiness.

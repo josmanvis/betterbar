@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@betterbar/api": [
+        "src/extension-api.ts"
+      ]
+    }
+  },
+  "include": [
+    "extensions/apps-drawer/main.tsx"
+  ],
+  "references": []
+}

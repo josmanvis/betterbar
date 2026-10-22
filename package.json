@@ -17,11 +17,11 @@
     "devtop": "p tauri dev",
     "test:extensions": "node --test tests/*.test.cjs",
     "test": "npm run test:unit",
-    "test:unit": "node --test tests/appearance.test.cjs tests/bar-layout.test.cjs tests/presentation-and-search.test.cjs tests/settings-native.test.cjs tests/polling-and-docking.test.cjs tests/extension-drag.test.cjs tests/extension-install-review.test.cjs",
+    "test:unit": "node --test tests/appearance.test.cjs tests/bar-layout.test.cjs tests/presentation-and-search.test.cjs tests/settings-native.test.cjs tests/polling-and-docking.test.cjs tests/extension-drag.test.cjs tests/extension-install-review.test.cjs tests/drawer-folders.test.cjs tests/drawer-shortcut.test.cjs",
     "test:e2e": "npm run build && playwright test --grep-invert @performance",
     "test:performance": "npm run build && playwright test --grep @performance",
     "test:all": "npm run test:unit && npm run test:typecheck && npm run build && playwright test && cargo test --manifest-path src-tauri/Cargo.toml --lib",
-    "test:typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json"
+    "test:typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.extensions.json"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

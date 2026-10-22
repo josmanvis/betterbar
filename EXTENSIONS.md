@@ -375,3 +375,11 @@ Installed versions also appear in Settings → Extensions.
 `@tauri-apps/api/core` now supports importing `invoke` directly. The supported
 window imports also include `getCurrentWindow` and `getAllWindows`; event imports
 include `listen`, `once`, `emit`, and `emitTo` from `@tauri-apps/api/event`.
+
+## Drawer: apps and folders
+
+`extensions/apps-drawer/main.tsx` is the reusable source for **Drawer** (formerly Apps Drawer). Install it at `~/.betterbar/extensions/apps-drawer/main.tsx`, reload extensions, and enable Drawer. Keep the `apps-drawer` directory name: it preserves existing enabled state, window placement, pins, appearance, shortcut, and other preferences.
+
+Both Library and Launch panel include a **Folders** view and an **+ Folder** button. Choose one or more folders with the native picker to add shortcuts; open a shortcut to show that folder in Finder. Search, recent items, pins, keyboard navigation, and dragging to the bar work for apps and folders. **Edit pins** can pin folders or remove manually added folder shortcuts without deleting files. Folders already pinned to the active bar set also appear automatically; manage those shortcuts in the bar's settings. Drawer does not recursively scan or display folder contents.
+
+Folder choices are saved locally in the existing `bb-apps-drawer-settings` preferences. This published source contains no installed preferences or personal paths. It uses the existing `pick_dock_items`, `get_path_icon`, and `launch_app` native commands, so no new native permissions are needed. An unavailable folder stays in the drawer and shows an error when opened, so it can be removed or added again from its new location.
