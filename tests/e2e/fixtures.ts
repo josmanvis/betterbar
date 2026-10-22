@@ -44,6 +44,7 @@ export async function installRuntime(page: Page, options: {
   installFailure?: boolean;
   pickerFailure?: boolean;
   wifiStatus?: Record<string, unknown>;
+  calendarAccess?: { status: string; error?: string; delayMs?: number; result?: string };
   nativeFailure?: boolean; nativeAccent?: string; reduceTransparency?: boolean; increaseContrast?: boolean;
 } = {}) {
   const initialize = ({ initial, options }: { initial: BetterBarConfig; options: any }) => {
@@ -123,7 +124,12 @@ export async function installRuntime(page: Page, options: {
         case "toggle_caffeine": return { active: true, minutes_remaining: null };
         case "check_accessibility_permissions":
         case "check_screen_recording_permission": return true;
-        case "get_apple_calendar_status": return "authorized";
+        case "get_apple_calendar_status": return win.__calendarStatus || options.calendarAccess?.status || "authorized";
+        case "request_apple_calendar_access": return new Promise((resolve, reject) => setTimeout(() => {
+          if (options.calendarAccess?.error) { reject(options.calendarAccess.error); return; }
+          win.__calendarStatus = options.calendarAccess?.result || "authorized";
+          resolve(win.__calendarStatus);
+        }, options.calendarAccess?.delayMs || 0));
         case "get_app_signature_status": return { valid: true, identifier: "com.betterbar.app", kind: "local", repairAvailable: false, reason: null };
         case "get_release_history": return [];
         default:

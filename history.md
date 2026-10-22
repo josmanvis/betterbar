@@ -1,6 +1,7 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **Calendar permission fix** — sign Hardened Runtime builds with the Calendar entitlement so macOS can present consent. Start requests on the main thread, retain the event store through completion, display native errors and pending state, and distinguish unrequested access from denial. Cover connection/retry states and entitlement preservation during local signature repair.
 - **Permission registration** — request Accessibility and Screen Recording through the macOS APIs before opening System Settings, so the installed executable is registered for its grants.
 - **Finder drop installation** — pin apps, files, and folders directly; install and enable dropped TSX extensions immediately. Review and confirm version upgrades, downgrades, identical versions, and legacy replacements, with backups, conflict detection, validation, and live reload. Show installed extension versions and support core/event API imports.
 - **Native app discovery and picker** — replace recurring AppleScript app discovery with NSWorkspace, retaining active-app state without an Automation grant. Keep native file selection asynchronous so the host event loop remains responsive.

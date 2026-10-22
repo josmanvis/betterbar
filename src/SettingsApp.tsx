@@ -41,7 +41,7 @@ const featureStrings = { activeApp: "ACTIVE APP", extensionLabels: "Show extensi
   extensionBorders: "Show extension borders", extensionBordersHint: "Show frames around extension buttons on the bar. Each extension can override this in Appearance.",
   extensionLabelsHint: "Show optional text beside extension icons. Each extension can override this in Appearance. Tooltips stay available.",
   calendars: "Calendars", calendarHint: "Optional. Allows the Apple Calendar extension to read upcoming events locally. Event titles stay hidden until enabled in the extension.",
-  connectCalendars: "Connect calendars", barSize: "Bar size", contentScale: "Content scale", barLength: "Bar length", iconBorderWidth: "Icon border width", arrange: "Arrange bar items", hiddenExtensions: "Your extensions are enabled but hidden from the bar. Turn on Show extensions to display them.",
+  connectCalendars: "Connect calendars", calendarWaiting: "Waiting for macOS…", calendarNotConnected: "NOT CONNECTED", calendarWriteOnly: "WRITE ONLY", calendarRestricted: "RESTRICTED", permissionsAttention: "NEEDS ATTENTION", barSize: "Bar size", contentScale: "Content scale", barLength: "Bar length", iconBorderWidth: "Icon border width", arrange: "Arrange bar items", hiddenExtensions: "Your extensions are enabled but hidden from the bar. Turn on Show extensions to display them.",
   enableFloat: "Enable floating bar", lengthLocked: "A docked bar fills the screen edge. Enable floating to choose its length.",
   fullEdge: "Full edge", fitContent: "Fit content", customLength: "Custom", appIcons: "App icons", letterIcons: "Letter icons",
   edgeHint: "Fill the screen edge while keeping the bar free to move.", autoHint: "Fit the bar to its apps and extensions.", customHint: "Choose an exact length in pixels.",
@@ -199,6 +199,9 @@ function SettingsContent() {
   const [axGranted, setAxGranted] = useState<boolean | null>(null);
   const [srGranted, setSrGranted] = useState<boolean | null>(null);
   const [calendarGranted, setCalendarGranted] = useState<boolean | null>(null);
+  const [calendarStatus, setCalendarStatus] = useState("not-determined");
+  const [calendarConnecting, setCalendarConnecting] = useState(false);
+  const [calendarError, setCalendarError] = useState("");
   const [permsLoading, setPermsLoading] = useState(false);
 
   const checkPermissions = useCallback(async () => {
@@ -212,6 +215,7 @@ function SettingsContent() {
       setAxGranted(ax);
       setSrGranted(sr);
       setCalendarGranted(calendar === "authorized");
+      setCalendarStatus(calendar);
     } catch {
       setAxGranted(false);
       setSrGranted(false);
@@ -771,7 +775,7 @@ function SettingsContent() {
               >
                 <Section title="PERMISSIONS" hint={
                   axGranted === false || srGranted === false || (extensionNames.includes("apple-calendar") && calendarGranted === false)
-                    ? "SOME DENIED"
+                    ? featureStrings.permissionsAttention
                     : axGranted === null || srGranted === null
                       ? "CHECKING..."
                       : "ALL GRANTED"
@@ -781,7 +785,15 @@ function SettingsContent() {
                     srGranted={srGranted}
                     calendarGranted={calendarGranted}
                     showCalendar={extensionNames.includes("apple-calendar")}
-                    onRequestCalendar={() => { void requestAppleCalendarAccess().then(checkPermissions).catch(console.error); }}
+                    calendarStatus={calendarStatus}
+                    calendarConnecting={calendarConnecting}
+                    calendarError={calendarError}
+                    onRequestCalendar={async () => {
+                      setCalendarConnecting(true); setCalendarError("");
+                      try { await requestAppleCalendarAccess(); await checkPermissions(); }
+                      catch (error) { setCalendarError(String(error)); }
+                      finally { setCalendarConnecting(false); }
+                    }}
                     loading={permsLoading}
                     onCheck={checkPermissions}
                     onRequestAccessibility={requestAccessibilityPermissions}
@@ -1610,6 +1622,7 @@ function PermissionsTab({
   axGranted, srGranted, loading, onCheck,
   onRequestAccessibility, onRequestScreenRecording,
   calendarGranted, showCalendar, onRequestCalendar,
+  calendarStatus, calendarConnecting, calendarError,
 }: {
   axGranted: boolean | null;
   srGranted: boolean | null;
@@ -1620,6 +1633,9 @@ function PermissionsTab({
   calendarGranted: boolean | null;
   showCalendar: boolean;
   onRequestCalendar: () => void;
+  calendarStatus: string;
+  calendarConnecting: boolean;
+  calendarError: string;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -1643,7 +1659,10 @@ function PermissionsTab({
         onRequest={onRequestScreenRecording}
       />
       {showCalendar && <PermissionRow name={featureStrings.calendars} description={featureStrings.calendarHint}
-        granted={calendarGranted} onRequest={onRequestCalendar} requestLabel={featureStrings.connectCalendars} />}
+        granted={calendarGranted} onRequest={onRequestCalendar}
+        statusLabel={calendarGranted === null ? undefined : calendarStatus === "not-determined" ? featureStrings.calendarNotConnected : calendarStatus === "write-only" ? featureStrings.calendarWriteOnly : calendarStatus === "restricted" ? featureStrings.calendarRestricted : undefined}
+        pending={calendarConnecting} error={calendarError}
+        requestLabel={calendarConnecting ? featureStrings.calendarWaiting : featureStrings.connectCalendars} />}
 
       <button
         onClick={onCheck}
@@ -1659,13 +1678,16 @@ function PermissionsTab({
 }
 
 function PermissionRow({
-  name, description, granted, onRequest, requestLabel = "Open System Settings",
+  name, description, granted, onRequest, requestLabel = "Open System Settings", statusLabel, pending, error,
 }: {
   name: string;
   description: string;
   granted: boolean | null;
   onRequest: () => void;
   requestLabel?: string;
+  statusLabel?: string;
+  pending?: boolean;
+  error?: string;
 }) {
   const statusText =
     granted === null ? "CHECKING..." :
@@ -1685,7 +1707,7 @@ function PermissionRow({
         </span>
         <span className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${statusClass}`}>
           {statusDot}
-          <span>[ {statusText} ]</span>
+          <span>[ {statusLabel || statusText} ]</span>
         </span>
       </div>
       <div className="px-3 py-3 space-y-3">
@@ -1695,12 +1717,14 @@ function PermissionRow({
         {granted === false && (
           <button
             onClick={onRequest}
+            disabled={pending}
             className="flex items-center gap-2 px-3 py-1.5 text-[10px] uppercase tracking-[0.15em] border border-[var(--bb-warn)]/40 text-[var(--bb-warn)] hover:bg-[var(--bb-warn)]/10 hover:border-[var(--bb-warn)] transition-colors cursor-pointer"
           >
             <Warning size={11} weight="bold" />
             <span className="font-semibold">{requestLabel}</span>
           </button>
         )}
+        {error && <p role="alert" className="text-[10px] text-[var(--bb-bad)] normal-case">{error}</p>}
       </div>
     </div>
   );

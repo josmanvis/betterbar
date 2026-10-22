@@ -294,12 +294,17 @@ mod tests {
         std::fs::create_dir_all(contents.join("MacOS")).unwrap();
         std::fs::write(contents.join("Info.plist"), r#"<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.betterbar.app</string><key>CFBundleExecutable</key><string>betterbar</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>"#).unwrap();
         std::fs::copy("/usr/bin/true", contents.join("MacOS/betterbar")).unwrap();
+        let entitlements = root.join("Entitlements.plist");
+        std::fs::write(&entitlements, include_str!("../Entitlements.plist")).unwrap();
         checked(
             "/usr/bin/codesign",
             &[
                 "--force".as_ref(),
                 "--sign".as_ref(),
                 "-".as_ref(),
+                "--options=runtime".as_ref(),
+                "--entitlements".as_ref(),
+                entitlements.as_os_str(),
                 bundle.as_os_str(),
             ],
         )
@@ -320,6 +325,10 @@ mod tests {
             std::fs::create_dir(&work).unwrap();
             let stage = work.join("BetterBar.app");
             checked("/usr/bin/ditto", &[bundle.as_os_str(), stage.as_os_str()]).unwrap();
+            checked("/usr/bin/codesign", &[
+                "--force".as_ref(), "--sign".as_ref(), "-".as_ref(),
+                "--preserve-metadata=entitlements,flags,runtime".as_ref(), stage.as_os_str(),
+            ]).unwrap();
             if corrupt {
                 std::fs::write(stage.join("Contents/Info.plist"), "invalid").unwrap();
             }
@@ -343,6 +352,9 @@ mod tests {
                 if corrupt { "failed" } else { "success" }
             );
             verify(&bundle).unwrap();
+            let signed = run("/usr/bin/codesign", &["--display".as_ref(), "--entitlements".as_ref(), "-".as_ref(), bundle.as_os_str()]).unwrap();
+            assert!(signed.status.success());
+            assert!(String::from_utf8_lossy(&signed.stdout).contains("com.apple.security.personal-information.calendars"));
             assert!(!work.exists());
             assert!(cache.join("signature-repair-reopen").exists());
         }

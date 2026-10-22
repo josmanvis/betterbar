@@ -17,10 +17,17 @@ pub fn get_apple_calendar_status() -> String {
 }
 
 #[tauri::command]
-pub async fn request_apple_calendar_access() -> Result<String, String> {
+pub async fn request_apple_calendar_access(app: tauri::AppHandle) -> Result<String, String> {
     #[cfg(target_os = "macos")]
-    { tauri::async_runtime::spawn_blocking(macos::request_calendar_access).await.map_err(|_| "Could not request calendar access.".to_string())? }
-    #[cfg(not(target_os = "macos"))] { Err("Calendar access is available on macOS.".into()) }
+    {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        app.run_on_main_thread(move || macos::request_calendar_access(sender))
+            .map_err(|_| "Could not start the Calendar permission request.".to_string())?;
+        tauri::async_runtime::spawn_blocking(move || receiver.recv_timeout(std::time::Duration::from_secs(180))
+            .map_err(|_| "Calendar access request did not complete. Try again.".to_string())?)
+            .await.map_err(|_| "Could not request calendar access.".to_string())?
+    }
+    #[cfg(not(target_os = "macos"))] { let _ = app; Err("Calendar access is available on macOS.".into()) }
 }
 
 #[tauri::command]
@@ -75,24 +82,48 @@ mod macos {
     }
     pub fn calendar_status() -> &'static str {
         let status: i64 = unsafe { msg_send![class!(EKEventStore), authorizationStatusForEntityType: 0i64] };
+        calendar_status_name(status)
+    }
+    fn calendar_status_name(status: i64) -> &'static str {
         match status { 0 => "not-determined", 1 => "restricted", 2 => "denied", 3 => "authorized", 4 => "write-only", _ => "unavailable" }
     }
-    pub fn request_calendar_access() -> Result<String, String> {
+    unsafe fn calendar_access_result(granted: BOOL, error: id) -> Result<String, String> {
+        if error != nil {
+            let description: id = msg_send![error, localizedDescription];
+            let domain: id = msg_send![error, domain];
+            let code: i64 = msg_send![error, code];
+            Err(format!("Calendar access: {} ({} {code}).", string(description, 500), string(domain, 100)))
+        } else if granted != NO { Ok("authorized".to_string()) }
+        else if calendar_status() == "not-determined" { Err("macOS did not complete the Calendar permission request. Try again.".into()) }
+        else { Ok(calendar_status().into()) }
+    }
+    pub fn request_calendar_access(sender: std::sync::mpsc::Sender<Result<String, String>>) {
         let current = calendar_status();
         if current == "denied" || current == "restricted" {
             let _ = std::process::Command::new("/usr/bin/open").arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars").status();
-            return Ok(current.into());
+            let _ = sender.send(Ok(current.into()));
+            return;
         }
-        if current == "authorized" { return Ok(current.into()); }
-        unsafe { with_store(|store| {
-            let (sender, receiver) = std::sync::mpsc::channel();
-            let completion = block::ConcreteBlock::new(move |granted: BOOL, _error: id| { let _ = sender.send(granted != NO); }).copy();
+        if current == "authorized" { let _ = sender.send(Ok(current.into())); return; }
+        unsafe {
+            // Start the consent UI on AppKit's main thread. Keep the store alive
+            // in the copied completion block until EventKit finishes the request.
+            struct RequestStore(id);
+            impl Drop for RequestStore {
+                fn drop(&mut self) { unsafe { let _: () = msg_send![self.0, release]; } }
+            }
+            let pool = NSAutoreleasePool::new(nil);
+            let store: id = msg_send![class!(EKEventStore), new];
+            let retained_store = RequestStore(store);
+            let completion = block::ConcreteBlock::new(move |granted: BOOL, error: id| {
+                let _keep_alive = &retained_store;
+                let _ = sender.send(calendar_access_result(granted, error));
+            }).copy();
             let modern: BOOL = msg_send![store, respondsToSelector: sel!(requestFullAccessToEventsWithCompletion:)];
             if modern != NO { let _: () = msg_send![store, requestFullAccessToEventsWithCompletion: &*completion]; }
             else { let _: () = msg_send![store, requestAccessToEntityType: 0i64 completion: &*completion]; }
-            receiver.recv_timeout(std::time::Duration::from_secs(180)).map_err(|_| "Calendar access request did not complete. Try again.".to_string())?;
-            Ok(calendar_status().into())
-        }) }
+            let _: () = msg_send![pool, drain];
+        }
     }
     pub fn agenda(days: u32, show_titles: bool) -> Result<CalendarAgenda, String> {
         let status = calendar_status().to_string();
@@ -173,6 +204,19 @@ mod macos {
         use super::*;
         #[test] fn calendar_status_does_not_request_access() {
             assert!(["not-determined", "restricted", "denied", "authorized", "write-only", "unavailable"].contains(&calendar_status()));
+        }
+        #[test] fn calendar_authorization_states_and_native_errors_are_preserved() {
+            assert_eq!((0..=5).map(calendar_status_name).collect::<Vec<_>>(), vec!["not-determined", "restricted", "denied", "authorized", "write-only", "unavailable"]);
+            unsafe {
+                with_store(|_| {
+                    use cocoa::foundation::NSString;
+                    let domain = NSString::alloc(nil).init_str("EKErrorDomain");
+                    let error: id = msg_send![class!(NSError), errorWithDomain: domain code: 29i64 userInfo: nil];
+                    assert!(calendar_access_result(NO, error).unwrap_err().contains("EKErrorDomain 29"));
+                    assert_eq!(calendar_access_result(cocoa::base::YES, nil).unwrap(), "authorized");
+                    let _: () = msg_send![domain, release];
+                });
+            }
         }
         #[test] fn cpu_and_memory_metrics_are_bounded() {
             assert_eq!(cpu_usage([10, 10, 10, 0], [20, 20, 40, 0]), 40.0);

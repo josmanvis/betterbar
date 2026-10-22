@@ -47,6 +47,17 @@ npm run tauri -- build --bundles app
 The build produces `src-tauri/target/release/bundle/macos/BetterBar.app`. These
 commands do not install the app over `/Applications/BetterBar.app`.
 
+Calendar access requires both the usage descriptions in `Info.plist` and the
+`com.apple.security.personal-information.calendars` entitlement. The release
+bundle enables Hardened Runtime, which requires this entitlement even without
+App Sandbox. `tauri.conf.json` signs with `Entitlements.plist`; keep this file
+when changing signing identities. Local signature repair preserves entitlements.
+An entitlement alone does not grant access: Connect calendars requests macOS
+consent, and denied or restricted access opens the Calendar privacy settings.
+Requests begin on AppKit's main thread and retain the event store until the
+completion callback. Settings distinguishes unrequested, restricted, and
+write-only access, prevents duplicate clicks while waiting, and displays errors.
+
 ## Coverage and limits
 
 - Unit coverage: configuration migration, persistence, taskbar theme isolation,
