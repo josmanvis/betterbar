@@ -144,6 +144,18 @@ export async function installRuntime(page: Page, options: {
           return Promise.reject(new Error(`Unmocked IPC: ${cmd}`));
       }
     }, { shouldMockEvents: true });
+    // Native listeners register asynchronously. Tests can wait for readiness
+    // before emitting an event that the real OS would deliver later.
+    const mockedInvoke = win.__TAURI_INTERNALS__.invoke;
+    const nativeListeners = new Map<number, string>();
+    win.__nativeListeners = [];
+    win.__TAURI_INTERNALS__.invoke = async (cmd: string, args: any, options: any) => {
+      const result = await mockedInvoke(cmd, args, options);
+      if (cmd === "plugin:event|listen") nativeListeners.set(args.handler, args.event);
+      if (cmd === "plugin:event|unlisten") nativeListeners.delete(args.eventId ?? args.id);
+      win.__nativeListeners = [...nativeListeners.values()];
+      return result;
+    };
     if (!localStorage.getItem("betterbar_config")) localStorage.setItem("betterbar_config", JSON.stringify(initial));
   };
   await page.addInitScript({ content: `${mocks}\nwindow.mockWindows = mockWindows; window.mockIPC = mockIPC;\n(${initialize.toString()})(${JSON.stringify({ initial: options.config || seed, options })});` });

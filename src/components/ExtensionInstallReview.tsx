@@ -22,6 +22,8 @@ export function ExtensionInstallReview() {
     const sync = () => setReviews(readInstallReviews());
     const storage = (event: StorageEvent) => { if (event.key === INSTALL_REVIEW_KEY || event.key === null) sync(); };
     window.addEventListener(INSTALL_REVIEW_EVENT, sync); window.addEventListener("storage", storage);
+    // A drop can arrive between the initial render and listener subscription.
+    sync();
     return () => { window.removeEventListener(INSTALL_REVIEW_EVENT, sync); window.removeEventListener("storage", storage); };
   }, []);
   useEffect(() => {

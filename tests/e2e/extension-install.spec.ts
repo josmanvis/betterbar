@@ -5,6 +5,7 @@ const registry = [{ name: "drop-sample", display_name: "Drop Sample", content: s
 const plan = (change: string, incoming = "1.1.0", previous: string | null = "1.0.0") => ({ token: "synthetic-drop-plan", name: "drop-sample", displayName: "Drop Sample", incomingVersion: incoming, installedVersion: previous, existing: change !== "install", change, content: source(incoming) });
 async function drop(page: Page) {
   await expect(page.locator(".bb-scanlines").first()).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any).__nativeListeners.includes("tauri://drag-leave"))).toBe(true);
   await page.evaluate(() => (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", { event: "tauri://drag-drop", payload: { paths: ["/synthetic/drop-sample.betterbar.tsx"], position: { x: 20, y: 20 } } }));
 }
 
