@@ -86,3 +86,42 @@ and browser checks use synthetic notes and skip when local source is unavailable
 The Show labels switch controls both pinned and running apps. Explicit per-item
 Icon / Icon + Label / Label choices retain precedence. With the settings cog
 hidden, ⌘, opens Settings while the taskbar is focused.
+
+## Sections, docking, and idle work
+
+The local section extensions now cover Docked Apps, Opened Apps, Terminal,
+Spaces, Caffeine, App Sets, Simulators, and Settings, alongside Time, Media, and
+Power. The host retains flexible space, geometry, native integrations, and
+compatibility renderers. Extensions control visibility, placement, and layout.
+Their `@betterbar/api` module exposes shared app/window snapshots, docking
+operations, and native controls. See `EXTENSIONS.md` for the API and migration.
+
+Docked Apps settings and Apps & Sets can pick apps, files, and folders using the
+native multi-select picker. Finder drops use Tauri native paths. New pins retain
+their type and native icon; files open in their default app and folders in Finder.
+Undocking removes only the pin. The Focus Timer settings offer Clock and
+Pomodoro icons and preserve running sessions when the selection changes.
+
+A controlled production-browser benchmark, repeated three times per engine,
+measured the following idle work over ten simulated seconds with unchanged app
+and window snapshots and Spaces hidden:
+
+| Measurement | Before (Chromium / WebKit) | After (Chromium / WebKit) |
+| --- | --- | --- |
+| Unnecessary extension renders | 13 / 12 | 0 / 0 |
+| Hidden Spaces queries | 6 / 6 | 0 / 0 |
+| Native IPC requests during the observation | 27 / 29 | 24 / 24 |
+
+The compiler and Markdown parser load only when an extension needs evaluation.
+Settings without enabled extensions requested about 527 KB of uncompressed JS;
+with the synthetic test extension it requested about 784 KB. Resource Timing
+omits some modulepreload body sizes, so the tests now count response bodies.
+The older byte totals are not comparable. Startup remained roughly 350–375 ms;
+this change targets unnecessary idle work, not a measured startup improvement.
+These are browser/IPC workload measurements, not installed-app CPU, memory, or
+battery savings. All 30 checks in the repeated after benchmark passed. The
+baseline had one host-sensitive tab latency failure out of 30 checks.
+
+For concurrent local work, set `PLAYWRIGHT_PORT` to a different preview port and
+use Playwright's `--output` option and `PLAYWRIGHT_HTML_OUTPUT_DIR` for independent
+artifacts. Defaults remain suitable for ordinary local runs and CI.

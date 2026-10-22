@@ -42,7 +42,7 @@ test('focus timer pause/resume, sleep, completion, and restart use persisted dea
     assert.equal(h.exports.readTimer().total, 5 * 60_000);
     assert.equal(h.exports.formatTime(60_001), '1:01');
     h.data.set('bb-focus-timer-preferences', JSON.stringify({ focus: -9, break: 999 }));
-    assert.deepEqual(h.exports.readPreferences(), { focus: 1, break: 60 });
+    assert.deepEqual(h.exports.readPreferences(), { focus: 1, break: 60, icon: "clock" });
   } finally { Date.now = oldNow; }
 });
 

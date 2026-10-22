@@ -2,6 +2,14 @@ import type { BetterBarConfig, SectionId } from "./types";
 
 // These extensions own their feature whenever they are installed, even disabled.
 export const EXTENSION_REPLACEMENTS = [
+  { name: "docked-apps", section: "pin", flag: "showDockArea", label: "DOCKED APPS" },
+  { name: "opened-apps", section: "run", flag: "showRunningApps", label: "OPENED APPS" },
+  { name: "terminal", section: "terminal", flag: "showTerminalIcon", label: "TERMINAL" },
+  { name: "caffeine", section: "caffeine", flag: "showCaffeine", label: "CAFFEINE" },
+  { name: "spaces", section: "spaces", flag: "showSpaces", label: "SPACES" },
+  { name: "app-sets", section: "sets", flag: "showSetSwitcher", label: "APP SETS" },
+  { name: "simulators", section: "sims", flag: "showSimIcons", label: "SIMULATORS" },
+  { name: "settings", section: "cog", flag: "showSettingsCog", label: "SETTINGS" },
   { name: "time", section: "time", flag: "showClocks", label: "TIME" },
   { name: "media", section: "music", flag: "showMusic", label: "MEDIA" },
   { name: "power", section: "battery", flag: "showBattery", label: "POWER" },
@@ -16,7 +24,7 @@ export function migrateExtensionReplacements(config: BetterBarConfig, installed:
   const pending = installedReplacements(installed).filter(replacement => !config.extensionReplacements?.includes(replacement.name));
   if (!pending.length) return config;
   return { ...config,
-    enabledExtensions: [...new Set([...config.enabledExtensions, ...pending.filter(replacement => config[replacement.flag]).map(replacement => replacement.name)])],
+    enabledExtensions: [...new Set([...config.enabledExtensions, ...pending.filter(replacement => config[replacement.flag] && (replacement.name !== "opened-apps" || config.showDockArea)).map(replacement => replacement.name)])],
     extensionReplacements: [...new Set([...(config.extensionReplacements || []), ...pending.map(replacement => replacement.name)])],
   };
 }

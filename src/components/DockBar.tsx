@@ -1,5 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { BarAPIContext, type NativeSectionName } from "../extension-api";
+import { inspectDockPaths, newDockItems } from "../dock-targets";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   DndContext, closestCenter, PointerSensor,
@@ -170,7 +173,29 @@ export function DockBar({
   const extensions = useExtensions(config.showExtensions ? config.enabledExtensions : []);
   const layoutOrder = resolveBarOrder(config, registry.extensions.map(extension => extension.name));
   const layoutItems = barItems(config, registry.extensions);
-  const spaces = useSpaces();
+  function visible(section: SectionId, legacy: boolean) {
+    const replacement = replacements.find(item => item.section === section);
+    return replacement ? config.showExtensions && config.enabledExtensions.includes(replacement.name) : legacy;
+  }
+  const showDocked = visible("pin", config.showDockArea);
+  const showOpened = visible("run", config.showDockArea && config.showRunningApps);
+  const spaces = useSpaces(visible("spaces", config.showSpaces));
+  const [dropError, setDropError] = useState(false);
+  const dockPaths = useCallback(async (paths: string[]) => {
+    try {
+      const targets = await inspectDockPaths(paths);
+      for (const item of newDockItems(activeSet.items, targets)) onAddItem(item);
+      setDropError(false);
+    } catch { setDropError(true); }
+  }, [activeSet.items, onAddItem]);
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    getCurrentWebview().onDragDropEvent(event => {
+      if (event.payload.type === "drop") void dockPaths(event.payload.paths);
+    }).then(stop => { if (cancelled) stop(); else unlisten = stop; }).catch(() => setDropError(true));
+    return () => { cancelled = true; unlisten?.(); };
+  }, [dockPaths]);
 
   const [customExpandedSize, setCustomExpandedSize] = useState<number | undefined>(undefined);
   useEffect(() => {
@@ -194,9 +219,9 @@ export function DockBar({
 
   // Running apps that aren't already in the pinned set (matched by bundle id or
   // name, since some items omit bundleId).
-  const pinnedBundleIds = new Set(activeSet.items.map((i) => i.bundleId).filter(Boolean));
-  const pinnedNames = new Set(activeSet.items.filter(item => !item.bundleId).map((i) => i.name.toLowerCase()));
-  const runningUnpinned = config.showRunningApps
+  const pinnedBundleIds = new Set(activeSet.items.filter(i => i.kind !== "file" && i.kind !== "folder").map((i) => i.bundleId).filter(Boolean));
+  const pinnedNames = new Set(activeSet.items.filter(item => !item.bundleId && item.kind !== "file" && item.kind !== "folder").map((i) => i.name.toLowerCase()));
+  const runningUnpinned = showOpened
     ? runningApps.filter((app) => {
         if (
           config.hideSelf &&
@@ -540,7 +565,7 @@ export function DockBar({
   function extensionNode(ext: LoadedExtension) {
     const showLabels = config.extensionAppearance?.[ext.name]?.showLabels ?? config.showExtensionLabels !== false;
     const showBorder = extensionBorderVisible(config, ext.name);
-    return <div key={ext.name} className="flex items-center justify-center shrink-0" data-extension-labels={showLabels ? "visible" : "hidden"}
+    return <div key={ext.name} className={`flex ${isVertical ? "flex-col" : "flex-row"} items-center justify-center shrink-0`} data-extension-labels={showLabels ? "visible" : "hidden"}
       data-extension-borders={showBorder ? "visible" : "hidden"}
       style={{ ...themeStyle(config, ext.name), opacity: (config.extensionAppearance?.[ext.name]?.opacity ?? 100) / 100,
         "--bb-extension-icon-size": `${iconSize}px`, "--bb-extension-slot-size": `${iconSize + 8}px`,
@@ -549,7 +574,7 @@ export function DockBar({
     </div>;
   }
 
-  if (config.showTerminalIcon) {
+  if (visible("terminal", config.showTerminalIcon)) {
     sectionNodes.terminal = (
       <TerminalInput
         isVertical={isVertical}
@@ -569,7 +594,7 @@ export function DockBar({
     const resolvedIcon =
       item.deviceIcon || item.forceGlyph
         ? undefined
-        : (item.icon ?? (wantsNative && item.bundleId ? appIcons[item.bundleId] : undefined));
+        : (item.icon ?? (wantsNative ? appIcons[item.bundleId || item.path] : undefined));
 
     const appWindows = runningWindows.filter(
       (w) =>
@@ -645,11 +670,11 @@ export function DockBar({
       />
     );
   }
-  if (config.showDockArea) {
+  if (showDocked) {
     for (const item of sortedItems) sectionNodes[appItemId(activeSet.id, item.id)] = pinnedItem(item);
   }
 
-  if (config.showDockArea && config.showRunningApps && runningUnpinned.length > 0) {
+  if (showOpened && runningUnpinned.length > 0) {
     sectionNodes.run = (
       <>
         <Divider isVertical={isVertical} label="RUN" zoom={config.contentScale} />
@@ -709,7 +734,7 @@ export function DockBar({
     );
   }
 
-  if (config.showCaffeine) {
+  if (visible("caffeine", config.showCaffeine)) {
     sectionNodes.caffeine = (
       <>
         <Divider isVertical={isVertical} label="CAF" />
@@ -727,7 +752,7 @@ export function DockBar({
     );
   }
 
-  if (config.showSetSwitcher) {
+  if (visible("sets", config.showSetSwitcher)) {
     sectionNodes.sets = (
       <>
         <Divider isVertical={isVertical} label="SET" />
@@ -742,7 +767,7 @@ export function DockBar({
     );
   }
 
-  if (config.showSimIcons) {
+  if (visible("sims", config.showSimIcons)) {
     sectionNodes.sims = (
       <>
         <Divider isVertical={isVertical} label="SIMS" />
@@ -783,7 +808,7 @@ export function DockBar({
     </>;
   }
 
-  if (config.showSpaces && spaces.length > 0) {
+  if (visible("spaces", config.showSpaces) && spaces.length > 0) {
     sectionNodes.spaces = (
       <>
         <Divider isVertical={isVertical} label="SPC" />
@@ -793,7 +818,7 @@ export function DockBar({
     );
   }
 
-  if (config.showSettingsCog) {
+  if (visible("cog", config.showSettingsCog)) {
     sectionNodes.cog = (
       <>
         <Divider isVertical={isVertical} />
@@ -812,9 +837,15 @@ export function DockBar({
     );
   }
 
+  const nativeSections = {
+    "docked-apps": <div className={`flex ${isVertical ? "flex-col" : "flex-row"} items-stretch gap-px`}>{sortedItems.map(item => pinnedItem(item))}</div>,
+    "opened-apps": sectionNodes.run, terminal: sectionNodes.terminal, spaces: sectionNodes.spaces,
+    caffeine: sectionNodes.caffeine, "app-sets": sectionNodes.sets, simulators: sectionNodes.sims, settings: sectionNodes.cog,
+  } satisfies Record<NativeSectionName, React.ReactNode>;
   const orderedItems = layoutItems.filter(item => item.enabled && sectionNodes[item.id] !== undefined);
 
   return (
+    <BarAPIContext.Provider value={{ config, dockItems: activeSet.items, runningApps, windows: runningWindows, sections: nativeSections, addItem: onAddItem, removeItem: onRemove, switchSet: onSwitchSet, dockPaths }}>
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={orderedItems.map(item => item.id)} strategy={isVertical ? verticalListSortingStrategy : horizontalListSortingStrategy}>
       <div
@@ -826,18 +857,8 @@ export function DockBar({
         onDrop={event => {
           if (event.dataTransfer.types.includes("text/x-betterbar-id") || !event.dataTransfer.files.length) return;
           event.preventDefault();
-          const target = (event.target as HTMLElement).closest("[data-bb-item]")?.getAttribute("data-bb-item") as BarItemId | undefined;
-          let next = [...layoutOrder];
-          for (const file of Array.from(event.dataTransfer.files)) {
-            const path = (file as File & { path?: string }).path;
-            if (!path) continue;
-            const id = `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-            onAddItem({ id, name: path.split("/").pop() || file.name, path, order: activeSet.items.length });
-            const key = appItemId(activeSet.id, id);
-            const index = target ? next.indexOf(target) : next.indexOf("pin");
-            next.splice(index < 0 ? next.length : index, 0, key);
-          }
-          if (next.length !== layoutOrder.length) onSetBarOrder?.(next);
+          const paths = Array.from(event.dataTransfer.files).map(file => (file as File & { path?: string }).path).filter((path): path is string => !!path);
+          if (paths.length) void dockPaths(paths);
         }}
         onMouseMove={handleBarMouseMove}
         onMouseLeave={() => { if (!resizing) setHoverEdge(null); }}
@@ -883,6 +904,7 @@ export function DockBar({
             {sectionNodes[item.id]}
           </SortableBarItem>;
         })}
+        {dropError && <button role="alert" onClick={() => setDropError(false)} className="px-3 text-[var(--bb-bad)]">Could not dock these items. Check that they are still available.</button>}
         <span className="sr-only" aria-live="polite">{layoutAnnouncement}</span>
 
         {/* Swipe label toast */}
@@ -909,6 +931,7 @@ export function DockBar({
       </div>
       </SortableContext>
     </DndContext>
+    </BarAPIContext.Provider>
   );
 }
 

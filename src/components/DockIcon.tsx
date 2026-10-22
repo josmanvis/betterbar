@@ -93,6 +93,7 @@ export function DockIcon({
 }: DockIconProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
+  const [launchError, setLaunchError] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(item.name);
@@ -349,6 +350,7 @@ export function DockIcon({
 
   async function handleClick() {
     if (renaming) return;
+    setLaunchError(false);
     setPressed(true);
     setTimeout(() => setPressed(false), 120);
     try {
@@ -366,7 +368,7 @@ export function DockIcon({
         await launchApp(item.path);
       }
     } catch (e) {
-      console.error("[BetterBar] Failed to launch app:", e);
+      setLaunchError(true);
     }
   }
 
@@ -393,18 +395,20 @@ export function DockIcon({
       draggable={isFileItem}
       onDragStart={isFileItem ? (e: React.DragEvent) => {
         e.dataTransfer.setData('text/x-betterbar-id', item.id);
-        e.dataTransfer.setData('text/uri-list', 'file://' + item.path);
+        e.dataTransfer.setData('text/uri-list', 'file://' + encodeURI(item.path).replace(/#/g, '%23').replace(/\?/g, '%3F'));
         e.dataTransfer.setData('text/plain', item.path);
         e.dataTransfer.effectAllowed = 'copy';
       } : undefined}
       className={`relative flex flex-col items-center justify-center ${isVertical ? "w-full" : "h-full"}`}
-      {...attributes}
-      {...listeners}
+      {...(sortable && !isFileItem ? attributes : {})}
+      {...(sortable && !isFileItem ? listeners : {})}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
+      {launchError && <span className="sr-only" role="alert">Could not open this item. Check that it is still available.</span>}
       <motion.button
         aria-label={item.name}
+        title={launchError ? "Could not open this item. Check that it is still available." : undefined}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         animate={{ scale: pressed ? 0.92 : 1 }}

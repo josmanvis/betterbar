@@ -1,26 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import { usePollingList } from "../hooks/usePollingList";
 import { getSpaces, switchToSpace } from "../tauri-bridge";
 import type { SpaceInfo } from "../types";
 
-export function useSpaces() {
-  const [spaces, setSpaces] = useState<SpaceInfo[]>([]);
+const reportSpacesError = (error: unknown) => console.error("[Spaces] Failed to fetch spaces:", error);
 
-  const refresh = useCallback(async () => {
-    try {
-      const list = await getSpaces();
-      setSpaces(list);
-    } catch (e) {
-      console.error("[Spaces] Failed to fetch spaces:", e);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, 2000);
-    return () => clearInterval(interval);
-  }, [refresh]);
-
-  return spaces;
+export function useSpaces(enabled = true) {
+  return usePollingList(getSpaces, 2000, enabled, reportSpacesError);
 }
 
 export function SpacesIndicator({

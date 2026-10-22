@@ -242,3 +242,45 @@ Install `extensions/gitlab-mrs/main.tsx` at `~/.betterbar/extensions/gitlab-mrs/
 The indicator defaults to open MRs authored by you across projects on your configured GitLab host, refreshing every minute. Settings also offers assigned MRs, review requests, 30/60/300/600-second refreshes, and an optional hostname override. Empty hostname uses `glab config get host`. Click to open the matching GitLab dashboard; right-click to refresh. Zero, loading, and failure are distinct. Failed refreshes retain the previous count with a warning; changing scope or host clears the previous count. The compact badge caps at 99+ while its accessible name and tooltip retain the exact count and last successful check time.
 
 The native bridge runs fixed read-only `glab api` requests without a shell, with a timeout and response size limit. Credentials stay with glab; MR payloads and counts are never persisted by BetterBar. Pagination headers supply the total, with page counting when totals are omitted. Only hostname, scope, and refresh interval are saved in extension preferences.
+
+## Bar API (version 1)
+
+Import the host API with `import { NativeSection, useBetterBar, DockSettings, API_VERSION } from "@betterbar/api"`. No npm package installation is needed. The runtime supplies this module alongside React. Extension source is compiled on demand; unchanged modules retain their component identity across toggles and registry reloads, so enabling another widget does not reset a running timer or local component state.
+
+`useBetterBar()` is available in taskbar components. It returns the current `config`, active-set `dockItems`, shared `runningApps` and `windows` snapshots, and actions `addItem(item)`, `removeItem(id)`, `switchSet(id)`, and asynchronous `dockPaths(paths)`. Shared snapshots use one host poller and retain their references when records have not changed. Window-mode components and Settings should use their supplied props and native commands instead of this bar-only hook.
+
+`NativeSection` reuses the host's native controls and interactions inside an extension's layout:
+
+```tsx
+import { NativeSection } from "@betterbar/api";
+export const name = "My Workspace";
+export default function Workspace() {
+  return <NativeSection name="spaces" />;
+}
+```
+
+Supported sections are `docked-apps`, `opened-apps`, `terminal`, `spaces`, `caffeine`, `app-sets`, `simulators`, and `settings`. Controls retain app focus, pinning, context menus, window previews, terminal expansion, workspace switching, simulator launching, and existing accessibility behavior. This is a compatibility renderer: extensions own their lifecycle, visibility, placement, and layout while the host supplies native interactions. Extensions can render their own UI using the shared snapshots and exported `focusApp`, `focusWindow`, `launchApp`, and `openSettingsWindow` actions.
+
+Install the corresponding local extension directories to migrate these sections, alongside Time, Media, and Power. Each is independently enabled, positioned, and styled. All feature sections can then be extensions; flexible space and bar/window geometry stay with the host. An installed replacement suppresses its native counterpart even when disabled. Uninstalling it restores the native fallback. Previous visibility is migrated once, preserving app sets, hidden pins, clock data, and styling. Docked Apps groups pinned items; Opened Apps independently shows running apps that are not already pinned. Reorder pins inside Docked Apps settings; move the whole group in Bar items. Saved individual app slots remain available for uninstall fallback.
+
+### Docking files and folders
+
+Docked items accept an optional `kind: "app" | "file" | "folder"`. Existing pins without a kind remain application pins. A file opens in its default app; a folder opens in Finder. Neither acquires running-app indicators or suppresses an app with the same display name. Native file-type and folder icons are used unless the user has selected a custom icon or glyph style.
+
+`DockSettings` renders the host's app/file/folder picker and pin management. Export a Settings component that passes it the supplied `config` and `updateConfig` props. It supports multiple selections, cancel, deduplication by path, reordering, removing pins without deleting their targets, and shared labels. Apps & Sets also includes the picker. Finder drops onto the native bar use Tauri's drag-drop paths, rather than relying on a browser `File.path` property.
+
+The API exports `pickDockItems("app" | "file" | "folder")` and `inspectDockPaths(paths)`, returning `{name, path, kind, bundleId?}[]`. Native equivalents are `pick_dock_items` with `{kind}` and `inspect_dock_paths` with `{paths}`. Cancel returns an empty array. Inspection accepts existing absolute local paths, resolves aliases implemented as symlinks, rejects missing targets, and deduplicates canonical paths. Inspection does not enumerate folders or read document contents. `get_path_icon` with `{path}` returns a PNG data URL or null. Paths are passed directly to macOS commands without a shell.
+
+### Focus Timer icon
+
+Focus Timer settings now offer Clock and Pomodoro (tomato) bar icons, with previews. Clock remains the default. The selection persists under the existing timer preferences and synchronizes across windows immediately. Changing the icon preserves the current session, deadline, and durations.
+
+## WiFi Status
+
+Install the local `extensions/wifi-status/` directory at `~/.betterbar/extensions/wifi-status/`, reload extensions, and enable **WiFi Status**. The matching BetterBar build must include `get_wifi_status`, `test_wifi_speed`, and `open_wifi_status_app`; copying the TSX alone into an older build cannot add the native bridge.
+
+In **Settings → Extensions → WiFi Status → Settings**, toggle download, upload, IP address, network name, signal strength, and Wi-Fi link rate independently. Choose Mbps or MB/s, a 1/2/5/10-second refresh, optional captions, and live transfer rates or the last manual speed test. Defaults show live download/upload every two seconds. Preferences persist under `bb-wifi-status-preferences` and synchronize across windows. Essential values remain visible when extension captions are hidden. All fields can be disabled to show only the Wi-Fi icon.
+
+Click the bar item for live traffic, local IPv4/IPv6, interface, signal/noise, link rate, display settings, and an **Open WiFiStatusApp** shortcut. macOS may redact the SSID when location access is unavailable; the extension explains this without calling a connected interface offline. Interface changes, counter resets, and long gaps establish a new traffic baseline. Failed polls retain a clearly marked previous reading. Network snapshots are kept in memory only.
+
+**Run speed test** makes a quick, bounded download/upload estimate using the [Cloudflare speed-test endpoints](https://github.com/cloudflare/speedtest/blob/main/README.md): 10 MB downloaded and 2 MB of synthetic payload uploaded. It runs only on request, follows the Mac's internet route (including a VPN), and may take up to 40 seconds on a slow or unavailable connection. Live rates count traffic on the Wi-Fi interface; link rate describes the radio connection. Speed-test results remain in memory until BetterBar quits. Partial failures are shown per direction; a failed retry keeps the previous result.

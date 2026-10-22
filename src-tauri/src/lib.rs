@@ -5,6 +5,7 @@ mod gitlab;
 mod bkr_pipelines;
 mod drawer_shortcut;
 mod applications;
+mod dock_targets;
 mod integrations;
 #[cfg(target_os = "macos")]
 mod signature;
@@ -1043,34 +1044,37 @@ end tell"#,
     /// → base64) which was fragile (PATH issues under Tauri, missing/binary
     /// Info.plists, ambiguous .icns selection).
     pub fn get_app_icon_base64(bundle_id: &str) -> Option<String> {
+        use cocoa::base::{id, nil};
+        use cocoa::foundation::NSString;
+        use objc::{class, msg_send, sel, sel_impl};
+        unsafe {
+            let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
+            if workspace == nil { return None; }
+            let bundle_ns = NSString::alloc(nil).init_str(bundle_id);
+            let url: id = msg_send![workspace, URLForApplicationWithBundleIdentifier: bundle_ns];
+            let _: () = msg_send![bundle_ns, release];
+            if url == nil { return None; }
+            let path: id = msg_send![url, path];
+            if path == nil { return None; }
+            let ptr: *const std::os::raw::c_char = msg_send![path, UTF8String];
+            if ptr.is_null() { return None; }
+            get_path_icon_base64(&std::ffi::CStr::from_ptr(ptr).to_string_lossy())
+        }
+    }
+
+    pub fn get_path_icon_base64(path: &str) -> Option<String> {
         use base64::Engine;
         use cocoa::base::{id, nil};
         use cocoa::foundation::NSString;
         use objc::{class, msg_send, sel, sel_impl};
-
         unsafe {
             let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
-            if workspace == nil {
-                eprintln!("[BetterBar] NSWorkspace sharedWorkspace returned nil");
-                return None;
-            }
-
-            let bundle_ns: id = NSString::alloc(nil).init_str(bundle_id);
-            let app_url: id = msg_send![workspace, URLForApplicationWithBundleIdentifier: bundle_ns];
-            if app_url == nil {
-                eprintln!("[BetterBar] No app URL for bundle id: {}", bundle_id);
-                return None;
-            }
-
-            let app_path_ns: id = msg_send![app_url, path];
-            if app_path_ns == nil {
-                eprintln!("[BetterBar] No POSIX path for {}", bundle_id);
-                return None;
-            }
-
-            let icon: id = msg_send![workspace, iconForFile: app_path_ns];
+            if workspace == nil { return None; }
+            let path_ns = NSString::alloc(nil).init_str(path);
+            let icon: id = msg_send![workspace, iconForFile: path_ns];
+            let _: () = msg_send![path_ns, release];
             if icon == nil {
-                eprintln!("[BetterBar] No icon for {}", bundle_id);
+                eprintln!("[BetterBar] No icon for {}", path);
                 return None;
             }
 
@@ -1090,14 +1094,14 @@ end tell"#,
                 hints: nil
             ];
             if cg_image.is_null() {
-                eprintln!("[BetterBar] CGImageForProposedRect returned null for {}", bundle_id);
+                eprintln!("[BetterBar] CGImageForProposedRect returned null for {}", path);
                 return None;
             }
 
             let bitmap: id = msg_send![class!(NSBitmapImageRep), alloc];
             let bitmap: id = msg_send![bitmap, initWithCGImage: cg_image];
             if bitmap == nil {
-                eprintln!("[BetterBar] initWithCGImage failed for {}", bundle_id);
+                eprintln!("[BetterBar] initWithCGImage failed for {}", path);
                 return None;
             }
 
@@ -1105,19 +1109,20 @@ end tell"#,
             let png_type: u64 = 4;
             let png_data: id = msg_send![bitmap, representationUsingType: png_type properties: nil];
             if png_data == nil {
-                eprintln!("[BetterBar] PNG representation failed for {}", bundle_id);
+                eprintln!("[BetterBar] PNG representation failed for {}", path);
                 return None;
             }
 
             let len: usize = msg_send![png_data, length];
             let bytes_ptr: *const u8 = msg_send![png_data, bytes];
             if bytes_ptr.is_null() || len == 0 {
-                eprintln!("[BetterBar] PNG buffer empty for {}", bundle_id);
+                eprintln!("[BetterBar] PNG buffer empty for {}", path);
                 return None;
             }
             let slice = std::slice::from_raw_parts(bytes_ptr, len);
 
             let encoded = base64::engine::general_purpose::STANDARD.encode(slice);
+            let _: () = msg_send![bitmap, release];
             Some(format!("data:image/png;base64,{}", encoded))
         }
     }
@@ -2419,6 +2424,9 @@ pub fn run() {
             get_installed_terminals,
             execute_terminal_command,
             launch_app,
+            dock_targets::inspect_dock_paths,
+            dock_targets::pick_dock_items,
+            dock_targets::get_path_icon,
             focus_app,
             get_screen_info,
             position_window,

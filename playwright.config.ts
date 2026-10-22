@@ -4,6 +4,9 @@ import { existsSync } from "node:fs";
 const chromeChannel = process.env.PLAYWRIGHT_CHROME_CHANNEL
   || (!process.env.CI && existsSync("/Applications/Google Chrome.app") ? "chrome" : undefined);
 
+const port = Number(process.env.PLAYWRIGHT_PORT || 1422);
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 30_000,
@@ -14,7 +17,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: "http://127.0.0.1:1422",
+    baseURL,
     viewport: { width: 1000, height: 760 },
     reducedMotion: "reduce",
     trace: "retain-on-failure",
@@ -25,8 +28,8 @@ export default defineConfig({
     { name: "webkit", use: { ...devices["Desktop Safari"] } },
   ],
   webServer: {
-    command: "npm run preview -- --host 127.0.0.1 --port 1422 --strictPort",
-    url: "http://127.0.0.1:1422",
+    command: `npm run preview -- --host 127.0.0.1 --port ${port} --strictPort`,
+    url: baseURL,
     reuseExistingServer: false,
   },
 });

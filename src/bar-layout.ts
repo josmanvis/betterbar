@@ -1,7 +1,8 @@
 import { DEFAULT_SECTION_ORDER, type BarItemId, type BetterBarConfig, type DockItem, type SectionId } from "./types";
 import { EXTENSION_REPLACEMENTS, installedReplacements } from "./extension-replacements";
 
-export function appMatchesDockItem(item: Pick<DockItem, "name" | "bundleId">, app: { name: string; bundle_id: string }) {
+export function appMatchesDockItem(item: Pick<DockItem, "name" | "bundleId" | "kind">, app: { name: string; bundle_id: string }) {
+  if (item.kind === "file" || item.kind === "folder") return false;
   return item.bundleId ? item.bundleId === app.bundle_id : item.name.toLocaleLowerCase() === app.name.toLocaleLowerCase();
 }
 
@@ -29,7 +30,7 @@ export function resolveBarOrder(config: BetterBarConfig, installed: string[]): B
   const seed: BarItemId[] = [];
   for (const section of config.sectionOrder) {
     const replacement = replacements.find(item => item.section === section);
-    if (section === "pin") seed.push(...apps, section);
+    if (section === "pin") seed.push(...apps, replacement ? extensionItemId(replacement.name) : section);
     else if (section === "extensions") seed.push(...installed.filter(name => !replacements.some(item => item.name === name)).map(extensionItemId), section);
     else seed.push(replacement ? extensionItemId(replacement.name) : section);
   }
@@ -38,6 +39,7 @@ export function resolveBarOrder(config: BetterBarConfig, installed: string[]): B
   const result: BarItemId[] = [];
   for (let id of source) {
     if (id.startsWith("app:") && !knownApps.has(id)) continue;
+    if (id.startsWith("app:") && replacements.some(item => item.name === "docked-apps") && !source.includes(extensionItemId("docked-apps")) && !result.includes(extensionItemId("docked-apps"))) result.push(extensionItemId("docked-apps"));
     const replacement = replacements.find(item => item.section === id);
     if (replacement) {
       const extension = extensionItemId(replacement.name);
@@ -104,6 +106,7 @@ export function barItems(config: BetterBarConfig, extensions: { name: string; di
     }
     if (id.startsWith("app:")) {
       const app = activeSet?.items.find(item => appItemId(activeSet.id, item.id) === id);
+      if (extensions.some(extension => extension.name === "docked-apps")) return [];
       return app ? [{ id, label: app.name, kind: "app", app, enabled: config.showDockArea && !app.hidden }] : [];
     }
     if (id === "pin" || id === "extensions") return [];

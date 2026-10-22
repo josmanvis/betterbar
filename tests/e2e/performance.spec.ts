@@ -1,6 +1,58 @@
+import type { Page } from "@playwright/test";
 import { test, expect, installRuntime, seed } from "./fixtures";
 
+// Resource Timing can omit modulepreload body sizes. Count actual response
+// bodies so the budget covers every requested JS chunk, including preloads.
+function observeJavaScript(page: Page) {
+  const responses = new Map<string, Promise<number>>();
+  page.on("response", response => {
+    if (new URL(response.url()).pathname.endsWith(".js") && !responses.has(response.url())) responses.set(response.url(), response.body().then(body => body.byteLength));
+  });
+  return async () => (await Promise.all(responses.values())).reduce((sum, size) => sum + size, 0);
+}
+
+test("@performance Settings avoids loading the extension compiler until needed", async ({ page }, testInfo) => {
+  const javascriptBytes = observeJavaScript(page);
+  await installRuntime(page, { registryExtensions: [], config: { ...seed, enabledExtensions: [] } });
+  await page.goto("/");
+  await expect(page.getByRole("combobox", { name: "Bar position", exact: true })).toBeVisible();
+  const metrics = await page.evaluate(() => ({
+    readyMs: performance.now(),
+    jsBytes: 0,
+  }));
+  metrics.jsBytes = await javascriptBytes();
+  await testInfo.attach("settings-without-extensions.json", { body: JSON.stringify(metrics), contentType: "application/json" });
+  expect(metrics.readyMs).toBeLessThan(2000);
+  expect(metrics.jsBytes).toBeLessThan(1_000_000);
+  expect(await page.evaluate(() => performance.getEntriesByType("resource").some(entry => entry.name.includes("extension-evaluator")))).toBe(false);
+});
+
+test("@performance idle taskbar avoids hidden Spaces polling and unchanged app rerenders", async ({ page }, testInfo) => {
+  await page.clock.install();
+  await installRuntime(page, {
+    label: "main", config: { ...seed, enabledExtensions: ["render-probe"], showClocks: false, showBattery: false },
+    registryExtensions: [{ name: "render-probe", display_name: "Render probe", content:
+      'export default function Probe() { window.__probeRenders = (window.__probeRenders || 0) + 1; return <button>Render probe</button>; }' }],
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Render probe", exact: true })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await page.clock.runFor(100);
+  const before = await page.evaluate(() => ({ renders: (window as any).__probeRenders, calls: (window as any).__ipcCalls.length }));
+  await page.clock.runFor(10_000);
+  const metrics = await page.evaluate(before => ({
+    simulatedSeconds: 10,
+    extensionRenders: (window as any).__probeRenders - before.renders,
+    hiddenSpacesRequests: (window as any).__ipcCalls.filter((call: any) => call.cmd === "get_spaces").length,
+    nativeRequests: (window as any).__ipcCalls.length - before.calls,
+  }), before);
+  await testInfo.attach("idle-taskbar.json", { body: JSON.stringify(metrics), contentType: "application/json" });
+  expect(metrics.extensionRenders).toBeLessThanOrEqual(1);
+  expect(metrics.hiddenSpacesRequests).toBe(0);
+});
+
 test("@performance production Settings starts within budget and shares native symbol requests", async ({ page }, testInfo) => {
+  const javascriptBytes = observeJavaScript(page);
   await installRuntime(page);
   await page.goto("/");
   await expect(page.getByRole("combobox", { name: "Bar position", exact: true })).toBeVisible();
@@ -8,11 +60,11 @@ test("@performance production Settings starts within budget and shares native sy
     const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming;
     return {
       readyMs: performance.now(), domContentLoadedMs: navigation.domContentLoadedEventEnd,
-      jsBytes: performance.getEntriesByType("resource").filter(entry => entry.name.endsWith(".js"))
-        .reduce((sum, entry) => sum + (entry as PerformanceResourceTiming).encodedBodySize, 0),
+      jsBytes: 0,
       symbolRequests: (window as any).__ipcCalls.filter((call: any) => call.cmd === "get_system_symbols").length,
     };
   });
+  metrics.jsBytes = await javascriptBytes();
   await testInfo.attach("settings-startup.json", { body: JSON.stringify(metrics, null, 2), contentType: "application/json" });
   expect(metrics.readyMs, "production Settings must become interactive within 2 seconds").toBeLessThan(2000);
   expect(metrics.jsBytes, "Settings JS transfer budget (uncompressed)").toBeLessThan(1_000_000);

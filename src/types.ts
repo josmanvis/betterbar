@@ -15,6 +15,8 @@ export interface IconChrome {
 }
 
 export interface DockItem {
+  /** Missing kind retains legacy application pins. */
+  kind?: "app" | "file" | "folder";
   id: string;
   name: string;
   path: string;

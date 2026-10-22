@@ -38,6 +38,10 @@ export async function installRuntime(page: Page, options: {
   registryExtensions?: { name: string; display_name: string; content: string }[];
   standupResponses?: { text?: string; error?: boolean; delayMs?: number }[];
   runningApps?: { name: string; bundle_id: string; pid: number; is_active: boolean }[];
+  spaces?: { id: number; name: string; is_current: boolean }[];
+  pickedTargets?: {name: string; path: string; kind: "app" | "file" | "folder"; bundleId?: string}[];
+  pickerFailure?: boolean;
+  wifiStatus?: Record<string, unknown>;
   nativeFailure?: boolean; nativeAccent?: string; reduceTransparency?: boolean; increaseContrast?: boolean;
 } = {}) {
   const initialize = ({ initial, options }: { initial: BetterBarConfig; options: any }) => {
@@ -55,6 +59,14 @@ export async function installRuntime(page: Page, options: {
       if (options.nativeFailure && ["get_macos_preferences", "get_system_symbols"].includes(cmd)) return Promise.reject(new Error("Native appearance unavailable"));
       switch (cmd) {
         case "get_system_symbols": return {};
+        case "get_wifi_status": return win.__wifiFailure ? Promise.reject(new Error("Wi-Fi unavailable")) : (win.__wifiStatus || options.wifiStatus);
+        case "test_wifi_speed": {
+          if (win.__wifiTestFailure) return Promise.reject(new Error("Test unavailable"));
+          const result = { download_mbps: 120, upload_mbps: 24, taken_at: Date.now() };
+          win.__wifiStatus = { ...options.wifiStatus, speed_test: result };
+          return result;
+        }
+        case "open_wifi_status_app": return null;
         case "get_macos_preferences": return { accent: options.nativeAccent || "#007aff", reduce_transparency: !!options.reduceTransparency, increase_contrast: !!options.increaseContrast, reduce_motion: true };
         case "fetch_extension_files_from_disk": return options.registryExtensions || [extension];
         case "read_standup_file": {
@@ -79,13 +91,22 @@ export async function installRuntime(page: Page, options: {
         case "update_bar_geometry":
         case "open_settings_window": return null;
         case "get_running_apps": return options.emptyApps ? [] : options.runningApps || [{ name: "Notes", bundle_id: "com.apple.Notes", pid: 101, is_active: true }];
-        case "get_on_screen_windows":
-        case "get_spaces": return [];
-        case "get_app_icon": return null;
+        case "get_on_screen_windows": return [];
+        case "get_spaces": return options.spaces || [];
+        case "switch_to_space":
+        case "launch_simulator": return null;
+        case "get_app_icon":
+        case "get_path_icon": return null;
+        case "focus_app":
+        case "focus_window":
+        case "launch_app": return null;
+        case "pick_dock_items":
+        case "inspect_dock_paths": return options.pickerFailure ? Promise.reject(new Error("Picker failed")) : options.pickedTargets || [];
         case "get_screen_info": return { width: 1440, height: 900, scale_factor: 1, menu_bar_height: 25, dock_height: 0 };
         case "get_window_outer_position": return [0, 832];
         case "get_battery_info": return { percentage: 80, is_charging: false, is_plugged: false, available: true };
         case "get_caffeine_status": return { active: false, minutes_remaining: null };
+        case "toggle_caffeine": return { active: true, minutes_remaining: null };
         case "check_accessibility_permissions":
         case "check_screen_recording_permission": return true;
         case "get_apple_calendar_status": return "authorized";

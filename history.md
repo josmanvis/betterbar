@@ -1,6 +1,9 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **WiFi Status** — add a local extension with independent download, upload, IP, network name, signal, and link-rate display options; live Wi-Fi traffic, selectable Mbps/MB/s, and manual download/upload tests in a details window. Include the native bridge and a shortcut to WiFiStatusApp.
+- **Section extensions and docking** — add the host Bar API and replacement migration for Docked Apps, Opened Apps, Terminal, Spaces, Caffeine, App Sets, Simulators, and Settings. Preserve existing pins, visibility, and positions. Dock apps, files, and folders through native multi-select pickers or Finder drops, with native icons and default-app opening. Add local Focus Timer Clock/Pomodoro icon preferences without resetting sessions.
+- **Idle performance** — preserve unchanged app/window list references, prevent overlapping native polls, stop hidden Spaces queries, defer the extension compiler, and reuse unchanged extension modules across toggles/reloads. Add unit, browser, and performance regression coverage.
 - **Extension windows and labels** — extension content and native title bars follow the selected window appearance; running app icons now honor Show labels. Add ⌘, access to Settings when the cog is hidden and local Standup reader refresh, copy, retry, and empty-state coverage.
 - **Next UI** — keep the current taskbar and combine it with the compact macOS Settings design: native sidebar material and window chrome, system typography and symbols, independent Automatic/Light/Dark settings appearance, keyboard navigation, search, and accessible confirmation dialogs. Add Chromium/WebKit end-to-end and performance checks, portable unit coverage, and macOS CI.
 - **Apps Drawer shortcut** — double-tap either Command key to show or hide the drawer from any app. Enable by default with an extension setting, cancel on typing, clicks, other modifiers, or long holds, and preserve normal keyboard shortcuts and drawer placement.

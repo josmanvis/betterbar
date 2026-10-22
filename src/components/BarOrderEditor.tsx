@@ -3,7 +3,7 @@ import type { BarItemId, BetterBarConfig } from "../types";
 import { barItems, moveBarItem, resolveBarOrder } from "../bar-layout";
 
 const strings = {
-  hint: "Drag rows, use the arrows, or choose a position. Extensions and pinned apps can go anywhere. On the bar, hold ⌘ and drag any item.",
+  hint: "Drag rows, use the arrows, or choose a position. Extensions and items can go anywhere. Reorder pins inside Docked Apps settings. On the bar, hold ⌘ and drag any item.",
   position: "Position for {name}", up: "Move {name} toward start", down: "Move {name} toward end",
   extension: "Extension", app: "Pinned app", native: "Bar feature", hidden: "Hidden", moved: "Moved {name} to position {position}.",
 };

@@ -152,3 +152,8 @@
 .bb-settings { font-family: var(--mac-font); font-feature-settings: normal; }
 
 :root[data-native-reduce-transparency="true"] .bb-settings .bb-settings-sidebar { background:var(--bb-bg); backdrop-filter:none; -webkit-backdrop-filter:none; }
+
+.bb-settings .bb-dock-settings { font-size:12px; line-height:1.6; padding:12px 0; color:var(--bb-dim); }
+.bb-settings .bb-dock-settings button { border:1px solid var(--bb-line-2); border-radius:6px; padding:5px 10px; background:var(--bb-pane); color:var(--bb-text); }
+.bb-settings .bb-dock-settings button:disabled { opacity:.4; }
+.bb-settings .bb-dock-settings ul { margin:0; padding:0; list-style:none; }

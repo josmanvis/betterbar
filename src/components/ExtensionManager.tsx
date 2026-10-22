@@ -16,6 +16,11 @@ const strings = {
   generic: "Customize this extension’s appearance and options.", count: "{shown} of {total} extensions",
 };
 const descriptions: Record<string, string> = {
+  "docked-apps": "Your pinned apps, files, and folders, organized in app sets.",
+  "opened-apps": "Currently open apps that are not already docked.",
+  terminal: "Launch your terminal and run a command from the bar.", spaces: "Switch macOS workspaces.",
+  caffeine: "Keep your Mac awake for a chosen duration.", "app-sets": "Switch between saved sets of docked items.",
+  simulators: "Quickly launch device simulators and virtual machines.", settings: "Open BetterBar settings. The ⌘, shortcut is always available.",
   "bkr-pipelines": "Warning when any latest BKR branch or tag pipeline fails, with links and automatic checks.",
   "gitlab-mrs": "Your open GitLab merge request count, assignments, and review requests.",
   bkrd: "Explore branches, tickets, merge requests, and local notes across your clones.",

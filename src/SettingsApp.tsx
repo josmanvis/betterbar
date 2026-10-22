@@ -1,3 +1,5 @@
+import { DockSettings } from "./components/DockSettings";
+import { EXTENSION_REPLACEMENTS } from "./extension-replacements";
 import { SystemSymbol } from "./components/SystemSymbol";
 import { WindowAppearance } from "./components/WindowAppearance";
 import "./settings-native.css";
@@ -430,12 +432,12 @@ function SettingsContent() {
                       enabled={config.grayscaleIdle}
                       onToggle={toggleGrayscaleIdle}
                     />
-                    <Toggle
+                    {!extensionNames.includes("opened-apps") && <Toggle
                       label="SHOW RUNNING"
                       description="Append running-but-unpinned apps after the pinned section"
                       enabled={config.showRunningApps}
                       onToggle={toggleShowRunningApps}
-                    />
+                    />}
                     <Toggle
                       label="HIDE SELF"
                       description="Hide BetterBar from the running apps list"
@@ -600,9 +602,10 @@ function SettingsContent() {
                 </Section>
 
                 <Section
-                  title="PINNED APPS"
+                  title="DOCKED ITEMS"
                   hint={`${activeSet.name} · ${activeSet.items.filter((i) => !i.hidden).length}/${activeSet.items.length}`}
                 >
+                  <DockSettings config={config} updateConfig={setConfig} showItems={false}/>
                   <ItemList
                     items={activeSet.items}
                     onRename={renameItem}
@@ -646,22 +649,22 @@ function SettingsContent() {
                 <Section title="VISIBLE SECTIONS">
                   <div className="flex flex-col">
                     <SubHead>Dock</SubHead>
-                    <Toggle
+                    {!extensionNames.includes("docked-apps") && <Toggle
                       label="DOCK AREA"
                       description="Show pinned apps and running apps"
                       enabled={config.showDockArea}
                       onToggle={toggleDockArea}
-                    />
-                    <Toggle
+                    />}
+                    {!extensionNames.includes("terminal") && <Toggle
                       label="TERMINAL ICON"
                       description="Show the blinking cursor terminal launcher"
                       enabled={config.showTerminalIcon}
                       onToggle={toggleTerminalIcon}
-                    />
+                    />}
 
                     <SubHead>Indicators</SubHead>
-                    {extensionNames.some(name => ["time", "media", "power"].includes(name)) && <p className="text-[11px] text-[var(--bb-dim)] leading-relaxed py-3">
-                      Time, Media, and Power are managed in <button className="underline text-[var(--bb-accent)]" onClick={() => setActiveTab("extensions")}>Extensions</button> when installed.
+                    {extensionNames.some(name => EXTENSION_REPLACEMENTS.some(item => item.name === name)) && <p className="text-[11px] text-[var(--bb-dim)] leading-relaxed py-3">
+                      Installed taskbar sections are managed in <button className="underline text-[var(--bb-accent)]" onClick={() => setActiveTab("extensions")}>Extensions</button> when installed.
                     </p>}
                     {!extensionNames.includes("media") && <Toggle
                       label="MUSIC"
@@ -681,44 +684,44 @@ function SettingsContent() {
                       enabled={config.showBattery}
                       onToggle={toggleBattery}
                     />}
-                    <Toggle
+                    {!extensionNames.includes("caffeine") && <Toggle
                       label="CAFFEINE / KEEP AWAKE"
                       description="Coffee-cup indicator that prevents display and system sleep"
                       enabled={config.showCaffeine}
                       onToggle={toggleCaffeine}
-                    />
-                    <Toggle
+                    />}
+                    {!extensionNames.includes("app-sets") && <Toggle
                       label="SET SWITCHER"
                       description="Show the set dots for switching app sets"
                       enabled={config.showSetSwitcher}
                       onToggle={toggleSetSwitcher}
-                    />
+                    />}
 
                     <SubHead>Extras</SubHead>
-                    <Toggle
+                    {!extensionNames.includes("simulators") && <Toggle
                       label="SIMULATOR ICONS"
                       description="Show simulator device quick-launch buttons"
                       enabled={config.showSimIcons}
                       onToggle={toggleSimIcons}
-                    />
-                    <Toggle
+                    />}
+                    {!extensionNames.includes("simulators") && <Toggle
                       label="SIMULATOR MORE MENU"
                       description="Show the '+' button for the full simulator list"
                       enabled={config.showSimDropdown}
                       onToggle={toggleSimDropdown}
-                    />
-                    <Toggle
+                    />}
+                    {!extensionNames.includes("spaces") && <Toggle
                       label="SPACES"
                       description="Show macOS workspace switcher rectangles"
                       enabled={config.showSpaces}
                       onToggle={toggleSpaces}
-                    />
-                    <Toggle
+                    />}
+                    {!extensionNames.includes("settings") && <Toggle
                       label="SETTINGS COG"
                       description="Show the settings cog button in the bar"
                       enabled={config.showSettingsCog}
                       onToggle={toggleSettingsCog}
-                    />
+                    />}
                   </div>
                 </Section>
 
