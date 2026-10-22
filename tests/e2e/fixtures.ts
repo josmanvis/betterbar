@@ -44,6 +44,7 @@ export async function installRuntime(page: Page, options: {
   pickedTargets?: {name: string; path: string; kind: "app" | "file" | "folder"; bundleId?: string}[];
   dropPlans?: {token: string; name: string; displayName: string; incomingVersion: string | null; installedVersion: string | null; existing: boolean; change: string; content: string}[];
   installFailure?: boolean;
+  inspectFailure?: boolean; inspectDelayMs?: number;
   pickerFailure?: boolean; pickerDelayMs?: number; launchFailure?: boolean;
   wifiStatus?: Record<string, unknown>;
   calendarAccess?: { status: string; error?: string; delayMs?: number; result?: string };
@@ -70,6 +71,7 @@ export async function installRuntime(page: Page, options: {
           if (options.dragFailure) reject(new Error("Drag failed"));
           else resolve(options.dragOutcome || "dropped");
         }, options.dragDelayMs || 50));
+        case "is_primary_mouse_button_down": return !!win.__primaryMouseDown;
         case "get_system_symbols": return {};
         case "get_wifi_status": return win.__wifiFailure ? Promise.reject(new Error("Wi-Fi unavailable")) : (win.__wifiStatus || options.wifiStatus);
         case "test_wifi_speed": {
@@ -123,8 +125,8 @@ export async function installRuntime(page: Page, options: {
           localStorage.setItem(registryKey, JSON.stringify(registry));
           return plan.name;
         }
-        case "pick_dock_items":
-        case "inspect_dock_paths": return new Promise((resolve, reject) => setTimeout(() => options.pickerFailure ? reject(new Error("Picker failed")) : resolve(options.pickedTargets || []), options.pickerDelayMs || 0));
+        case "inspect_dock_paths": return new Promise((resolve, reject) => setTimeout(() => options.inspectFailure ? reject(new Error("Inspection failed")) : resolve((options.pickedTargets || []).filter((item: any) => args.paths.includes(item.path))), options.inspectDelayMs || 0));
+        case "pick_dock_items": return new Promise((resolve, reject) => setTimeout(() => options.pickerFailure ? reject(new Error("Picker failed")) : resolve(options.pickedTargets || []), options.pickerDelayMs || 0));
         case "get_screen_info": return { width: 1440, height: 900, scale_factor: 1, menu_bar_height: 25, dock_height: 0 };
         case "get_window_outer_position": return [0, 832];
         case "get_battery_info": return { percentage: 80, is_charging: false, is_plugged: false, available: true };

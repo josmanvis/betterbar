@@ -8,7 +8,7 @@ import { useDragSource } from "@betterbar/api";
 declare function invoke<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T>;
 
 export const name = "Drawer";
-export const version = "1.1.0";
+export const version = "1.2.0";
 const WINDOW = "ext_apps_drawer";
 const RECENTS_KEY = "bb-apps-drawer-recents";
 const PREFS_KEY = "bb-apps-drawer-settings";
@@ -19,25 +19,29 @@ const GEOMETRY_RESET_KEY = "bb-apps-drawer-geometry-reset";
 const GEOMETRY_OPENING_KEY = "bb-apps-drawer-opening";
 const strings = {
   title: "Drawer", windowTitle: "Drawer — BetterBar", subtitle: "YOUR MAC, WITHIN REACH", open: "Open Drawer",
-  search: "Search apps and folders", placeholder: "Search apps and folders…", clear: "Clear search",
+  search: "Search apps, files and folders", placeholder: "Search apps, files and folders…", clear: "Clear search",
   all: "All items", recent: "Recent", refresh: "Refresh applications", close: "Close Drawer",
   loading: "Finding your apps…", empty: "No matching items", emptyHint: "Try a different name.",
-  noRecent: "Your next launch starts here", recentHint: "Apps and folders you open from Drawer will appear here.",
+  noRecent: "Your next launch starts here", recentHint: "Apps, files and folders you open from Drawer will appear here.",
   noApps: "No applications found", retry: "Try again", failed: "Could not load applications.",
   openFailed: "Could not open the drawer. Try again.", launchFailed: "Could not open this item. It may have moved or been removed.",
   closeFailed: "Could not close the drawer. Try again.",
+  dropHint: "Drop files and folders to pin", dropBusy: "Pinning items…", dropDone: "Items pinned to Drawer.",
+  dropFailed: "Could not pin these items. Check that they still exist and drop them again.",
+  dropListenFailed: "Could not receive Finder drops. Reopen Drawer or restart BetterBar to try again.",
+  removeShortcut: "Remove shortcut", file: "File",
   dragFailed: "Could not drag this item. Try again.",
   installed: "items", results: "results", enter: "open", escape: "close", navigate: "navigate",
-  settings: "Browse apps and folders, add folders with the + Folder button, and press Enter to open. Escape clears search or closes Drawer.",
+  settings: "Drop files and folders anywhere in Drawer to pin them, add folders with the + Folder button, and press Enter to open. Escape clears search or closes Drawer.",
   layout: "Drawer layout", library: "Library", panel: "Launch panel",
   libraryHint: "A spacious icon grid in a centered window.",
   panelHint: "Pinned favorites and an app list, opening beside your bar.",
   density: "Spacing", comfortable: "Comfortable", compact: "Compact",
-  showRecent: "Show recent items", showRecentHint: "Keep recently opened apps and folders within reach.",
+  showRecent: "Show recent items", showRecentHint: "Keep recently opened items within reach.",
   dismiss: "Dismiss when clicking outside", dismissHint: "Keep the drawer open by turning this off.",
   preview: "Open drawer", pinned: "Pinned", managePins: "Edit pins", done: "Done",
   pin: "Pin", unpin: "Unpin", pinHint: "Choose your favorites with Edit pins.",
-  pinsHint: "Pin apps and folders to your Launch panel. Removing a folder only removes its shortcut.",
+  pinsHint: "Pin your favorite items. Removing an item only removes its shortcut.",
   settingsError: "Could not save your drawer preferences. Try again.",
   appearance: "Appearance", behavior: "Behavior", window: "Window",
   iconSize: "Grid icon size", automatic: "Automatic", columns: "Grid columns",
@@ -47,7 +51,7 @@ const strings = {
   followAccent: "Follow bar accent", accentHint: "Use BetterBar’s accent, or choose a color just for the drawer.",
   customAccent: "Drawer accent", sort: "Item order", alphabetical: "Alphabetical", recentlyOpened: "Recently opened",
   recentLimit: "Recent items shown", panelStart: "Launch panel opens to",
-  closeOnLaunch: "Close after opening", closeOnLaunchHint: "Dismiss Drawer when you open an app or folder.",
+  closeOnLaunch: "Close after opening", closeOnLaunchHint: "Dismiss Drawer when you open an item.",
   rememberWindow: "Remember size and position", rememberHint: "Keep your window placement across opens and app restarts, separately for each layout.",
   resetWindow: "Reset window placement", resetWindowHint: "Use the default size and position the next time this layout opens.",
   resetDone: "Window placement reset.", clearRecents: "Clear recent items", recentsCleared: "Recent items cleared.",
@@ -59,14 +63,16 @@ const strings = {
   folderFailed: "Could not add folders. Try again.", folder: "Folder",
 };
 
-type App = { name: string; path: string; bundle_id: string; kind?: "folder" };
+type App = { name: string; path: string; bundle_id: string; kind?: "folder" | "file" };
 type Folder = { name: string; path: string };
+type Shortcut = Folder & { kind: "file" | "app"; bundleId?: string };
+type DropTarget = Folder & { kind: "file" | "folder" | "app"; bundleId?: string };
 type Preferences = {
   layout: "library" | "panel"; density: "comfortable" | "compact"; showRecent: boolean; dismissOnBlur: boolean; pins: string[];
   iconSize: number; columns: number; showLabels: boolean; showSubtitle: boolean; showFooter: boolean;
   followAccent: boolean; accentColor: string; sort: "name" | "recent"; recentLimit: number;
   closeOnLaunch: boolean; rememberWindow: boolean; panelStart: "home" | "all";
-  doubleTapCommand: boolean; folders: Folder[];
+  doubleTapCommand: boolean; folders: Folder[]; shortcuts: Shortcut[];
 };
 type WindowGeometry = {
   x: number; y: number; width: number; height: number; scale: number;
@@ -85,6 +91,17 @@ function validFolders(value: unknown): Folder[] {
       || !item.path.startsWith("/") || seen.has(item.path)) return false;
     seen.add(item.path); return true;
   }).map(({ name, path }) => ({ name, path }));
+}
+
+function validShortcuts(value: unknown): Shortcut[] {
+  if (!Array.isArray(value)) return [];
+  const paths = new Set(validFolders(value).map(item => item.path));
+  const seen = new Set<string>();
+  return value.filter((item): item is Shortcut => {
+    if (!item || !paths.has(item.path) || !["file", "app"].includes(item.kind) || seen.has(item.path)) return false;
+    seen.add(item.path); return true;
+  })
+    .map(({ name, path, kind, bundleId }) => ({ name, path, kind, ...(typeof bundleId === "string" ? { bundleId } : {}) }));
 }
 
 function barFolders(): Folder[] {
@@ -125,7 +142,7 @@ function readPreferences(): Preferences {
     closeOnLaunch: value.closeOnLaunch !== false, rememberWindow: value.rememberWindow !== false,
     panelStart: value.panelStart === "all" ? "all" : "home",
     doubleTapCommand: value.doubleTapCommand !== false,
-    folders: validFolders(value.folders),
+    folders: validFolders(value.folders), shortcuts: validShortcuts(value.shortcuts),
   };
 }
 
@@ -191,26 +208,28 @@ function usePreferences() {
     window.addEventListener(PREFS_EVENT, sync);
     return () => { window.removeEventListener("storage", sync); window.removeEventListener(PREFS_EVENT, sync); };
   }, []);
-  function update(patch: Partial<Preferences>) {
+  const update = React.useCallback((patch: Partial<Preferences>) => {
     try {
       const next = { ...readPreferences(), ...patch };
       localStorage.setItem(PREFS_KEY, JSON.stringify(next));
       setPreferences(next);
       setSaveError(false);
       window.dispatchEvent(new Event(PREFS_EVENT));
-    } catch { setSaveError(true); }
-  }
+      return true;
+    } catch { setSaveError(true); return false; }
+  }, []);
   return { preferences, update, saveError };
 }
 const iconCache = new Map<string, Promise<string | null>>();
 let iconQueue = Promise.resolve();
 
 function loadIcon(app: App): Promise<string | null> {
-  const key = app.kind === "folder" ? `folder:${app.path}` : app.bundle_id;
+  const pathIcon = !!app.kind || !app.bundle_id;
+  const key = pathIcon ? `path:${app.path}` : app.bundle_id;
   if (!key) return Promise.resolve(null);
   if (!iconCache.has(key)) {
     // Serialize native icon rendering; only visible tiles request an icon.
-    const result = iconQueue.then(() => app.kind === "folder"
+    const result = iconQueue.then(() => pathIcon
       ? invoke<string | null>("get_path_icon", { path: app.path }) : invoke<string | null>("get_app_icon", { bundleId: app.bundle_id })).catch(() => null);
     iconCache.set(key, result);
     iconQueue = result.then(() => undefined);
@@ -374,6 +393,11 @@ function Drawer() {
   const [launching, setLaunching] = React.useState<string | null>(null);
   const [pickingFolder, setPickingFolder] = React.useState(false);
   const folderPickerOpen = React.useRef(false);
+  const [dropActive, setDropActive] = React.useState(false);
+  const [dropBusy, setDropBusy] = React.useState(false);
+  const [dropStatus, setDropStatus] = React.useState("");
+  const incomingDrag = React.useRef(false);
+  const pendingDrops = React.useRef(0);
   const search = React.useRef<HTMLInputElement>(null);
   const grid = React.useRef<HTMLDivElement>(null);
   const mounted = React.useRef(false);
@@ -387,7 +411,7 @@ function Drawer() {
     nativeInteractionUntil.current = Date.now() + 350;
   }
   const isPanel = preferences.layout === "panel";
-  const showHome = isPanel && tab === "home" && !query.trim() && !editingPins;
+  const showHome = tab === "home" && !query.trim() && !editingPins;
   React.useEffect(() => { setTab(initialTab()); setEditingPins(false); }, [isPanel, preferences.panelStart]);
   React.useEffect(() => { if (!preferences.showRecent && tab === "recent") setTab("all"); }, [preferences.showRecent, tab]);
   React.useEffect(() => {
@@ -439,15 +463,28 @@ function Drawer() {
     mounted.current = true;
     let cancelled = false;
     let unlisten: (() => void) | undefined;
+    let focusGeneration = 0;
+    let blurTimer: ReturnType<typeof setTimeout> | undefined;
+    const busy = () => draggingApp.current || folderPickerOpen.current || incomingDrag.current || pendingDrops.current;
+    async function dismissWhenReleased(request: number) {
+      if (cancelled || request !== focusGeneration || busy()) return;
+      if (Date.now() < nativeInteractionUntil.current || !readPreferences().dismissOnBlur || keepOpenAfterLaunch.current) {
+        void persistGeometry(); return;
+      }
+      // Finder takes focus at mouse-down, before its drag reaches this window.
+      const pressed = await invoke<boolean>("is_primary_mouse_button_down").catch(() => false);
+      if (cancelled || request !== focusGeneration || busy() || Date.now() < nativeInteractionUntil.current) return;
+      if (pressed) blurTimer = setTimeout(() => { void dismissWhenReleased(request); }, 75);
+      else void hide();
+    }
     refresh();
     search.current?.focus();
     WebviewWindow.getCurrent().onFocusChanged(({ payload: focused }) => {
-      if (draggingApp.current || folderPickerOpen.current) return;
+      const request = ++focusGeneration;
+      clearTimeout(blurTimer);
+      if (busy()) return;
       if (!focused) {
-        // macOS temporarily blurs a borderless window during a native drag.
-        if (Date.now() < nativeInteractionUntil.current) { void persistGeometry(); return; }
-        if (readPreferences().dismissOnBlur && !keepOpenAfterLaunch.current) hide();
-        else void persistGeometry();
+        void dismissWhenReleased(request);
         return;
       }
       keepOpenAfterLaunch.current = false;
@@ -458,11 +495,53 @@ function Drawer() {
       search.current?.focus();
       refresh();
     }).then(stop => { if (!cancelled) unlisten = stop; else stop(); }).catch(() => console.error("Drawer operation failed."));
-    return () => { cancelled = true; mounted.current = false; generation.current++; unlisten?.(); };
+    return () => { cancelled = true; mounted.current = false; generation.current++; clearTimeout(blurTimer); unlisten?.(); };
   }, [refresh, hide]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    let queue = Promise.resolve();
+    WebviewWindow.getCurrent().onDragDropEvent(({ payload }) => {
+      if (cancelled) return;
+      incomingDrag.current = payload.type === "enter" || payload.type === "over";
+      setDropActive(incomingDrag.current);
+      nativeInteractionUntil.current = Date.now() + 500;
+      if (payload.type !== "drop" || !payload.paths.length) return;
+      pendingDrops.current++;
+      setDropBusy(true); setDropStatus(""); setError("");
+      // Inspect each batch in order, then merge with the latest saved preferences.
+      queue = queue.then(async () => {
+        try {
+          if (cancelled) return;
+          const targets = await invoke<DropTarget[]>("inspect_dock_paths", { paths: payload.paths });
+          if (cancelled || !targets.length) return;
+          const current = readPreferences();
+          const saved = update({
+            folders: validFolders([...current.folders, ...targets.filter(item => item.kind === "folder")]),
+            shortcuts: validShortcuts([...current.shortcuts, ...targets.filter(item => item.kind !== "folder")]),
+            pins: [...new Set([...current.pins, ...targets.map(item => item.path)])],
+          });
+          if (saved) { setQuery(""); setTab("home"); setEditingPins(false); setDropStatus(strings.dropDone); }
+        } catch { if (!cancelled) setError(strings.dropFailed); }
+        finally {
+          pendingDrops.current--;
+          nativeInteractionUntil.current = Date.now() + 500;
+          if (!cancelled) setDropBusy(pendingDrops.current > 0);
+        }
+      });
+    }).then(stop => { if (cancelled) stop(); else unlisten = stop; })
+      .catch(() => { if (!cancelled) setError(strings.dropListenFailed); });
+    return () => { cancelled = true; incomingDrag.current = false; unlisten?.(); };
+  }, [update]);
+
   const folders = React.useMemo(() => drawerFolders(preferences), [preferences]);
-  const items = React.useMemo(() => [...apps, ...folders].sort((a, b) => a.name.localeCompare(b.name)), [apps, folders]);
+  const items = React.useMemo(() => {
+    const shortcuts: App[] = preferences.shortcuts.map(item => ({ name: item.name, path: item.path,
+      bundle_id: item.bundleId || "", ...(item.kind === "file" ? { kind: "file" as const } : {}) }));
+    return [...new Map([...shortcuts, ...apps, ...folders].map(item => [item.path, item])).values()]
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [apps, folders, preferences.shortcuts]);
   const filtered = React.useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
     let source = tab === "folders" ? [...folders] : tab === "recent" && !term ? recents.slice(0, preferences.recentLimit).map(path => items.find(app => app.path === path)).filter((app): app is App => !!app) : [...items];
@@ -498,25 +577,25 @@ function Drawer() {
       if (mounted.current) { setPickingFolder(false); search.current?.focus(); }
     }
   }
-  function removeFolder(app: App) {
+  function removeShortcut(app: App) {
     const current = readPreferences();
-    update({ folders: current.folders.filter(folder => folder.path !== app.path), pins: current.pins.filter(path => path !== app.path) });
+    update({ folders: current.folders.filter(folder => folder.path !== app.path), shortcuts: current.shortcuts.filter(item => item.path !== app.path), pins: current.pins.filter(path => path !== app.path) });
   }
   function appButton(app: App, list = false, keyPrefix = "") {
     const pinned = preferences.pins.includes(app.path);
-    const removable = editingPins && app.kind === "folder" && !barFolders().some(folder => folder.path === app.path);
+    const removable = editingPins && (app.kind === "folder" || preferences.shortcuts.some(item => item.path === app.path)) && !barFolders().some(folder => folder.path === app.path);
     return <div className={`ad-tile ${list ? "ad-tile-row" : ""}`} key={keyPrefix + app.path}>
       <AppDragButton app={app} onDraggingChange={onDraggingChange} onError={() => setError(strings.dragFailed)}
         className="ad-app" title={app.path} disabled={launching !== null} data-ad-launch
         aria-label={app.name} onClick={() => launch(app)}>
         <AppIcon app={app} /><span className="ad-app-name">{app.name}</span>
-        {list && app.kind === "folder" && <span className="ad-kind">{strings.folder}</span>}
+        {list && app.kind && <span className="ad-kind">{app.kind === "folder" ? strings.folder : strings.file}</span>}
         {list && !editingPins && <span className="ad-row-arrow" aria-hidden="true">↗</span>}
       </AppDragButton>
       {editingPins && <button className="ad-pin" aria-pressed={pinned} aria-label={`${pinned ? strings.unpin : strings.pin} ${app.name}`}
         title={`${pinned ? strings.unpin : strings.pin} ${app.name}`} onClick={() => togglePin(app)}>{pinned ? "✓" : "+"}</button>}
-      {removable && <button className="ad-remove" aria-label={`${strings.removeFolder} ${app.name}`}
-        title={`${strings.removeFolder} ${app.name}`} onClick={() => removeFolder(app)}>×</button>}
+      {removable && <button className="ad-remove" aria-label={`${app.kind === "folder" ? strings.removeFolder : strings.removeShortcut} ${app.name}`}
+        title={`${app.kind === "folder" ? strings.removeFolder : strings.removeShortcut} ${app.name}`} onClick={() => removeShortcut(app)}>×</button>}
     </div>;
   }
 
@@ -537,7 +616,7 @@ function Drawer() {
   }
 
   function onKeyDown(event: React.KeyboardEvent) {
-    if (draggingApp.current || folderPickerOpen.current) return;
+    if (draggingApp.current || folderPickerOpen.current || incomingDrag.current || pendingDrops.current) return;
     if (event.nativeEvent.isComposing) return;
     if (event.key === "Escape") {
       event.preventDefault();
@@ -594,6 +673,8 @@ function Drawer() {
       "--ad-columns": preferences.columns ? `repeat(${preferences.columns}, minmax(0, 1fr))` : undefined,
     } as React.CSSProperties}>
     <style>{css}</style>
+    {(dropActive || dropBusy) && <div className="ad-drop-overlay" role="status"><span>{dropBusy ? strings.dropBusy : strings.dropHint}</span></div>}
+    {dropStatus && <span className="ad-drop-status" role="status">{dropStatus}</span>}
     <header className="ad-header" data-tauri-drag-region>
       <div className="ad-heading" data-tauri-drag-region>
         <span className="ad-mark"><GridIcon size={19} /></span>
@@ -609,7 +690,7 @@ function Drawer() {
     </div>
     <nav className="ad-toolbar" aria-label={strings.title}>
       <div className="ad-tabs">
-        {isPanel && <button aria-pressed={tab === "home" && !editingPins} onClick={() => { setTab("home"); setQuery(""); setEditingPins(false); }}>{strings.pinned}</button>}
+        <button aria-pressed={tab === "home" && !editingPins} onClick={() => { setTab("home"); setQuery(""); setEditingPins(false); }}>{strings.pinned}</button>
         <button aria-pressed={tab === "all" && !editingPins} onClick={() => { setTab("all"); setQuery(""); setEditingPins(false); }}>{strings.all}<span>{items.length}</span></button>
         <button aria-pressed={tab === "folders"} onClick={() => { setTab("folders"); setQuery(""); setEditingPins(false); }}>{strings.folders}<span>{folders.length}</span></button>
         {preferences.showRecent && !isPanel && <button aria-pressed={tab === "recent"} onClick={() => { setTab("recent"); setQuery(""); }}>{strings.recent}</button>}
@@ -777,7 +858,10 @@ function Choice({ label, value, options, onChange }: {
 const css = `
 .ad-trigger { flex-shrink:0; display:grid; place-items:center; background:transparent; color:var(--bb-dim); border:1px solid var(--bb-line); transition:color 150ms,border-color 150ms; }
 .ad-trigger:hover { color:var(--bb-accent); border-color:var(--bb-accent); }
-.ad-drawer { --ad-muted:var(--bb-dim); --ad-gap:16px; height:100%; display:flex; flex-direction:column; background:var(--bb-pane); color:var(--bb-text); font-family:"IBM Plex Mono",Menlo,monospace; border:1px solid var(--bb-line-2); }
+.ad-drawer { position:relative; --ad-muted:var(--bb-dim); --ad-gap:16px; height:100%; display:flex; flex-direction:column; background:var(--bb-pane); color:var(--bb-text); font-family:"IBM Plex Mono",Menlo,monospace; border:1px solid var(--bb-line-2); }
+.ad-drop-overlay { position:absolute; inset:6px; z-index:10; display:grid; place-items:center; pointer-events:none; border:2px dashed var(--bb-accent); background:color-mix(in srgb,var(--bb-pane) 90%,transparent); color:var(--bb-accent); font-size:14px; text-align:center; padding:24px; }
+.ad-drop-overlay span { padding:16px; background:var(--bb-pane); }
+.ad-drop-status { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 .ad-drawer button { font:inherit; color:inherit; background:transparent; border:0; }
 .ad-drawer button:disabled { opacity:.5; }
 .ad-drawer button:focus-visible,.ad-trigger:focus-visible { outline:2px solid var(--bb-accent); outline-offset:-2px; }

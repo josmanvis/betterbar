@@ -1,6 +1,7 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **Drawer drop to pin** — drop Finder files and folders anywhere in the open drawer to save pinned shortcuts, with native icons, drop feedback, duplicate handling, Pinned available in both layouts, and dismissal deferred while starting a drag in Finder.
 - **Drawer folders** — rename Apps Drawer to Drawer, add Finder folder shortcuts in both layouts, include active bar folders in search, pins and recents, and preserve existing drawer preferences.
 
 ## 0.11.1 — 2026-10-22

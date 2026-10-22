@@ -20,7 +20,7 @@ for (const layout of ["library", "panel"]) {
     await page.getByRole("button", { name: "Add folders", exact: true }).click();
     await expect(item).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Add folders", exact: true })).toBeEnabled();
-    const search = page.getByRole("searchbox", { name: "Search apps and folders" });
+    const search = page.getByRole("searchbox", { name: "Search apps, files and folders" });
     await search.fill("project");
     await search.press("Enter");
     await expect.poll(() => page.evaluate(() => (window as any).__ipcCalls.filter((c: any) => c.cmd === "launch_app").map((c: any) => c.args.path))).toContain(folder.path);
