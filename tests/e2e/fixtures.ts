@@ -40,6 +40,8 @@ export async function installRuntime(page: Page, options: {
   runningApps?: { name: string; bundle_id: string; pid: number; is_active: boolean }[];
   spaces?: { id: number; name: string; is_current: boolean }[];
   pickedTargets?: {name: string; path: string; kind: "app" | "file" | "folder"; bundleId?: string}[];
+  dropPlans?: {token: string; name: string; displayName: string; incomingVersion: string | null; installedVersion: string | null; existing: boolean; change: string; content: string}[];
+  installFailure?: boolean;
   pickerFailure?: boolean;
   wifiStatus?: Record<string, unknown>;
   nativeFailure?: boolean; nativeAccent?: string; reduceTransparency?: boolean; increaseContrast?: boolean;
@@ -52,6 +54,8 @@ export async function installRuntime(page: Page, options: {
       name: "sample-clock", display_name: "Sample Clock",
       content: 'export default function Clock() { return <button title="Sample clock">09:41</button>; } export function Settings() { return <label>Sample clock label<input aria-label="Sample clock label" defaultValue="Local time" /></label>; }',
     };
+    const registryKey = "__betterbar_test_registry";
+    if (options.dropPlans && !localStorage.getItem(registryKey)) localStorage.setItem(registryKey, JSON.stringify(options.registryExtensions || []));
     let standupRead = 0;
     win.mockWindows(options.label || "settings");
     win.mockIPC((cmd: string, args: any) => {
@@ -68,7 +72,7 @@ export async function installRuntime(page: Page, options: {
         }
         case "open_wifi_status_app": return null;
         case "get_macos_preferences": return { accent: options.nativeAccent || "#007aff", reduce_transparency: !!options.reduceTransparency, increase_contrast: !!options.increaseContrast, reduce_motion: true };
-        case "fetch_extension_files_from_disk": return options.registryExtensions || [extension];
+        case "fetch_extension_files_from_disk": return options.dropPlans ? JSON.parse(localStorage.getItem(registryKey) || "[]") : options.registryExtensions || [extension];
         case "read_standup_file": {
           const responses = options.standupResponses || [{ text: "# Standup" }];
           const response = responses[Math.min(standupRead++, responses.length - 1)];
@@ -100,6 +104,16 @@ export async function installRuntime(page: Page, options: {
         case "focus_app":
         case "focus_window":
         case "launch_app": return null;
+        case "inspect_bar_drop": return { items: options.pickedTargets || [], extensions: options.dropPlans || [] };
+        case "discard_dropped_extension": return null;
+        case "install_dropped_extension": {
+          const plan = options.dropPlans?.find((plan: any) => plan.token === args.token);
+          if (!plan || options.installFailure || (plan.existing && !args.confirm)) return Promise.reject(new Error("Install conflict"));
+          const registry = JSON.parse(localStorage.getItem(registryKey) || "[]").filter((ext: any) => ext.name !== plan.name);
+          registry.push({ name: plan.name, display_name: plan.displayName, content: plan.content });
+          localStorage.setItem(registryKey, JSON.stringify(registry));
+          return plan.name;
+        }
         case "pick_dock_items":
         case "inspect_dock_paths": return options.pickerFailure ? Promise.reject(new Error("Picker failed")) : options.pickedTargets || [];
         case "get_screen_info": return { width: 1440, height: 900, scale_factor: 1, menu_bar_height: 25, dock_height: 0 };

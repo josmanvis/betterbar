@@ -5,6 +5,7 @@ export interface ExtensionFile {
   name: string;
   display_name: string;
   content: string;
+  version?: string | null;
 }
 
 export interface LoadedExtension {
@@ -12,6 +13,7 @@ export interface LoadedExtension {
   displayName: string;
   Component: ComponentType<any>;
   Settings?: ComponentType<any>;
+  version?: string;
 }
 
 // We will fetch the registry dynamically from Rust
@@ -38,8 +40,8 @@ export async function fetchExtensionRegistry(): Promise<ExtensionFile[]> {
 
 // Synchronous getter for the UI (SettingsApp uses this on mount)
 // SettingsApp might mount before fetchExtensionRegistry completes, so we return empty if not ready.
-export function getExtensionRegistry(): { name: string; displayName: string }[] {
-  return cachedRegistry.map((ext) => ({ name: ext.name, displayName: ext.display_name }));
+export function getExtensionRegistry(): { name: string; displayName: string; version?: string | null }[] {
+  return cachedRegistry.map((ext) => ({ name: ext.name, displayName: ext.display_name, version: ext.version }));
 }
 
 export function useExtensionRegistry() {
@@ -95,6 +97,7 @@ export function useExtensions(enabled: string[]): LoadedExtension[] {
               displayName: mod.name || ext.display_name,
               Component: mod.default,
               Settings: mod.Settings,
+              version: typeof mod.version === "string" ? mod.version : ext.version || undefined,
             });
           }
         } catch {

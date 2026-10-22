@@ -19,7 +19,13 @@ export function DockSettings({ config, updateConfig, showItems = true }: Props) 
     try {
       const targets = await pickDockItems(kind);
       const current = latest.current.sets.find(set => set.id === setId);
-      if (current) save([...current.items, ...newDockItems(current.items, targets)], setId);
+      if (current && targets.length) {
+        const paths = new Set(targets.map(target => target.path));
+        const items = [...current.items.map(item => paths.has(item.path) && item.hidden ? { ...item, hidden: false } : item), ...newDockItems(current.items, targets)];
+        const latestConfig = latest.current;
+        updateConfig({ sets: latestConfig.sets.map(set => set.id === setId ? { ...set, items } : set), showDockArea: true, showExtensions: true,
+          enabledExtensions: [...new Set([...latestConfig.enabledExtensions, "docked-apps"])] });
+      }
     } catch { setError(true); } finally { setBusy(false); }
   }
   const sorted = [...(active?.items || [])].sort((a, b) => a.order - b.order);

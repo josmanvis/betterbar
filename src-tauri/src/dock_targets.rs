@@ -11,7 +11,7 @@ pub struct DockTarget {
     bundle_id: Option<String>,
 }
 
-fn inspect(paths: Vec<String>) -> Result<Vec<DockTarget>, String> {
+pub(crate) fn inspect(paths: Vec<String>) -> Result<Vec<DockTarget>, String> {
     let mut targets = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for input in paths {
@@ -65,7 +65,6 @@ pub async fn pick_dock_items(app: tauri::AppHandle, kind: String) -> Result<Vec<
             use cocoa::base::{id, nil, YES, NO};
             use cocoa::foundation::{NSAutoreleasePool, NSString};
             use objc::{class, msg_send, sel, sel_impl};
-            let mut paths = Vec::new();
             unsafe {
                 let pool = NSAutoreleasePool::new(nil);
                 let panel: id = msg_send![class!(NSOpenPanel), openPanel];
@@ -86,20 +85,26 @@ pub async fn pick_dock_items(app: tauri::AppHandle, kind: String) -> Result<Vec<
                 } else {
                     let _: () = msg_send![panel, setAllowedFileTypes: nil];
                 }
-                let result: i64 = msg_send![panel, runModal];
-                if result == 1 {
-                    let urls: id = msg_send![panel, URLs];
-                    let count: usize = msg_send![urls, count];
-                    for index in 0..count {
-                        let url: id = msg_send![urls, objectAtIndex: index];
-                        let path: id = msg_send![url, path];
-                        let ptr: *const std::os::raw::c_char = msg_send![path, UTF8String];
-                        if !ptr.is_null() { paths.push(std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()); }
+                // Keep the host event loop running while the native panel is open.
+                let _: id = msg_send![panel, retain];
+                let completion = block::ConcreteBlock::new(move |result: i64| {
+                    let mut paths = Vec::new();
+                    if result == 1 {
+                        let urls: id = msg_send![panel, URLs];
+                        let count: usize = msg_send![urls, count];
+                        for index in 0..count {
+                            let url: id = msg_send![urls, objectAtIndex: index];
+                            let path: id = msg_send![url, path];
+                            let ptr: *const std::os::raw::c_char = msg_send![path, UTF8String];
+                            if !ptr.is_null() { paths.push(std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()); }
+                        }
                     }
-                }
+                    let _ = send.send(paths);
+                    let _: () = msg_send![panel, release];
+                }).copy();
+                let _: () = msg_send![panel, beginWithCompletionHandler: &*completion];
                 let _: () = msg_send![pool, drain];
             }
-            let _ = send.send(paths);
         }).map_err(|_| "Could not open the file picker.".to_string())?;
         tauri::async_runtime::spawn_blocking(move || {
             let paths = receive.recv().map_err(|_| "The file picker closed unexpectedly.".to_string())?;
@@ -121,6 +126,16 @@ pub async fn get_path_icon(path: String) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn running_app_inventory_uses_native_records_and_active_state() {
+        let start = std::time::Instant::now();
+        let apps = crate::macos::get_running_apps();
+        assert!(!apps.is_empty());
+        assert!(apps.iter().all(|app| app.pid > 0 && !app.name.is_empty()));
+        assert!(apps.iter().filter(|app| app.is_active).count() <= 1);
+        assert!(start.elapsed() < std::time::Duration::from_secs(2));
+    }
     #[test]
     #[cfg(target_os = "macos")]
     fn renders_native_folder_and_document_icons() {

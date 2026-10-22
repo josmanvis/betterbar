@@ -6,6 +6,7 @@ mod bkr_pipelines;
 mod drawer_shortcut;
 mod applications;
 mod dock_targets;
+mod extension_installer;
 mod integrations;
 #[cfg(target_os = "macos")]
 mod signature;
@@ -741,55 +742,37 @@ mod macos {
     }
 
     pub fn get_running_apps() -> Vec<RunningApp> {
-        let output = Command::new("osascript")
-            .arg("-e")
-            .arg(
-                r#"set appList to ""
-tell application "System Events"
-    set runningApps to (every application process whose background only is false)
-    repeat with anApp in runningApps
-        set appName to name of anApp
-        set appPID to unix id of anApp
-        try
-            set appBundle to bundle identifier of anApp
-            if appBundle is missing value then
-                set appBundle to ""
-            end if
-        on error
-            set appBundle to ""
-        end try
-        set appList to appList & appName & "|" & appPID & "|" & appBundle & "\n"
-    end repeat
-end tell
-return appList"#,
-            )
-            .output();
-
-        match output {
-            Ok(out) => {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                stdout
-                    .lines()
-                    .filter(|l| l.contains('|'))
-                    .map(|line| {
-                        let parts: Vec<&str> = line.split('|').collect();
-                        let name = parts.first().unwrap_or(&"").trim().to_string();
-                        let pid: i32 = parts.get(1).unwrap_or(&"0").trim().parse().unwrap_or(0);
-                        let mut parsed_bundle = parts.get(2).unwrap_or(&"").trim().to_string();
-                        if parsed_bundle.is_empty() {
-                            parsed_bundle = name.to_lowercase().replace(' ', ".");
-                        }
-                        RunningApp {
-                            bundle_id: parsed_bundle,
-                            name,
-                            pid,
-                            is_active: false,
-                        }
-                    })
-                    .collect()
-            }
-            Err(_) => vec![],
+        use cocoa::base::{id, nil};
+        use objc::{class, msg_send, sel, sel_impl};
+        unsafe fn string(value: id) -> String {
+            if value == nil { return String::new(); }
+            let bytes: *const std::os::raw::c_char = msg_send![value, UTF8String];
+            if bytes.is_null() { String::new() } else { std::ffi::CStr::from_ptr(bytes).to_string_lossy().into_owned() }
         }
+        objc::rc::autoreleasepool(|| unsafe {
+            let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
+            if workspace == nil { return Vec::new(); }
+            let applications: id = msg_send![workspace, runningApplications];
+            let count: usize = msg_send![applications, count];
+            let mut result = Vec::new();
+            for index in 0..count {
+                let application: id = msg_send![applications, objectAtIndex: index];
+                let terminated: bool = msg_send![application, isTerminated];
+                if terminated { continue; }
+                let policy: i64 = msg_send![application, activationPolicy];
+                let bundle: id = msg_send![application, bundleIdentifier];
+                let bundle_id = string(bundle);
+                // Regular Dock apps, plus BetterBar when Hide self is disabled.
+                if policy != 0 && bundle_id != "com.betterbar.app" { continue; }
+                let localized_name: id = msg_send![application, localizedName];
+                let name = string(localized_name);
+                let pid: i32 = msg_send![application, processIdentifier];
+                let is_active: bool = msg_send![application, isActive];
+                if name.is_empty() || pid <= 0 { continue; }
+                result.push(RunningApp { name, bundle_id, pid, is_active });
+            }
+            result
+        })
     }
 
     pub fn launch_app(path: &str) -> Result<(), String> {
@@ -2399,6 +2382,7 @@ return "skip""#,
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(extension_installer::InstallerState::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             macos_settings::get_macos_preferences,
@@ -2424,6 +2408,9 @@ pub fn run() {
             get_installed_terminals,
             execute_terminal_command,
             launch_app,
+            extension_installer::inspect_bar_drop,
+            extension_installer::install_dropped_extension,
+            extension_installer::discard_dropped_extension,
             dock_targets::inspect_dock_paths,
             dock_targets::pick_dock_items,
             dock_targets::get_path_icon,

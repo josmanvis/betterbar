@@ -284,3 +284,56 @@ In **Settings → Extensions → WiFi Status → Settings**, toggle download, up
 Click the bar item for live traffic, local IPv4/IPv6, interface, signal/noise, link rate, display settings, and an **Open WiFiStatusApp** shortcut. macOS may redact the SSID when location access is unavailable; the extension explains this without calling a connected interface offline. Interface changes, counter resets, and long gaps establish a new traffic baseline. Failed polls retain a clearly marked previous reading. Network snapshots are kept in memory only.
 
 **Run speed test** makes a quick, bounded download/upload estimate using the [Cloudflare speed-test endpoints](https://github.com/cloudflare/speedtest/blob/main/README.md): 10 MB downloaded and 2 MB of synthetic payload uploaded. It runs only on request, follows the Mac's internet route (including a VPN), and may take up to 40 seconds on a slow or unavailable connection. Live rates count traffic on the Wi-Fi interface; link rate describes the radio connection. Speed-test results remain in memory until BetterBar quits. Partial failures are shown per direction; a failed retry keeps the previous result.
+
+## Install and update by dropping
+
+Drag applications, files, or folders from Finder directly onto BetterBar. They
+are added to the current app set. A drop reveals Docked Apps when needed;
+repeated paths are deduplicated and hidden matching pins become visible again.
+Application bundles always remain application pins.
+
+A `.tsx` source file that declares a literal `export const name` is recognized
+as an extension. A folder containing such a `main.tsx` is also recognized.
+Other source files and folders remain ordinary pins. The extension must export a
+default React component. The runtime remains a single-file TSX extension system:
+relative imports, arbitrary npm dependencies, archives, and package installation
+are not supported. Source is limited to 2 MB and validated before installation.
+
+Use stable IDs and semantic versions in extension files:
+
+```tsx
+export const id = "my-weather";
+export const name = "My Weather";
+export const version = "1.2.3";
+export default function Weather() {
+  return <button>Weather</button>;
+}
+```
+
+New extension drops install, enable, and render on the bar immediately. This runs
+extension code with the same native API access as other local extensions. An
+explicit ID identifies an installed extension even when the download is renamed.
+Without an ID, BetterBar matches the filename or an unambiguous installed display
+name, then derives an ID for a new extension. Metadata uses static string exports;
+reading a name or version does not evaluate extension code. Comments, quoted
+examples, and template literals do not supply metadata.
+
+Replacing an installed extension opens a review in Settings. It displays both
+versions and requires confirmation for upgrades, downgrades, and same-version
+replacements. Semantic version precedence includes prereleases; build metadata
+does not turn an otherwise identical version into an upgrade. Unversioned legacy
+extensions require an explicit replacement confirmation. Cancel leaves the
+installed source and enabled state untouched. Incoming code is not evaluated
+before confirmation.
+
+Approved replacements save the previous source under
+`~/.betterbar/backups/extension-installs/`, then replace `main.tsx` atomically and
+reload BetterBar windows. An extension that was disabled remains disabled when
+updated. If its installed source changes during review, the request is rejected;
+drop the file again to review the new state. Pending requests expire after 15
+minutes. Review preferences contain metadata and a temporary token, never source.
+Installed versions also appear in Settings → Extensions.
+
+`@tauri-apps/api/core` now supports importing `invoke` directly. The supported
+window imports also include `getCurrentWindow` and `getAllWindows`; event imports
+include `listen`, `once`, `emit`, and `emitTo` from `@tauri-apps/api/event`.

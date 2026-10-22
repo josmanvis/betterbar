@@ -2,7 +2,8 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { BarAPIContext, type NativeSectionName } from "../extension-api";
-import { inspectDockPaths, newDockItems } from "../dock-targets";
+import { handleBarDrop } from "../extension-install";
+import { newDockItems } from "../dock-targets";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   DndContext, closestCenter, PointerSensor,
@@ -134,6 +135,7 @@ interface DockBarProps {
   onRenameItem: (id: string, name: string) => void;
   onSetItemHidden: (id: string, hidden: boolean) => void;
   onAddItem: (item: DockItem) => void;
+  onEnableExtensions?: (names: string[]) => void;
   onToggleGrouping: (bundleId: string) => void;
   onSetItemIcon?: (id: string, icon: string | undefined) => void;
   onSetItemDeviceIcon?: (id: string, deviceIcon: string | undefined) => void;
@@ -149,7 +151,7 @@ export function DockBar({
   onSwitchSet,
   onFloatPositionChange, onSetFreeFloat,
   onRenameItem, onSetItemHidden,
-  onAddItem, onToggleGrouping,
+  onAddItem, onEnableExtensions, onToggleGrouping,
   onSetItemIcon, onSetItemDeviceIcon, onSetItemForceGlyph, onSetItemForceNative, onSetItemDisplayType,
 }: DockBarProps) {
 
@@ -180,20 +182,25 @@ export function DockBar({
   const showDocked = visible("pin", config.showDockArea);
   const showOpened = visible("run", config.showDockArea && config.showRunningApps);
   const spaces = useSpaces(visible("spaces", config.showSpaces));
-  const [dropError, setDropError] = useState(false);
+  const [dropError, setDropError] = useState<string | null>(null);
   const dockPaths = useCallback(async (paths: string[]) => {
     try {
-      const targets = await inspectDockPaths(paths);
+      const { items: targets, installed, warning } = await handleBarDrop(paths);
+      if (installed.length || targets.length) onEnableExtensions?.([...installed, ...(targets.length ? ["docked-apps"] : [])]);
+      for (const target of targets) {
+        const hidden = activeSet.items.find(item => item.path === target.path && item.hidden);
+        if (hidden) onSetItemHidden(hidden.id, false);
+      }
       for (const item of newDockItems(activeSet.items, targets)) onAddItem(item);
-      setDropError(false);
-    } catch { setDropError(true); }
-  }, [activeSet.items, onAddItem]);
+      setDropError(warning || null);
+    } catch (error) { setDropError(error instanceof Error ? error.message : typeof error === "string" ? error : "Could not add these items. Drop the files again to retry."); }
+  }, [activeSet.items, onAddItem, onEnableExtensions, onSetItemHidden]);
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
     getCurrentWebview().onDragDropEvent(event => {
       if (event.payload.type === "drop") void dockPaths(event.payload.paths);
-    }).then(stop => { if (cancelled) stop(); else unlisten = stop; }).catch(() => setDropError(true));
+    }).then(stop => { if (cancelled) stop(); else unlisten = stop; }).catch(() => setDropError("Could not listen for Finder drops. Restart BetterBar and try again."));
     return () => { cancelled = true; unlisten?.(); };
   }, [dockPaths]);
 
@@ -904,7 +911,7 @@ export function DockBar({
             {sectionNodes[item.id]}
           </SortableBarItem>;
         })}
-        {dropError && <button role="alert" onClick={() => setDropError(false)} className="px-3 text-[var(--bb-bad)]">Could not dock these items. Check that they are still available.</button>}
+        {dropError && <button role="alert" onClick={() => setDropError(null)} className="px-3 text-[var(--bb-bad)]">{dropError}</button>}
         <span className="sr-only" aria-live="polite">{layoutAnnouncement}</span>
 
         {/* Swipe label toast */}

@@ -236,6 +236,8 @@ dependencies = [
  "core-foundation",
  "dirs 7.0.0",
  "objc",
+ "regex",
+ "semver",
  "serde",
  "serde_json",
  "tauri",

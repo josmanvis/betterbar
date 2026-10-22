@@ -1,6 +1,8 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **Finder drop installation** — pin apps, files, and folders directly; install and enable dropped TSX extensions immediately. Review and confirm version upgrades, downgrades, identical versions, and legacy replacements, with backups, conflict detection, validation, and live reload. Show installed extension versions and support core/event API imports.
+- **Native app discovery and picker** — replace recurring AppleScript app discovery with NSWorkspace, retaining active-app state without an Automation grant. Keep native file selection asynchronous so the host event loop remains responsive.
 - **WiFi Status** — add a local extension with independent download, upload, IP, network name, signal, and link-rate display options; live Wi-Fi traffic, selectable Mbps/MB/s, and manual download/upload tests in a details window. Include the native bridge and a shortcut to WiFiStatusApp.
 - **Section extensions and docking** — add the host Bar API and replacement migration for Docked Apps, Opened Apps, Terminal, Spaces, Caffeine, App Sets, Simulators, and Settings. Preserve existing pins, visibility, and positions. Dock apps, files, and folders through native multi-select pickers or Finder drops, with native icons and default-app opening. Add local Focus Timer Clock/Pomodoro icon preferences without resetting sessions.
 - **Idle performance** — preserve unchanged app/window list references, prevent overlapping native polls, stop hidden Spaces queries, defer the extension compiler, and reuse unchanged extension modules across toggles/reloads. Add unit, browser, and performance regression coverage.

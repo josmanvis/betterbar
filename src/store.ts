@@ -253,10 +253,9 @@ export function useConfig() {
   // Item operations (within active set)
   const addItem = useCallback(
     (item: DockItem) => {
-      updateActiveSet((s) => ({
-        ...s,
-        items: [...s.items, { ...item, order: s.items.length }],
-      }));
+      updateActiveSet(set => set.items.some(existing => existing.id === item.id || (!!item.path && existing.path === item.path)) ? set : {
+        ...set, items: [...set.items, { ...item, order: set.items.length }],
+      });
     },
     [updateActiveSet]
   );
@@ -624,6 +623,9 @@ export function useConfig() {
     toggleSettingsCog,
     toggleCaffeine: useCallback(() => setConfig((p) => ({ ...p, showCaffeine: !p.showCaffeine })), [setConfig]),
     toggleExtension,
+    enableExtensions: useCallback((names: string[]) => {
+      setConfig(previous => ({ ...previous, showExtensions: true, ...(names.includes("docked-apps") ? { showDockArea: true } : {}), enabledExtensions: [...new Set([...previous.enabledExtensions, ...names])] }));
+    }, [setConfig]),
     setSectionPadding: useCallback((sectionId: SectionId, padding: SectionPadding) => {
       setConfig((prev) => {
         const styles = { ...(prev.sectionStyles || {}) };

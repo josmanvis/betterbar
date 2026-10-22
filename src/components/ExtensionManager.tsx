@@ -32,7 +32,7 @@ const descriptions: Record<string, string> = {
   power: "Battery level and charging status.", floatnote: "Open Floatnote from your bar.",
   timesheets: "Open Timesheets from your bar.", "Standup Update": "Read your latest standup update.",
 };
-type Extension = { name: string; displayName: string };
+type Extension = { name: string; displayName: string; version?: string | null };
 type Props = { config: BetterBarConfig; extensions: Extension[]; loaded: LoadedExtension[]; ready: boolean;
   update: (patch: Partial<BetterBarConfig>) => void; toggle: (name: string) => void; revealName?: string };
 
@@ -80,12 +80,14 @@ export function ExtensionManager({ config, extensions, loaded, ready, update, to
         const Settings = extension?.Settings;
         const displayName = extension?.displayName || ext.displayName.replace(/\b\w/g, letter => letter.toUpperCase());
         const open = expanded === ext.name;
+        const version = extension?.version || ext.version;
+        const status = enabled ? config.showExtensions ? strings.enabled : strings.hidden : strings.disabled;
         const panelId = `extension-options-${encodeURIComponent(ext.name)}`;
         return <div className="bb-extension-card" key={ext.name}>
           <div className="bb-extension-header">
             <PuzzlePiece size={20} aria-hidden="true"/>
             <div className="bb-extension-heading"><h2>{displayName}</h2><p>{descriptions[ext.name] || strings.generic}</p>
-              <small>{enabled ? config.showExtensions ? strings.enabled : strings.hidden : strings.disabled}</small>
+              <small>{version ? `${status} · v${version}` : status}</small>
             </div>
             <button className="bb-extension-switch" role="switch" aria-checked={enabled}
               aria-label={(enabled ? strings.disable : strings.enable).replace("{name}", displayName)}

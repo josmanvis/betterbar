@@ -125,3 +125,20 @@ baseline had one host-sensitive tab latency failure out of 30 checks.
 For concurrent local work, set `PLAYWRIGHT_PORT` to a different preview port and
 use Playwright's `--output` option and `PLAYWRIGHT_HTML_OUTPUT_DIR` for independent
 artifacts. Defaults remain suitable for ordinary local runs and CI.
+
+## Drag installation and native app discovery
+
+Finder drops now distinguish ordinary dock targets from TSX extensions. New
+extensions activate immediately. Existing ones open a themed, keyboard-accessible
+version review in Settings; upgrades, downgrades, identical versions, and legacy
+unversioned replacements all require confirmation. Syntax and supported imports
+are checked before writes or evaluation. Native tests cover semantic versions,
+comment-safe metadata, backups, cancellation, atomic replacement, and concurrent
+source changes; browser scenarios cover activation, review focus, cancellation,
+invalid syntax, and live reload. No private extension sources are committed.
+
+The native file picker uses asynchronous completion to keep the host event loop
+running. Running apps now come from `NSWorkspace.runningApplications`, replacing
+a recurring AppleScript subprocess and reporting actual foreground-app state.
+App discovery no longer requires an Automation grant. Window focus and previews
+still use their normal macOS Accessibility and Screen Recording permissions.

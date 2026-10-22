@@ -1,3 +1,4 @@
+import { ExtensionInstallReview } from "./components/ExtensionInstallReview";
 import { DockSettings } from "./components/DockSettings";
 import { EXTENSION_REPLACEMENTS } from "./extension-replacements";
 import { SystemSymbol } from "./components/SystemSymbol";
@@ -296,6 +297,7 @@ function SettingsContent() {
       style={settingsThemeStyle(config)}
       className="bb-settings bb-native-surface h-screen bg-[var(--bb-bg)] text-[var(--bb-text)] flex flex-col"
     >
+      <ExtensionInstallReview/>
       <WindowAppearance config={config}/>
       <div className="bb-settings-titlebar" data-tauri-drag-region/>
       <div className="bb-settings-shell flex-1 min-h-0 flex" inert={!!confirmDialog}>

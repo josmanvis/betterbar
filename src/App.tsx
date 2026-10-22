@@ -21,6 +21,7 @@ export default function App() {
     setBarOrder,
     removeItem,
     addItem,
+    enableExtensions,
     renameItem,
     setItemHidden,
     setItemIcon,
@@ -43,6 +44,7 @@ export default function App() {
       onSetBarOrder={setBarOrder}
       onRemove={removeItem}
       onAddItem={addItem}
+      onEnableExtensions={enableExtensions}
       onRenameItem={renameItem}
       onSetItemHidden={setItemHidden}
       onSetBarSize={setBarSize}
