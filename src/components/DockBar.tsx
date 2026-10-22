@@ -183,6 +183,7 @@ export function DockBar({
   const showOpened = visible("run", config.showDockArea && config.showRunningApps);
   const spaces = useSpaces(visible("spaces", config.showSpaces));
   const [dropError, setDropError] = useState<string | null>(null);
+  const [dropActive, setDropActive] = useState(false);
   const dockPaths = useCallback(async (paths: string[]) => {
     try {
       const { items: targets, installed, warning } = await handleBarDrop(paths);
@@ -199,6 +200,7 @@ export function DockBar({
     let cancelled = false;
     let unlisten: (() => void) | undefined;
     getCurrentWebview().onDragDropEvent(event => {
+      setDropActive(event.payload.type === "enter" || event.payload.type === "over");
       if (event.payload.type === "drop") void dockPaths(event.payload.paths);
     }).then(stop => { if (cancelled) stop(); else unlisten = stop; }).catch(() => setDropError("Could not listen for Finder drops. Restart BetterBar and try again."));
     return () => { cancelled = true; unlisten?.(); };
@@ -857,6 +859,7 @@ export function DockBar({
       <SortableContext items={orderedItems.map(item => item.id)} strategy={isVertical ? verticalListSortingStrategy : horizontalListSortingStrategy}>
       <div
         ref={barRef}
+        data-bb-drop-target={dropActive || undefined}
         onDragOver={event => {
           if (event.dataTransfer.types.includes("text/x-betterbar-id") || !event.dataTransfer.types.includes("Files")) return;
           event.preventDefault(); event.dataTransfer.dropEffect = "copy";
@@ -879,6 +882,7 @@ export function DockBar({
         `}
         style={{
           ...barSurface(config),
+          ...(dropActive ? { outline: "2px solid var(--bb-accent)", outlineOffset: -3 } : {}),
           width: config.freeFloat ? undefined : (isVertical ? config.barSize : undefined),
           height: config.freeFloat ? undefined : (isVertical ? undefined : config.barSize),
         } as any}

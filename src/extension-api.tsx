@@ -3,6 +3,7 @@ import type { BetterBarConfig, DockItem, RunningApp, WindowDetails } from "./typ
 export { focusApp, focusWindow, launchApp, openSettingsWindow } from "./tauri-bridge";
 export { inspectDockPaths, pickDockItems } from "./dock-targets";
 export { DockSettings } from "./components/DockSettings";
+export { startDrag, useDragSource, type DragOutcome } from "./extension-drag";
 
 export const API_VERSION = 1;
 

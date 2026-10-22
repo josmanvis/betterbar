@@ -23,7 +23,7 @@ function evaluate(file, extra='', extraModules={}, react=React, invoke=async()=>
   const exports={}; new Function('exports','module','require','React','invoke',code)(exports,{exports},id=>{assert.ok(id in modules,id);return modules[id];},react,invoke); return exports;
 }
 (async()=>{
- const ext=evaluate('extensions/apps-drawer/main.tsx','export {readPreferences,readGeometry,persistGeometry,resetGeometry,openDrawer,toggleDrawer};');
+ const ext=evaluate('extensions/apps-drawer/main.tsx','export {readPreferences,readGeometry,persistGeometry,resetGeometry,openDrawer,toggleDrawer};', {'@betterbar/api':{}});
  assert.equal(ext.readPreferences().rememberWindow,true);
  assert.equal(ext.readPreferences().doubleTapCommand,true);
  data.set('bb-apps-drawer-settings',JSON.stringify({doubleTapCommand:false}));assert.equal(ext.readPreferences().doubleTapCommand,false);

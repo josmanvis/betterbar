@@ -1,6 +1,7 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **Extension drag and drop** — expose native copy-only file drags and reusable tile bindings through `@betterbar/api`, including from separate extension windows. Drag Apps Drawer tiles onto BetterBar to pin them to the active set, preserving normal launch clicks, duplicate handling, and hidden-pin recovery. Keep the drawer open during drags and highlight the bar as a drop target.
 - **Calendar permission fix** — sign Hardened Runtime builds with the Calendar entitlement so macOS can present consent. Start requests on the main thread, retain the event store through completion, display native errors and pending state, and distinguish unrequested access from denial. Cover connection/retry states and entitlement preservation during local signature repair.
 - **Permission registration** — request Accessibility and Screen Recording through the macOS APIs before opening System Settings, so the installed executable is registered for its grants.
 - **Finder drop installation** — pin apps, files, and folders directly; install and enable dropped TSX extensions immediately. Review and confirm version upgrades, downgrades, identical versions, and legacy replacements, with backups, conflict detection, validation, and live reload. Show installed extension versions and support core/event API imports.

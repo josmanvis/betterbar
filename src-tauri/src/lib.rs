@@ -7,6 +7,7 @@ mod drawer_shortcut;
 mod applications;
 mod dock_targets;
 mod extension_installer;
+mod extension_drag;
 mod integrations;
 mod wifi_status;
 #[cfg(target_os = "macos")]
@@ -2423,6 +2424,7 @@ pub fn run() {
             execute_terminal_command,
             launch_app,
             extension_installer::inspect_bar_drop,
+            extension_drag::start_extension_drag,
             extension_installer::install_dropped_extension,
             extension_installer::discard_dropped_extension,
             dock_targets::inspect_dock_paths,

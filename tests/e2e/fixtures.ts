@@ -34,6 +34,8 @@ export const seed: BetterBarConfig = {
 };
 
 export async function installRuntime(page: Page, options: {
+  dragOutcome?: string; dragFailure?: boolean; dragDelayMs?: number;
+  installedApps?: { name: string; path: string; bundle_id: string }[];
   label?: "main" | "settings" | `ext_${string}`; config?: BetterBarConfig; emptyApps?: boolean;
   registryExtensions?: { name: string; display_name: string; content: string }[];
   standupResponses?: { text?: string; error?: boolean; delayMs?: number }[];
@@ -63,6 +65,11 @@ export async function installRuntime(page: Page, options: {
       win.__ipcCalls.push({ cmd, args });
       if (options.nativeFailure && ["get_macos_preferences", "get_system_symbols"].includes(cmd)) return Promise.reject(new Error("Native appearance unavailable"));
       switch (cmd) {
+        case "get_installed_apps": return options.installedApps || [];
+        case "start_extension_drag": return new Promise((resolve, reject) => setTimeout(() => {
+          if (options.dragFailure) reject(new Error("Drag failed"));
+          else resolve(options.dragOutcome || "dropped");
+        }, options.dragDelayMs || 50));
         case "get_system_symbols": return {};
         case "get_wifi_status": return win.__wifiFailure ? Promise.reject(new Error("Wi-Fi unavailable")) : (win.__wifiStatus || options.wifiStatus);
         case "test_wifi_speed": {

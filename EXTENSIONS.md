@@ -287,6 +287,44 @@ Click the bar item for live traffic, local IPv4/IPv6, interface, signal/noise, l
 
 ## Install and update by dropping
 
+### Dragging from extension windows
+
+`@betterbar/api` exports `startDrag({ paths })` and `useDragSource(...)` for native
+macOS file drags. Both work in extension windows as well as bar components;
+they do not require `useBetterBar()`. Paths must be existing absolute local
+paths (1–64 items). The native operation offers copying only. Dropping onto
+BetterBar pins the items to the active app set using the same validation,
+deduplication, and hidden-pin recovery as Finder drops. Other applications can
+also accept these native file drags.
+
+```tsx
+import { useDragSource } from "@betterbar/api";
+function AppTile({ app, launch, reportError }) {
+  const { dragProps, dragging } = useDragSource({
+    paths: [app.path],
+    onError: reportError,
+    onDraggingChange: active => { /* suspend window blur dismissal while active */ },
+  });
+  return <button {...dragProps} onClick={() => launch(app)}
+    style={{ opacity: dragging ? 0.5 : 1 }}>{app.name}</button>;
+}
+```
+
+The hook begins after 6px of primary-button movement, suppresses the resulting
+mouse click, and preserves ordinary clicks and keyboard activation. It returns
+`dragging` and pointer/click bindings in `dragProps`. Optional `onDragEnd` receives
+`"dropped"` or `"cancelled"`; `onError` receives failures; `onDraggingChange`
+runs at start and after every completion, cancellation, or failure. Keep blur
+dismissal suspended until completion. `startDrag({ paths })` returns a promise
+with the same outcome and rejects on failure; call it during a held mouse drag.
+A quick release before native startup resolves as `"cancelled"`.
+
+Press and hold an Apps Drawer tile, then drag it onto BetterBar to pin it.
+Both layouts support this, including search, favorites, and recents.
+Dragging keeps the drawer open and does not launch the
+app. BetterBar highlights while a native drag is over it. A native host rebuild
+and the updated local Apps Drawer are both required.
+
 Drag applications, files, or folders from Finder directly onto BetterBar. They
 are added to the current app set. A drop reveals Docked Apps when needed;
 repeated paths are deduplicated and hidden matching pins become visible again.
