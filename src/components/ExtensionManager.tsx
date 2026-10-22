@@ -24,7 +24,7 @@ const descriptions: Record<string, string> = {
   "bkr-pipelines": "Warning when any latest BKR branch or tag pipeline fails, with links and automatic checks.",
   "gitlab-mrs": "Your open GitLab merge request count, assignments, and review requests.",
   bkrd: "Explore branches, tickets, merge requests, and local notes across your clones.",
-  "apps-drawer": "Find and launch apps, with your favorites close at hand.",
+  "apps-drawer": "Find apps and folders, with your favorites close at hand.",
   "apple-calendar": "Upcoming events from your Mac’s calendars.",
   "focus-timer": "A simple timer for focus sessions and breaks.",
   "system-monitor": "Live CPU and memory use at a glance.",

@@ -1,5 +1,5 @@
 import { test, expect, installRuntime, savedConfig, seed } from "./fixtures";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 const tile = { name: "drag-source", display_name: "Drag Source", content: `
   import React from "react";
@@ -47,18 +47,17 @@ test("native drag highlights the bar, pins only on drop, and deduplicates subseq
   await page.reload(); await expect(page.getByRole("button", { name: "Example", exact: true })).toBeVisible();
 });
 
-// The drawer remains local-only; clean public checkouts test the generic API above.
+// Drawer source is published so native drag behavior runs in clean checkouts too.
 for (const layout of ["library", "panel"]) {
-  test(`local Apps Drawer ${layout} keeps search and visibility during a drag`, async ({ page }, testInfo) => {
+  test(`Drawer ${layout} keeps search and visibility during a drag`, async ({ page }, testInfo) => {
     const file = "extensions/apps-drawer/main.tsx";
-    test.skip(!existsSync(file), "Apps Drawer is installed locally only");
     await installRuntime(page, { label: "ext_apps_drawer", dragDelayMs: 1000,
-      registryExtensions: [{ name: "apps-drawer", display_name: "Apps Drawer", content: readFileSync(file, "utf8") }],
+      registryExtensions: [{ name: "apps-drawer", display_name: "Drawer", content: readFileSync(file, "utf8") }],
       installedApps: [{ name: "Example", path: "/Applications/Example.app", bundle_id: "com.example.App" }],
     });
     await page.addInitScript(layout => localStorage.setItem("bb-apps-drawer-settings", JSON.stringify({ layout, dismissOnBlur: true })), layout);
     await page.goto("/?ext=apps-drawer");
-    const search = page.getByRole("searchbox", { name: "Search applications" }); await search.fill("Example");
+    const search = page.getByRole("searchbox", { name: "Search apps and folders" }); await search.fill("Example");
     const app = page.getByRole("button", { name: "Example", exact: true }); await expect(app).toBeVisible();
     const box = await app.boundingBox();
     await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2); await page.mouse.down();
