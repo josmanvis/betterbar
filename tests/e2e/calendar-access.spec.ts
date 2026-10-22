@@ -17,10 +17,12 @@ for (const status of ["not-determined", "write-only"]) {
 
 for (const status of ["denied", "restricted"]) {
   test(`Calendar ${status} access stays unavailable until System Settings grants it`, async ({ page }) => {
-    await installRuntime(page, { registryExtensions, config: { ...seed, enabledExtensions: [] }, calendarAccess: { status, result: status } });
+    await installRuntime(page, { registryExtensions, config: { ...seed, enabledExtensions: [] }, calendarAccess: { status, result: status, delayMs: 100 } });
     await page.goto("/");
     await page.getByRole("tab", { name: "Permissions", exact: true }).click();
     await page.getByRole("button", { name: "Connect calendars", exact: true }).click();
+    // Let the pending request finish before simulating a later Settings grant.
+    await expect(page.getByRole("button", { name: "Connect calendars", exact: true })).toBeEnabled();
     await expect(page.getByText(`[ ${status.toUpperCase()} ]`, { exact: true })).toBeVisible();
     await expect(page.getByText("[ GRANTED ]", { exact: true })).toHaveCount(2);
     await page.evaluate(() => { (window as any).__calendarStatus = "authorized"; });
