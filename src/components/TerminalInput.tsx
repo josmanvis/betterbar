@@ -176,6 +176,7 @@ export function TerminalInput({
           border-b border-[var(--bb-line)] transition-colors duration-75
         `}
         title="Run Terminal Command"
+        style={{ minWidth: isVertical ? undefined : 48, minHeight: isVertical ? 28 : 32 }}
       >
         <span className="bb-caret text-[14px] px-4">▍</span>
       </button>

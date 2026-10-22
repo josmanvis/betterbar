@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DockItem } from "../types";
+import { invoke } from "@tauri-apps/api/core";
 import { getAppIcon } from "../tauri-bridge";
 
 /** Resolve bundleId → base64 icon data URL. Each bundle is fetched at most once
@@ -14,7 +15,7 @@ export function useAppIcons(items: DockItem[]): Record<string, string> {
   // when the actual set changes — not on every render. Re-running on every
   // render previously cancelled in-flight fetches and left them stuck.
   const bundleIds = useMemo(
-    () => Array.from(new Set(items.filter((i) => i.bundleId && !i.icon).map((i) => i.bundleId!))),
+    () => Array.from(new Set(items.filter(i => !i.icon && (i.bundleId || i.path)).map(i => i.bundleId || i.path))),
     [items]
   );
   const key = bundleIds.join("|");
@@ -24,7 +25,7 @@ export function useAppIcons(items: DockItem[]): Record<string, string> {
       if (statusRef.current[bundleId]) return; // loading | done | miss
       statusRef.current[bundleId] = "loading";
       try {
-        const data = await getAppIcon(bundleId);
+        const data = bundleId.startsWith("/") ? await invoke<string | null>("get_path_icon", { path: bundleId }) : await getAppIcon(bundleId);
         if (data) {
           statusRef.current[bundleId] = "done";
           setIcons((prev) => ({ ...prev, [bundleId]: data }));

@@ -1,18 +1,11 @@
-import { useState, useEffect } from "react";
-import * as React from "react";
-import type { ComponentType } from "react";
+import { useState, useEffect, type ComponentType } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { transform } from "sucrase";
-import { marked } from "marked";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
-import { availableMonitors, currentMonitor } from "@tauri-apps/api/window";
-import { homeDir, join } from "@tauri-apps/api/path";
 
 export interface ExtensionFile {
   name: string;
   display_name: string;
   content: string;
+  version?: string | null;
 }
 
 export interface LoadedExtension {
@@ -20,12 +13,14 @@ export interface LoadedExtension {
   displayName: string;
   Component: ComponentType<any>;
   Settings?: ComponentType<any>;
+  version?: string;
 }
 
 // We will fetch the registry dynamically from Rust
 let cachedRegistry: ExtensionFile[] = [];
 let registryLoaded = false;
 let registryPromise: Promise<ExtensionFile[]> | null = null;
+const evaluated = new Map<string, { content: string; module: any }>();
 const registryListeners = new Set<() => void>();
 const RELOAD_KEY = "betterbar-extensions-reload";
 let watchingReloads = false;
@@ -38,15 +33,15 @@ export async function fetchExtensionRegistry(): Promise<ExtensionFile[]> {
       registryLoaded = true;
       registryListeners.forEach(listener => listener());
       return exts;
-    });
+    }).catch(error => { registryPromise = null; throw error; });
   }
   return registryPromise;
 }
 
 // Synchronous getter for the UI (SettingsApp uses this on mount)
 // SettingsApp might mount before fetchExtensionRegistry completes, so we return empty if not ready.
-export function getExtensionRegistry(): { name: string; displayName: string }[] {
-  return cachedRegistry.map((ext) => ({ name: ext.name, displayName: ext.display_name }));
+export function getExtensionRegistry(): { name: string; displayName: string; version?: string | null }[] {
+  return cachedRegistry.map((ext) => ({ name: ext.name, displayName: ext.display_name, version: ext.version }));
 }
 
 export function useExtensionRegistry() {
@@ -68,36 +63,6 @@ export function useExtensionRegistry() {
   return registry;
 }
 
-function evaluateExtension(tsxCode: string, name: string) {
-  try {
-    const jsCode = transform(tsxCode, {
-      transforms: ["typescript", "jsx", "imports"],
-      jsxPragma: "React.createElement",
-      jsxFragmentPragma: "React.Fragment",
-    }).code;
-
-    const exports: any = {};
-    const module = { exports };
-    const require_fn = (id: string) => {
-      if (id === "react") return React;
-      if (id === "marked") return { marked };
-      if (id === "@tauri-apps/api/webviewWindow") return { WebviewWindow };
-      if (id === "@tauri-apps/api/dpi") return { LogicalSize, PhysicalPosition };
-      if (id === "@tauri-apps/api/window") return { availableMonitors, currentMonitor };
-      if (id === "@tauri-apps/api/path") return { homeDir, join };
-      throw new Error(`Cannot require ${id} in extension`);
-    };
-
-    const f = new Function("exports", "module", "require", "React", "invoke", jsCode);
-    f(exports, module, require_fn, React, invoke);
-
-    return module.exports;
-  } catch (err) {
-    console.error(`[extensions] Failed to evaluate "${name}":`, err);
-    throw err;
-  }
-}
-
 export function useExtensions(enabled: string[]): LoadedExtension[] {
   const [loaded, setLoaded] = useState<LoadedExtension[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
@@ -113,28 +78,36 @@ export function useExtensions(enabled: string[]): LoadedExtension[] {
 
     async function loadAll() {
       const results: LoadedExtension[] = [];
+      if (!enabled.length) { setLoaded([]); return; }
       const exts = await fetchExtensionRegistry();
-
+      const { evaluateExtension } = await import("./extension-evaluator");
+      if (cancelled) return;
       for (const ext of exts) {
         if (!enabled.includes(ext.name)) continue;
         try {
-          const mod = evaluateExtension(ext.content, ext.name);
+          let cached = evaluated.get(ext.name);
+          if (!cached || cached.content !== ext.content) {
+            cached = { content: ext.content, module: evaluateExtension(ext.content, ext.name) };
+            evaluated.set(ext.name, cached);
+          }
+          const mod = cached.module;
           if (mod && mod.default) {
             results.push({
               name: ext.name,
               displayName: mod.name || ext.display_name,
               Component: mod.default,
               Settings: mod.Settings,
+              version: typeof mod.version === "string" ? mod.version : ext.version || undefined,
             });
           }
-        } catch (e) {
-          console.error(`[extensions] Failed to load "${ext.name}":`, e);
+        } catch {
+          console.error(`[extensions] Failed to load "${ext.name}".`);
         }
       }
       if (!cancelled) setLoaded(results);
     }
 
-    loadAll();
+    loadAll().catch(() => { if (!cancelled) console.error("[extensions] Could not load extensions."); });
     return () => { cancelled = true; };
   }, [enabled.join(","), reloadKey]);
 

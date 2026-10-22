@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": ["node"], "noUnusedLocals": false },
+  "include": ["playwright.config.ts", "tests/e2e/**/*.ts"],
+  "references": []
+}

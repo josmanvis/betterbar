@@ -1,0 +1,161 @@
+# BetterBar next
+
+`next` combines the taskbar from `feat/independent-bar-items` with the Settings
+window from `macos-native-ui`. Existing local work and local-only extensions are
+preserved. The macOS experiment's taskbar redesign and layout preset are omitted.
+
+Settings has a compact sidebar, macOS system typography, SF Symbols rendered by
+AppKit, native traffic lights, a draggable title area, sidebar material, aligned
+preference rows, segmented controls, switches, and keyboard-accessible dialogs.
+The webview controls remain React/HTML.
+
+Style → Window appearance offers Automatic, Light, and Dark. The preference
+persists as `settingsAppearance` and applies to Settings and all extension
+windows, including native title bars. Style → Bar colors and effects retains the existing taskbar customization controls. Settings search
+opens that disclosure when a matching bar appearance control is selected.
+Shared native colors are scoped to `.bb-native-surface` and Settings layout to
+`.bb-settings`; the existing taskbar palette, IBM Plex Mono typography, scanlines,
+icon chrome, layout, and per-extension color overrides
+remain available. Window entry points load independently to avoid loading the
+Settings UI and its stylesheet in the taskbar window.
+
+## Run and test
+
+```sh
+npm ci
+npx playwright install chromium webkit
+npm run test:unit
+npm run test:typecheck
+npm run test:e2e
+npm run test:performance
+cargo test --manifest-path src-tauri/Cargo.toml --lib
+```
+
+`npm run test:all` runs the portable unit suite, type checks, production build,
+all browser scenarios, performance budgets, and Rust tests. The Chromium project
+uses an installed Chrome on macOS when available; CI uses Playwright’s Chromium.
+Set `PLAYWRIGHT_CHROME_CHANNEL` to override that choice. `npm run test:extensions`
+additionally runs the pre-existing
+local extension tests; those require the user's local extension sources and are
+not part of clean-checkout CI.
+
+```sh
+npm run tauri -- dev
+npm run tauri -- build --bundles app
+```
+
+The build produces `src-tauri/target/release/bundle/macos/BetterBar.app`. These
+commands do not install the app over `/Applications/BetterBar.app`.
+
+Calendar access requires both the usage descriptions in `Info.plist` and the
+`com.apple.security.personal-information.calendars` entitlement. The release
+bundle enables Hardened Runtime, which requires this entitlement even without
+App Sandbox. `tauri.conf.json` signs with `Entitlements.plist`; keep this file
+when changing signing identities. Local signature repair preserves entitlements.
+An entitlement alone does not grant access: Connect calendars requests macOS
+consent, and denied or restricted access opens the Calendar privacy settings.
+Requests begin on AppKit's main thread and retain the event store until the
+completion callback. Settings distinguishes unrequested, restricted, and
+write-only access, prevents duplicate clicks while waiting, and displays errors.
+
+## Coverage and limits
+
+- Unit coverage: configuration migration, persistence, taskbar theme isolation,
+  appearance editor updates, native listener cleanup, shared symbol requests and
+  retries, CSS scoping, native window permissions, and clean-checkout auditing.
+- Browser scenarios in Chromium and WebKit: sidebar keyboard navigation, all
+  settings tabs, restart persistence, search and disclosures, disabled layout
+  controls, dimensions, extensions, reset focus trapping/cancellation/confirmation,
+  720px layouts, reduced motion, Light/Dark/system appearance, native API failure
+  fallbacks, taskbar styling, and settings-to-taskbar storage synchronization.
+- Performance budgets against the production build: Settings interactive in
+  2 seconds, under 1 MB of uncompressed JavaScript, search results within 200 ms,
+  and tab transitions within 250 ms. JSON measurements are attached to the report.
+  IPC assertions prevent repeated symbol rendering, appearance refreshes on bar
+  size edits, and continuous app queries when the app list is empty.
+- Rust tests exercise real AppKit symbol rendering and macOS accessibility
+  preferences. Existing native tests run alongside them.
+
+Browser tests run the real built frontend using Tauri's official IPC/window mocks
+and synthetic extensions. They do not automate the installed application,
+permission dialogs, native screen reservations, or the AppKit titlebar/material.
+Inspect native chrome in the built app for platform-specific visual validation.
+Screenshots, traces on failure, and performance measurements are available in
+`playwright-report/` and `test-results/`; CI uploads these as artifacts.
+
+The Tests GitHub Actions workflow runs on macOS for pull requests and `next`
+pushes. Builds and portable tests do not require installed private extensions.
+
+
+## Standup and app labels
+
+The local Standup Update extension has a reading layout, Refresh (⌘R), Copy
+Markdown, last-update feedback, and retry/empty states. Failed refreshes keep the
+previous note visible. Source remains in the local extension registry; its unit
+and browser checks use synthetic notes and skip when local source is unavailable.
+
+The Show labels switch controls both pinned and running apps. Explicit per-item
+Icon / Icon + Label / Label choices retain precedence. With the settings cog
+hidden, ⌘, opens Settings while the taskbar is focused.
+
+## Sections, docking, and idle work
+
+The local section extensions now cover Docked Apps, Opened Apps, Terminal,
+Spaces, Caffeine, App Sets, Simulators, and Settings, alongside Time, Media, and
+Power. The host retains flexible space, geometry, native integrations, and
+compatibility renderers. Extensions control visibility, placement, and layout.
+Their `@betterbar/api` module exposes shared app/window snapshots, docking
+operations, and native controls. See `EXTENSIONS.md` for the API and migration.
+
+Docked Apps settings and Apps & Sets can pick apps, files, and folders using the
+native multi-select picker. Finder drops use Tauri native paths. New pins retain
+their type and native icon; files open in their default app and folders in Finder.
+Undocking removes only the pin. The Focus Timer settings offer Clock and
+Pomodoro icons and preserve running sessions when the selection changes.
+
+A controlled production-browser benchmark, repeated three times per engine,
+measured the following idle work over ten simulated seconds with unchanged app
+and window snapshots and Spaces hidden:
+
+| Measurement | Before (Chromium / WebKit) | After (Chromium / WebKit) |
+| --- | --- | --- |
+| Unnecessary extension renders | 13 / 12 | 0 / 0 |
+| Hidden Spaces queries | 6 / 6 | 0 / 0 |
+| Native IPC requests during the observation | 27 / 29 | 24 / 24 |
+
+The compiler and Markdown parser load only when an extension needs evaluation.
+Settings without enabled extensions requested about 527 KB of uncompressed JS;
+with the synthetic test extension it requested about 784 KB. Resource Timing
+omits some modulepreload body sizes, so the tests now count response bodies.
+The older byte totals are not comparable. Startup remained roughly 350–375 ms;
+this change targets unnecessary idle work, not a measured startup improvement.
+These are browser/IPC workload measurements, not installed-app CPU, memory, or
+battery savings. All 30 checks in the repeated after benchmark passed. The
+baseline had one host-sensitive tab latency failure out of 30 checks.
+
+For concurrent local work, set `PLAYWRIGHT_PORT` to a different preview port and
+use Playwright's `--output` option and `PLAYWRIGHT_HTML_OUTPUT_DIR` for independent
+artifacts. Defaults remain suitable for ordinary local runs and CI.
+
+## Drag installation and native app discovery
+
+Finder drops now distinguish ordinary dock targets from TSX extensions. New
+extensions activate immediately. Existing ones open a themed, keyboard-accessible
+version review in Settings; upgrades, downgrades, identical versions, and legacy
+unversioned replacements all require confirmation. Syntax and supported imports
+are checked before writes or evaluation. Native tests cover semantic versions,
+comment-safe metadata, backups, cancellation, atomic replacement, and concurrent
+source changes; browser scenarios cover activation, review focus, cancellation,
+invalid syntax, and live reload. No private extension sources are committed.
+
+The native file picker uses asynchronous completion to keep the host event loop
+running. Running apps now come from `NSWorkspace.runningApplications`, replacing
+a recurring AppleScript subprocess and reporting actual foreground-app state.
+App discovery no longer requires an Automation grant. Window focus and previews
+still use their normal macOS Accessibility and Screen Recording permissions.
+
+Permission requests now call AXIsProcessTrustedWithOptions and
+CGRequestScreenCaptureAccess before opening their System Settings panes. This
+registers the current signed executable. Builds remain locally signed unless a
+valid developer identity is available; macOS may require fresh grants after an
+updated local signature. Permission changes go through the standard macOS UI.

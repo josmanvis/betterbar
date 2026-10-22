@@ -8,7 +8,7 @@ function evaluate(path,modules={}) {
 }
 const a=evaluate('src/appearance.ts');
 const types=evaluate('src/types.ts');
-const store=evaluate('src/store.ts',{react:React,'./types':types,'./appearance':a,'./extensions-runtime':{},'./extension-replacements':{},'./tauri-bridge':{setOpenOnLogin:async()=>{}}});
+const store=evaluate('src/store.ts',{react:React,'./types':types,'./appearance':a,'./extensions-runtime':{},'./extension-replacements':{},'./bar-layout':evaluate('src/bar-layout.ts',{'./types':types,'./extension-replacements':evaluate('src/extension-replacements.ts')}),'./tauri-bridge':{setOpenOnLogin:async()=>{}}});
 let config=store.sanitize({...types.DEFAULT_CONFIG,transparentBg:true});assert.equal(config.appearance.opacity,35);assert.equal(config.appearance.blur,12);
 config=store.sanitize({...config,appearance:{palette:{text:'bad',background:'#123456'},opacity:500,blur:-10,radius:NaN,borderWidth:9,shadow:50},extensionAppearance:{timesheets:{colors:{accent:'#f01234',text:'invalid',bogus:'#123456'},opacity:-20,iconScale:10}}});
 assert.equal(config.appearance.opacity,100);assert.equal(config.appearance.blur,0);assert.equal(config.appearance.palette.text,a.PALETTE.text);assert.equal(config.appearance.radius,0);assert.equal(config.appearance.borderWidth,4);

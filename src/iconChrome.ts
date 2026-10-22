@@ -6,6 +6,8 @@ export function mergeChrome(global?: IconChrome, item?: IconChrome): IconChrome 
   return { ...(global || {}), ...(item || {}) };
 }
 
+export const iconBordersVisible = (chrome: IconChrome = {}) => chrome.showBorder !== false && chrome.borderWidth !== 0;
+
 /** True when the chrome paints anything of its own (a fill or a border). */
 export function hasChrome(c: IconChrome): boolean {
   return c.background !== undefined || c.borderColor !== undefined;
@@ -24,5 +26,6 @@ export function iconChromeStyle(c: IconChrome): CSSProperties {
     style.overflow = "hidden";
   }
   if (c.padding !== undefined) style.padding = `${c.padding}px`;
+  if (!iconBordersVisible(c)) style.borderColor = "transparent";
   return style;
 }

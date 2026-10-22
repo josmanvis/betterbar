@@ -4,12 +4,16 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Menu, MenuItem, CheckMenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { DockItem, DockPosition, IconChrome, IconStyle, WindowDetails } from "../types";
-import { hasChrome, iconChromeStyle, mergeChrome } from "../iconChrome";
+import { hasChrome, iconChromeStyle, mergeChrome, iconBordersVisible } from "../iconChrome";
 import { launchApp, focusApp, focusWindow, hideApp, quitApp, zoomAppWindow } from "../tauri-bridge";
 import { WindowPreview } from "./WindowPreview";
 import { DEVICE_GLYPHS } from "./deviceIcons";
+import { appFocusProps } from "./ActiveAppEditor";
+import type { BetterBarConfig } from "../types";
 
 interface DockIconProps {
+  sortable?: boolean;
+  focusAppearance?: Partial<BetterBarConfig>;
   item: DockItem;
   isRunning: boolean;
   isActive?: boolean;
@@ -61,6 +65,8 @@ function tooltipClass(position: DockPosition) {
 }
 
 export function DockIcon({
+  sortable = true,
+  focusAppearance,
   item,
   isRunning,
   isActive,
@@ -87,6 +93,7 @@ export function DockIcon({
 }: DockIconProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
+  const [launchError, setLaunchError] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(item.name);
@@ -321,7 +328,7 @@ export function DockIcon({
 
   const isFileItem = !!(!item.bundleId && item.path);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: item.id, disabled: isFileItem });
+    useSortable({ id: item.id, disabled: isFileItem || !sortable });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -343,6 +350,7 @@ export function DockIcon({
 
   async function handleClick() {
     if (renaming) return;
+    setLaunchError(false);
     setPressed(true);
     setTimeout(() => setPressed(false), 120);
     try {
@@ -360,7 +368,7 @@ export function DockIcon({
         await launchApp(item.path);
       }
     } catch (e) {
-      console.error("[BetterBar] Failed to launch app:", e);
+      setLaunchError(true);
     }
   }
 
@@ -378,42 +386,29 @@ export function DockIcon({
   // isn't painting a fill or border of its own.
   const fallbackTile = chromePainted ? "" : "bg-[var(--bb-pane-2)] border border-[var(--bb-line-2)]";
 
-  const runningStripeClass =
-    position === "left"   ? "left-0 top-0 bottom-0 w-[2px]"  :
-    position === "right"  ? "right-0 top-0 bottom-0 w-[2px]" :
-    position === "top"    ? "top-0 left-0 right-0 h-[2px]"   :
-                            "bottom-0 left-0 right-0 h-[2px]";
-
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      {...appFocusProps(focusAppearance, !!isActive, position)}
+      data-bb-icon-borders={iconBordersVisible(effChrome) ? "visible" : "hidden"}
+      style={{ ...style, ...appFocusProps(focusAppearance, !!isActive, position).style }}
       draggable={isFileItem}
       onDragStart={isFileItem ? (e: React.DragEvent) => {
         e.dataTransfer.setData('text/x-betterbar-id', item.id);
-        e.dataTransfer.setData('text/uri-list', 'file://' + item.path);
+        e.dataTransfer.setData('text/uri-list', 'file://' + encodeURI(item.path).replace(/#/g, '%23').replace(/\?/g, '%3F'));
         e.dataTransfer.setData('text/plain', item.path);
         e.dataTransfer.effectAllowed = 'copy';
       } : undefined}
       className={`relative flex flex-col items-center justify-center ${isVertical ? "w-full" : "h-full"}`}
-      {...attributes}
-      {...listeners}
+      {...(sortable && !isFileItem ? attributes : {})}
+      {...(sortable && !isFileItem ? listeners : {})}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <AnimatePresence>
-        {isActive && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.08 }}
-            className={`absolute z-10 ${runningStripeClass} bg-[var(--bb-accent)]`}
-          />
-        )}
-      </AnimatePresence>
-
+      {launchError && <span className="sr-only" role="alert">Could not open this item. Check that it is still available.</span>}
       <motion.button
+        aria-label={item.name}
+        title={launchError ? "Could not open this item. Check that it is still available." : undefined}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         animate={{ scale: pressed ? 0.92 : 1 }}
@@ -468,7 +463,7 @@ export function DockIcon({
                 {item.forceGlyph ? (
                   <div
                     className={`w-full h-full flex items-center justify-center text-[var(--bb-accent)] font-bold tracking-tight ${fallbackTile}`}
-                    style={{ fontSize: Math.max(10, iconSize * 0.32) }}
+                    style={{ fontSize: `max(${Math.max(10, iconSize * 0.32)}px, var(--bb-font-floor, 8px))` }}
                   >
                     {getFallbackGlyph(item)}
                   </div>
@@ -495,7 +490,7 @@ export function DockIcon({
             )}
 
             {effectiveShowLabel && (
-              <span className={`
+              <span data-bb-app-label style={{ fontSize: "max(9px, var(--bb-font-floor, 8px))", maxWidth: isVertical ? "100%" : undefined }} className={`
                 text-[9px] uppercase tracking-wider leading-none truncate font-medium
                 ${isVertical ? "max-w-[58px] text-center" : "max-w-[120px] text-left"}
                 ${isRunning ? "text-[var(--bb-accent)]" : "text-[var(--bb-dim)]"}
@@ -515,6 +510,7 @@ export function DockIcon({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.08 }}
+            style={{ zoom: "var(--bb-tooltip-scale, 1)" }}
             className={`absolute z-50 bg-[var(--bb-bg)] border border-[var(--bb-line-2)] shadow-[3px_3px_0_0_rgba(0,0,0,1)] ${tooltipClass(position)} ${
               isRunning && runningPid !== undefined
                 ? "p-1.5"

@@ -1,5 +1,17 @@
 mod extensions;
+mod macos_settings;
+mod bkrd;
+mod gitlab;
+mod bkr_pipelines;
+mod drawer_shortcut;
 mod applications;
+mod dock_targets;
+mod extension_installer;
+mod extension_drag;
+mod integrations;
+mod wifi_status;
+#[cfg(target_os = "macos")]
+mod signature;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime, WindowEvent};
 
@@ -732,55 +744,37 @@ mod macos {
     }
 
     pub fn get_running_apps() -> Vec<RunningApp> {
-        let output = Command::new("osascript")
-            .arg("-e")
-            .arg(
-                r#"set appList to ""
-tell application "System Events"
-    set runningApps to (every application process whose background only is false)
-    repeat with anApp in runningApps
-        set appName to name of anApp
-        set appPID to unix id of anApp
-        try
-            set appBundle to bundle identifier of anApp
-            if appBundle is missing value then
-                set appBundle to ""
-            end if
-        on error
-            set appBundle to ""
-        end try
-        set appList to appList & appName & "|" & appPID & "|" & appBundle & "\n"
-    end repeat
-end tell
-return appList"#,
-            )
-            .output();
-
-        match output {
-            Ok(out) => {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                stdout
-                    .lines()
-                    .filter(|l| l.contains('|'))
-                    .map(|line| {
-                        let parts: Vec<&str> = line.split('|').collect();
-                        let name = parts.first().unwrap_or(&"").trim().to_string();
-                        let pid: i32 = parts.get(1).unwrap_or(&"0").trim().parse().unwrap_or(0);
-                        let mut parsed_bundle = parts.get(2).unwrap_or(&"").trim().to_string();
-                        if parsed_bundle.is_empty() {
-                            parsed_bundle = name.to_lowercase().replace(' ', ".");
-                        }
-                        RunningApp {
-                            bundle_id: parsed_bundle,
-                            name,
-                            pid,
-                            is_active: false,
-                        }
-                    })
-                    .collect()
-            }
-            Err(_) => vec![],
+        use cocoa::base::{id, nil};
+        use objc::{class, msg_send, sel, sel_impl};
+        unsafe fn string(value: id) -> String {
+            if value == nil { return String::new(); }
+            let bytes: *const std::os::raw::c_char = msg_send![value, UTF8String];
+            if bytes.is_null() { String::new() } else { std::ffi::CStr::from_ptr(bytes).to_string_lossy().into_owned() }
         }
+        objc::rc::autoreleasepool(|| unsafe {
+            let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
+            if workspace == nil { return Vec::new(); }
+            let applications: id = msg_send![workspace, runningApplications];
+            let count: usize = msg_send![applications, count];
+            let mut result = Vec::new();
+            for index in 0..count {
+                let application: id = msg_send![applications, objectAtIndex: index];
+                let terminated: bool = msg_send![application, isTerminated];
+                if terminated { continue; }
+                let policy: i64 = msg_send![application, activationPolicy];
+                let bundle: id = msg_send![application, bundleIdentifier];
+                let bundle_id = string(bundle);
+                // Regular Dock apps, plus BetterBar when Hide self is disabled.
+                if policy != 0 && bundle_id != "com.betterbar.app" { continue; }
+                let localized_name: id = msg_send![application, localizedName];
+                let name = string(localized_name);
+                let pid: i32 = msg_send![application, processIdentifier];
+                let is_active: bool = msg_send![application, isActive];
+                if name.is_empty() || pid <= 0 { continue; }
+                result.push(RunningApp { name, bundle_id, pid, is_active });
+            }
+            result
+        })
     }
 
     pub fn launch_app(path: &str) -> Result<(), String> {
@@ -1035,34 +1029,37 @@ end tell"#,
     /// → base64) which was fragile (PATH issues under Tauri, missing/binary
     /// Info.plists, ambiguous .icns selection).
     pub fn get_app_icon_base64(bundle_id: &str) -> Option<String> {
+        use cocoa::base::{id, nil};
+        use cocoa::foundation::NSString;
+        use objc::{class, msg_send, sel, sel_impl};
+        unsafe {
+            let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
+            if workspace == nil { return None; }
+            let bundle_ns = NSString::alloc(nil).init_str(bundle_id);
+            let url: id = msg_send![workspace, URLForApplicationWithBundleIdentifier: bundle_ns];
+            let _: () = msg_send![bundle_ns, release];
+            if url == nil { return None; }
+            let path: id = msg_send![url, path];
+            if path == nil { return None; }
+            let ptr: *const std::os::raw::c_char = msg_send![path, UTF8String];
+            if ptr.is_null() { return None; }
+            get_path_icon_base64(&std::ffi::CStr::from_ptr(ptr).to_string_lossy())
+        }
+    }
+
+    pub fn get_path_icon_base64(path: &str) -> Option<String> {
         use base64::Engine;
         use cocoa::base::{id, nil};
         use cocoa::foundation::NSString;
         use objc::{class, msg_send, sel, sel_impl};
-
         unsafe {
             let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
-            if workspace == nil {
-                eprintln!("[BetterBar] NSWorkspace sharedWorkspace returned nil");
-                return None;
-            }
-
-            let bundle_ns: id = NSString::alloc(nil).init_str(bundle_id);
-            let app_url: id = msg_send![workspace, URLForApplicationWithBundleIdentifier: bundle_ns];
-            if app_url == nil {
-                eprintln!("[BetterBar] No app URL for bundle id: {}", bundle_id);
-                return None;
-            }
-
-            let app_path_ns: id = msg_send![app_url, path];
-            if app_path_ns == nil {
-                eprintln!("[BetterBar] No POSIX path for {}", bundle_id);
-                return None;
-            }
-
-            let icon: id = msg_send![workspace, iconForFile: app_path_ns];
+            if workspace == nil { return None; }
+            let path_ns = NSString::alloc(nil).init_str(path);
+            let icon: id = msg_send![workspace, iconForFile: path_ns];
+            let _: () = msg_send![path_ns, release];
             if icon == nil {
-                eprintln!("[BetterBar] No icon for {}", bundle_id);
+                eprintln!("[BetterBar] No icon for {}", path);
                 return None;
             }
 
@@ -1082,14 +1079,14 @@ end tell"#,
                 hints: nil
             ];
             if cg_image.is_null() {
-                eprintln!("[BetterBar] CGImageForProposedRect returned null for {}", bundle_id);
+                eprintln!("[BetterBar] CGImageForProposedRect returned null for {}", path);
                 return None;
             }
 
             let bitmap: id = msg_send![class!(NSBitmapImageRep), alloc];
             let bitmap: id = msg_send![bitmap, initWithCGImage: cg_image];
             if bitmap == nil {
-                eprintln!("[BetterBar] initWithCGImage failed for {}", bundle_id);
+                eprintln!("[BetterBar] initWithCGImage failed for {}", path);
                 return None;
             }
 
@@ -1097,19 +1094,20 @@ end tell"#,
             let png_type: u64 = 4;
             let png_data: id = msg_send![bitmap, representationUsingType: png_type properties: nil];
             if png_data == nil {
-                eprintln!("[BetterBar] PNG representation failed for {}", bundle_id);
+                eprintln!("[BetterBar] PNG representation failed for {}", path);
                 return None;
             }
 
             let len: usize = msg_send![png_data, length];
             let bytes_ptr: *const u8 = msg_send![png_data, bytes];
             if bytes_ptr.is_null() || len == 0 {
-                eprintln!("[BetterBar] PNG buffer empty for {}", bundle_id);
+                eprintln!("[BetterBar] PNG buffer empty for {}", path);
                 return None;
             }
             let slice = std::slice::from_raw_parts(bytes_ptr, len);
 
             let encoded = base64::engine::general_purpose::STANDARD.encode(slice);
+            let _: () = msg_send![bitmap, release];
             Some(format!("data:image/png;base64,{}", encoded))
         }
     }
@@ -1156,7 +1154,16 @@ end tell"#,
     }
 
     pub fn request_accessibility() {
-        // Open System Settings → Privacy & Security → Accessibility
+        use core_foundation::{base::TCFType, boolean::CFBoolean, dictionary::{CFDictionary, CFDictionaryRef}, string::{CFString, CFStringRef}};
+        #[link(name = "ApplicationServices", kind = "framework")]
+        extern "C" {
+            fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> bool;
+            static kAXTrustedCheckOptionPrompt: CFStringRef;
+        }
+        let key = unsafe { CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt) };
+        let options = CFDictionary::from_CFType_pairs(&[(key, CFBoolean::true_value())]);
+        if unsafe { AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef()) } { return; }
+        // Register the current signed executable before opening its permission pane.
         let _ = Command::new("open")
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
             .spawn();
@@ -1267,6 +1274,7 @@ end tell"#,
     }
 
     pub fn request_screen_recording() {
+        if unsafe { CGRequestScreenCaptureAccess() } { return; }
         let _ = Command::new("open")
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
             .spawn();
@@ -2386,17 +2394,42 @@ return "skip""#,
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(extension_installer::InstallerState::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            macos_settings::get_macos_preferences,
+            macos_settings::get_system_symbols,
+            gitlab::get_gitlab_mr_count,
+            bkr_pipelines::get_bkr_pipeline_status,
+            drawer_shortcut::set_apps_drawer_shortcut,
+            bkrd::get_bkrd_data,
+            bkrd::bkrd_action,
+            signature::get_app_signature_status,
+            signature::repair_app_signature,
             extensions::fetch_extension_files_from_disk,
             extensions::read_standup_file,
             extensions::open_timesheets,
             extensions::open_floatnote,
             applications::get_installed_apps,
+            integrations::get_apple_calendar_status,
+            integrations::request_apple_calendar_access,
+            integrations::get_apple_calendar_agenda,
+            integrations::open_apple_calendar,
+            integrations::get_system_stats,
+            wifi_status::get_wifi_status,
+            wifi_status::test_wifi_speed,
+            wifi_status::open_wifi_status_app,
             get_running_apps,
             get_installed_terminals,
             execute_terminal_command,
             launch_app,
+            extension_installer::inspect_bar_drop,
+            extension_drag::start_extension_drag,
+            extension_installer::install_dropped_extension,
+            extension_installer::discard_dropped_extension,
+            dock_targets::inspect_dock_paths,
+            dock_targets::pick_dock_items,
+            dock_targets::get_path_icon,
             focus_app,
             get_screen_info,
             position_window,
@@ -2436,6 +2469,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                signature::reopen_after_repair(app.handle());
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.set_visible_on_all_workspaces(true);
                     let _ = macos::set_window_level(&window, "floating");
@@ -2446,6 +2480,7 @@ pub fn run() {
                     });
                 }
                 if let Some(settings_win) = app.get_webview_window("settings") {
+                    macos_settings::install_settings_material(&settings_win);
                     let settings_clone = settings_win.clone();
                     settings_win.on_window_event(move |event| {
                         if let WindowEvent::CloseRequested { api, .. } = event {

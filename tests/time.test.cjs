@@ -15,7 +15,7 @@ assert.equal(ext.formatTime(ext.timeFormatter('UTC',prefs),now,prefs),'12:05 AM'
 prefs={...prefs,hour12:false,showSeconds:true};assert.equal(ext.formatTime(ext.timeFormatter('UTC',prefs),now,prefs),'00:05:09');
 prefs={...prefs,hour12:true,showPeriod:false};assert.equal(ext.formatTime(ext.timeFormatter('UTC',prefs),now,prefs),'12:05:09');
 assert.equal(ext.validTimezone('Invalid/City'),false);assert.equal(ext.validTimezone('America/New_York'),true);
-assert.equal(ext.formatTime(null,now,prefs),'--:--');assert.deepEqual(ext.clocksFor({clocks:[]}),[]);assert.equal(ext.clocksFor().length,6);
+assert.equal(ext.formatTime(null,now,prefs),'--:--');assert.deepEqual(ext.clocksFor({clocks:[]}),[]);assert.equal(ext.clocksFor().length,1);assert.equal(ext.clocksFor()[0].tz,Intl.DateTimeFormat().resolvedOptions().timeZone);
 data.set('bb-time-settings',JSON.stringify({timeSize:900,labelSize:-1,spacing:NaN,date:'invalid',weight:900}));
 prefs=ext.readPreferences();assert.equal(prefs.timeSize,24);assert.equal(prefs.labelSize,8);assert.equal(prefs.spacing,16);assert.equal(prefs.date,'none');assert.equal(prefs.weight,400);data.clear();
 let config={clocks:[{id:'a',code:'NY',tz:'America/New_York'},{id:'b',code:'UTC',tz:'UTC'}]},updates=0;

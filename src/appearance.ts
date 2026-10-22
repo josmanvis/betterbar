@@ -15,6 +15,14 @@ export interface ExtensionAppearance {
   colors?: Partial<Palette> & { accent?: string };
   opacity?: number;
   iconScale?: number;
+  showLabels?: boolean;
+  showBorder?: boolean;
+}
+export const ACTIVE_APP_STYLES = ["edge", "halo", "spotlight", "pill", "underline", "lift", "none"] as const;
+export type ActiveAppStyle = (typeof ACTIVE_APP_STYLES)[number];
+export function activeAppSettings(config: Partial<BetterBarConfig>) {
+  return { activeAppStyle: ACTIVE_APP_STYLES.includes(config.activeAppStyle as ActiveAppStyle) ? config.activeAppStyle! : "edge" as ActiveAppStyle,
+    activeAppStrength: clamp(config.activeAppStrength, 75, 20, 100), activeAppPulse: config.activeAppPulse === true, dimInactiveApps: config.dimInactiveApps === true };
 }
 export const color = (value: unknown, fallback: string) => typeof value === "string" && /^#[\da-f]{6}$/i.test(value) ? value : fallback;
 const clamp = (value: unknown, fallback: number, min: number, max: number) => typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
@@ -32,11 +40,16 @@ export function sanitizeExtensionAppearance(value: unknown): Record<string, Exte
     const v = raw as ExtensionAppearance;
     const colors = v.colors && typeof v.colors === "object" ? Object.fromEntries(Object.entries(v.colors)
       .filter(([k,c]) => (k === "accent" || k in PALETTE) && typeof c === "string" && /^#[\da-f]{6}$/i.test(c))) : undefined;
-    return [key, { colors, opacity: clamp(v.opacity, 100, 0, 100), iconScale: clamp(v.iconScale, 1, .5, 1.5) }];
+    return [key, { colors, opacity: clamp(v.opacity, 100, 0, 100), iconScale: clamp(v.iconScale, 1, .5, 1.5),
+      ...(typeof v.showLabels === "boolean" ? { showLabels: v.showLabels } : {}),
+      ...(typeof v.showBorder === "boolean" ? { showBorder: v.showBorder } : {}) }];
   }));
 }
 
 export const appearanceFor = (config: BetterBarConfig) => sanitizeAppearance(config.appearance, config.transparentBg);
+
+export const extensionBorderVisible = (config: BetterBarConfig, name: string) =>
+  config.extensionAppearance?.[name]?.showBorder ?? config.showExtensionBorders !== false;
 
 export function themeStyle(config: BetterBarConfig, extension?: string): CSSProperties {
   const own = extension ? config.extensionAppearance?.[extension]?.colors : undefined;
@@ -62,4 +75,36 @@ export function barSurface(config: BetterBarConfig): CSSProperties {
     backdropFilter: a.blur ? `blur(${a.blur}px)` : "none", WebkitBackdropFilter: a.blur ? `blur(${a.blur}px)` : "none",
     borderRadius: a.radius, borderWidth: a.borderWidth, borderStyle: "solid", borderColor: a.palette.border,
     boxShadow: a.shadow ? `inset 0 0 18px rgba(0,0,0,${a.shadow / 100})` : "none" };
+}
+
+/** Settings follows macOS independently of the saved taskbar palette. */
+export function settingsThemeStyle(config: BetterBarConfig): CSSProperties {
+  const mode = config.settingsAppearance;
+  const prefix = mode === "light" || mode === "dark" ? `--mac-${mode}` : "--mac";
+  return {
+    "--bb-bg": `var(${prefix}-background)`, "--bb-pane": `var(${prefix}-surface)`, "--bb-pane-2": `var(${prefix}-elevated)`,
+    "--bb-text": `var(${prefix}-text)`, "--bb-dim": `var(${prefix}-secondary)`, "--bb-mute": `var(${prefix}-muted)`,
+    "--bb-line": `var(${prefix}-border)`, "--bb-line-2": `var(${prefix}-strongBorder)`,
+    "--bb-warn": `var(${prefix}-warning)`, "--bb-bad": `var(${prefix}-danger)`,
+    "--bb-accent": `var(${prefix}-accent)`, "--bb-accent-d": `var(${prefix}-accent)`, "--bb-on-accent": `var(${prefix}-on-accent)`,
+    color: "var(--bb-text)", colorScheme: mode === "light" || mode === "dark" ? mode : "light dark",
+  } as CSSProperties;
+}
+
+export function extensionThemeStyle(config: BetterBarConfig, extension: string): CSSProperties {
+  const style = settingsThemeStyle(config) as Record<string, string>;
+  const colors = config.extensionAppearance?.[extension]?.colors;
+  const variables: Record<keyof Palette, string> = {
+    background: "--bb-bg", surface: "--bb-pane", elevated: "--bb-pane-2", text: "--bb-text",
+    secondary: "--bb-dim", muted: "--bb-mute", border: "--bb-line", strongBorder: "--bb-line-2",
+    warning: "--bb-warn", danger: "--bb-bad",
+  };
+  for (const [key, variable] of Object.entries(variables)) {
+    if (colors?.[key as keyof Palette]) style[variable] = colors[key as keyof Palette]!;
+  }
+  if (colors?.accent) {
+    style["--bb-accent"] = style["--bb-accent-d"] = colors.accent;
+    style["--bb-on-accent"] = (themeStyle(config, extension) as Record<string, string>)["--bb-on-accent"];
+  }
+  return style as CSSProperties;
 }

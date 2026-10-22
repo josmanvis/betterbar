@@ -47,6 +47,7 @@ pub struct ExtensionFile {
     pub name: String,
     pub display_name: String,
     pub content: String,
+    pub version: Option<String>,
 }
 
 #[tauri::command]
@@ -64,10 +65,12 @@ pub fn fetch_extension_files_from_disk() -> Vec<ExtensionFile> {
                     if let Ok(content) = std::fs::read_to_string(main_tsx) {
                         let name = entry.file_name().to_string_lossy().into_owned();
                         let display_name = name.replace("-", " ");
+                        let version = crate::extension_installer::literal_export(&content, "version");
                         extensions.push(ExtensionFile {
                             name,
                             display_name,
                             content,
+                            version,
                         });
                     }
                 }

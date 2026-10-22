@@ -11,7 +11,7 @@ let monitors = [{ name: 'Built-in', position: {x:0,y:0}, size:{width:3024,height
 let visible = true, pos = {x:200,y:240}, dimensions = {width:1600,height:1240};
 const drawer = { isVisible:async()=>visible, outerPosition:async()=>pos, innerSize:async()=>dimensions, scaleFactor:async()=>monitors[0].scaleFactor,
   setSize:async size=>{ dimensions={width:size.width*monitors[0].scaleFactor,height:size.height*monitors[0].scaleFactor}; },
-  outerSize:async()=>dimensions, setPosition:async p=>{pos={x:p.x,y:p.y};}, show:async()=>{visible=true;}, setFocus:async()=>{} };
+  outerSize:async()=>dimensions, setPosition:async p=>{pos={x:p.x,y:p.y};}, show:async()=>{visible=true;}, hide:async()=>{visible=false;}, setFocus:async()=>{} };
 const main = {innerPosition:async()=>({x:1000,y:1840}), innerSize:async()=>({width:600,height:100}), scaleFactor:async()=>2};
 const api = {getCurrent:()=>drawer,getByLabel:async label=>label==='main'?main:drawer};
 class Point { constructor(x,y){this.x=x;this.y=y;} }
@@ -23,8 +23,10 @@ function evaluate(file, extra='', extraModules={}, react=React, invoke=async()=>
   const exports={}; new Function('exports','module','require','React','invoke',code)(exports,{exports},id=>{assert.ok(id in modules,id);return modules[id];},react,invoke); return exports;
 }
 (async()=>{
- const ext=evaluate('extensions/apps-drawer/main.tsx','export {readPreferences,readGeometry,persistGeometry,resetGeometry,openDrawer};');
+ const ext=evaluate('extensions/apps-drawer/main.tsx','export {readPreferences,readGeometry,persistGeometry,resetGeometry,openDrawer,toggleDrawer};', {'@betterbar/api':{}});
  assert.equal(ext.readPreferences().rememberWindow,true);
+ assert.equal(ext.readPreferences().doubleTapCommand,true);
+ data.set('bb-apps-drawer-settings',JSON.stringify({doubleTapCommand:false}));assert.equal(ext.readPreferences().doubleTapCommand,false);
  data.set('bb-apps-drawer-settings',JSON.stringify({iconSize:999,columns:99,accentColor:'bad',recentLimit:100}));
  assert.equal(ext.readPreferences().iconSize,0);assert.equal(ext.readPreferences().columns,0);assert.equal(ext.readPreferences().recentLimit,4);
  data.set('bb-apps-drawer-active-layout',JSON.stringify({layout:'library',reset:null}));
@@ -45,6 +47,9 @@ function evaluate(file, extra='', extraModules={}, react=React, invoke=async()=>
  await ext.openDrawer();assert.ok(pos.x>=12&&pos.x+dimensions.width<=888);assert.ok(pos.y>=42&&pos.y+dimensions.height<=688);
  ext.resetGeometry('library');assert.equal(ext.readGeometry('library'),null);await ext.persistGeometry();assert.equal(ext.readGeometry('library'),null);assert.ok(ext.readGeometry('panel'));
  data.set('bb-apps-drawer-geometry',JSON.stringify({library:{x:NaN,width:800}}));assert.equal(ext.readGeometry('library'),null);
+ visible=false;await ext.toggleDrawer();assert.equal(visible,true);
+ pos={x:60,y:80};const before={...dimensions};await ext.toggleDrawer();assert.equal(visible,false);
+ await ext.toggleDrawer();assert.equal(visible,true);assert.deepEqual(pos,{x:60,y:80});assert.deepEqual(dimensions,before);
  const calls=[]; const hooks={...React,useState:initial=>[initial,()=>{}],useRef:value=>({current:value})};
  for(const [file,expected] of [['timesheets','open_timesheets'],['floatnote','open_floatnote']]) {
    const app=evaluate('extensions/'+file+'/main.tsx','',{'@tauri-apps/api/path':{homeDir:async()=>'/Users/test',join:async(...parts)=>parts.join('/')}},hooks,async(...args)=>{calls.push(args);});

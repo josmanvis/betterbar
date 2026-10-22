@@ -1,4 +1,4 @@
-import type { Appearance, ExtensionAppearance } from "./appearance";
+import type { Appearance, ExtensionAppearance, ActiveAppStyle } from "./appearance";
 
 export type DockPosition = "bottom" | "left" | "right" | "top";
 
@@ -6,6 +6,7 @@ export type DockPosition = "bottom" | "left" | "right" | "top";
  *  per-item override falls back to the global `BetterBarConfig.iconChrome`,
  *  which in turn falls back to the plain (chrome-less) default. */
 export interface IconChrome {
+  showBorder?: boolean;
   background?: string;   // css color, or "transparent"
   borderColor?: string;  // css color, or "transparent"
   borderWidth?: number;  // 0–4 px
@@ -14,6 +15,8 @@ export interface IconChrome {
 }
 
 export interface DockItem {
+  /** Missing kind retains legacy application pins. */
+  kind?: "app" | "file" | "folder";
   id: string;
   name: string;
   path: string;
@@ -103,11 +106,18 @@ export interface ClockConfig {
 }
 
 export interface BetterBarConfig {
+  settingsAppearance?: "system" | "light" | "dark";
   position: DockPosition;
   iconSize: number; // 32–96
-  barSize: number;  // 48–200, thickness of the bar
+  barSize: number;  // 24–200, thickness of the bar
   autoHide: boolean;
   showLabels: boolean;
+  showExtensionLabels?: boolean;
+  showExtensionBorders?: boolean;
+  activeAppStyle?: ActiveAppStyle;
+  activeAppStrength?: number;
+  activeAppPulse?: boolean;
+  dimInactiveApps?: boolean;
   theme: "dark" | "light" | "auto";
   sets: AppSet[];
   activeSetId: string;
@@ -161,9 +171,10 @@ export interface BetterBarConfig {
   showCaffeine: boolean;
   /** Automatically launch BetterBar on macOS login. */
   openOnLogin: boolean;
-  /** Left-to-right (or top-to-bottom) order of bar sections. ⌘-drag a section
-   *  on the bar to reorder. Unknown ids are ignored and missing ones appended. */
+  /** Legacy section order used to seed independent bar items. */
   sectionOrder: SectionId[];
+  /** Independent extension/app/feature positions; legacy sectionOrder seeds it once. */
+  barOrder?: BarItemId[];
   /** Per-section styling overrides (padding T/R/B/L and content scale) */
   sectionStyles?: Partial<Record<SectionId, SectionStyleConfig>>;
   /** Global default chrome (background/border/radius/padding) for every dock
@@ -208,11 +219,13 @@ export type SectionId =
   | "extensions"
   | "spaces";
 
+export type BarItemId = SectionId | `extension:${string}` | `app:${string}:${string}`;
+
 export const DEFAULT_SECTION_ORDER: SectionId[] = [
   "terminal", "pin", "run", "extensions", "spacer", "spaces", "time", "music", "caffeine", "battery", "sets", "sims", "cog",
 ];
 
-export const BAR_SIZE_MIN = 48;
+export const BAR_SIZE_MIN = 24;
 export const BAR_SIZE_MAX = 200;
 export const BAR_LENGTH_MIN = 200;
 export const BAR_LENGTH_MAX = 1400;
@@ -265,6 +278,12 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   barSize: 68,
   autoHide: false,
   showLabels: false,
+  showExtensionLabels: true,
+  showExtensionBorders: true,
+  activeAppStyle: "edge",
+  activeAppStrength: 75,
+  activeAppPulse: false,
+  dimInactiveApps: false,
   theme: "dark",
   activeSetId: "default",
   sets: [

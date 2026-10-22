@@ -1,13 +1,27 @@
+import { useEffect } from "react";
+import { openSettingsWindow } from "./tauri-bridge";
 import { DockBar } from "./components/DockBar";
 import { useConfig } from "./store";
 
 export default function App() {
+  useEffect(() => {
+    const openPreferences = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === ",") {
+        event.preventDefault();
+        openSettingsWindow().catch(() => {});
+      }
+    };
+    window.addEventListener("keydown", openPreferences);
+    return () => window.removeEventListener("keydown", openPreferences);
+  }, []);
+
   const {
     config,
     activeSet,
-    reorderItems,
+    setBarOrder,
     removeItem,
     addItem,
+    enableExtensions,
     renameItem,
     setItemHidden,
     setItemIcon,
@@ -27,9 +41,10 @@ export default function App() {
     <DockBar
       config={config}
       activeSet={activeSet}
-      onReorder={reorderItems}
+      onSetBarOrder={setBarOrder}
       onRemove={removeItem}
       onAddItem={addItem}
+      onEnableExtensions={enableExtensions}
       onRenameItem={renameItem}
       onSetItemHidden={setItemHidden}
       onSetBarSize={setBarSize}
