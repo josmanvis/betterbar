@@ -57,7 +57,7 @@ pub async fn inspect_dock_paths(paths: Vec<String>) -> Result<Vec<DockTarget>, S
 
 #[tauri::command]
 pub async fn pick_dock_items(app: tauri::AppHandle, kind: String) -> Result<Vec<DockTarget>, String> {
-    if !["app", "file", "folder"].contains(&kind.as_str()) { return Err("Unknown item type.".into()); }
+    if !["app", "file", "folder", "attachment"].contains(&kind.as_str()) { return Err("Unknown item type.".into()); }
     #[cfg(target_os = "macos")]
     {
         let (send, receive) = std::sync::mpsc::channel();
@@ -74,7 +74,7 @@ pub async fn pick_dock_items(app: tauri::AppHandle, kind: String) -> Result<Vec<
                 let _: () = msg_send![panel, setCanChooseFiles: files];
                 let _: () = msg_send![panel, setAllowsMultipleSelection: YES];
                 let _: () = msg_send![panel, setTreatsFilePackagesAsDirectories: NO];
-                let prompt = NSString::alloc(nil).init_str("Dock selected items");
+                let prompt = NSString::alloc(nil).init_str(if kind == "attachment" { "Attach files" } else { "Dock selected items" });
                 let _: () = msg_send![panel, setPrompt: prompt];
                 let _: () = msg_send![prompt, release];
                 if kind == "app" {

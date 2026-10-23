@@ -9,7 +9,8 @@
     }
   },
   "include": [
-    "extensions/apps-drawer/main.tsx"
+    "extensions/apps-drawer/main.tsx",
+    "extensions/app-requests/main.tsx"
   ],
   "references": []
 }

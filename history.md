@@ -1,6 +1,7 @@
 # BetterBar — Changelog
 
 ## Unreleased
+- **App Requests attachments** — browse for multiple reference files or drop them into the request window, remove selections, preserve drafts, and pass private bounded snapshots to the existing local request worker.
 - **Files extension** — add a tabbed file browser with favorites, list/icon views, Spotlight search, Quick Look, Finder tags, clipboard and native drag support, safe file operations, Trash confirmation, and session undo. Keep advanced macOS services available through Show in Finder.
 - **Extension permission approval** — review every declared permission before extension code runs, including new installs and updates. Remember approval for the exact version and source, pause existing extensions until reviewed, sync approvals across windows, and support revocation without resetting preferences.
 - **Drawer drop to pin** — drop Finder files and folders anywhere in the open drawer to save pinned shortcuts, with native icons, drop feedback, duplicate handling, Pinned available in both layouts, and dismissal deferred while starting a drag in Finder.
