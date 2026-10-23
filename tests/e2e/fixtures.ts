@@ -35,6 +35,7 @@ export const seed: BetterBarConfig = {
 
 export async function installRuntime(page: Page, options: {
   requireApproval?: boolean;
+  files?: boolean;
   dragOutcome?: string; dragFailure?: boolean; dragDelayMs?: number;
   installedApps?: { name: string; path: string; bundle_id: string }[];
   label?: "main" | "settings" | `ext_${string}`; config?: BetterBarConfig; emptyApps?: boolean;
@@ -73,14 +74,52 @@ export async function installRuntime(page: Page, options: {
       const version = /export const version = ["']([^"']+)["']/.exec(ext.content)?.[1] || null;
       const key = "betterbar-extension-approvals-v1";
       const approvals = JSON.parse(localStorage.getItem(key) || "{}");
-      if (!(ext.name in approvals)) { approvals[ext.name] = JSON.stringify([version, fingerprint, ["full-access"], true]); localStorage.setItem(key, JSON.stringify(approvals)); }
+      const literalPermissions = /export const permissions = (\[[^\]]*\]);/.exec(ext.content)?.[1];
+      const permissions = literalPermissions ? JSON.parse(literalPermissions) : ["full-access"];
+      if (!(ext.name in approvals)) { approvals[ext.name] = JSON.stringify([version, fingerprint, permissions, !literalPermissions]); localStorage.setItem(key, JSON.stringify(approvals)); }
     }));
     let standupRead = 0;
+    // Files tests use synthetic paths and never access the host filesystem.
+    const file = (path: string, directory = false) => ({ path, name: path.split("/").pop(), directory, package: path.endsWith(".app"), symlink: false, size: 1234, modified: 1700000000 });
+    win.__files = [file("/Files Test/Documents", true), file("/Files Test/Example.app", true), file("/Files Test/notes.txt"), file("/Files Test/report 10.txt"), file("/Files Test/report 2.txt"), file("/Files Test/.hidden"), file("/Files Test/Documents/deep.txt")];
+    win.__filesClipboard = [];
+    win.__filesTags = {};
+
     win.mockWindows(options.label || "settings");
     win.mockIPC((cmd: string, args: any) => {
       win.__ipcCalls.push({ cmd, args });
       if (options.nativeFailure && ["get_macos_preferences", "get_system_symbols"].includes(cmd)) return Promise.reject(new Error("Native appearance unavailable"));
       switch (cmd) {
+        case "files_places": return [{ name: "Home", path: "/Files Test" }, { name: "Documents", path: "/Files Test/Documents" }];
+        case "files_list":
+        case "files_search": {
+          if (!options.files) throw new Error("Files fixtures not enabled");
+          return new Promise((resolve, reject) => setTimeout(() => {
+            if (win.__filesReadFailure || args.path.includes("unavailable")) { reject(new Error("Read denied")); return; }
+            const prefix = args.path.replace(/\/$/, "") + "/";
+            resolve({ path: args.path, entries: win.__files.filter((f: any) => f.path.startsWith(prefix) && (cmd === "files_search" ? f.name.toLowerCase().includes(args.query.toLowerCase()) : !f.path.slice(prefix.length).includes("/")) && (args.hidden || !f.name.startsWith("."))), truncated: !!win.__filesTruncated, skipped: 0 });
+          }, win.__filesReadDelay || 0));
+        }
+        case "files_action": {
+          if (!options.files) throw new Error("Files fixtures not enabled");
+          if (win.__filesActionFailure === args.path) return Promise.reject("The operation failed. Check access.");
+          const source = win.__files.find((f: any) => f.path === args.path);
+          const name = args.name || source?.name;
+          let target = args.target + "/" + name;
+          if (["open", "preview", "reveal"].includes(args.action)) return "";
+          if (args.action === "trash") target = "/Trash/" + name;
+          if (args.action === "rename") target = args.path.slice(0, args.path.lastIndexOf("/")) + "/" + name;
+          if (args.action === "duplicate") target = args.path + " copy";
+          if (args.action === "compress") target = args.path + ".zip";
+          if (win.__files.some((f: any) => f.path === target)) return Promise.reject("An item with this name already exists. Nothing was replaced.");
+          if (args.action === "mkdir") { target = args.path + "/" + args.name; win.__files.push(file(target, true)); return target; }
+          if (!source) return Promise.reject("Source missing");
+          win.__files.push({ ...source, path: target, name: target.split("/").pop() });
+          if (["move", "rename", "trash"].includes(args.action)) win.__files = win.__files.filter((f: any) => f !== source);
+          return target;
+        }
+        case "files_clipboard": if (args?.paths) win.__filesClipboard = args.paths; return win.__filesClipboard;
+        case "files_tags": if (args.values) win.__filesTags[args.path] = args.values; return win.__filesTags[args.path] || [];
         case "get_installed_apps": return options.installedApps || [];
         case "start_extension_drag": return new Promise((resolve, reject) => setTimeout(() => {
           if (options.dragFailure) reject(new Error("Drag failed"));

@@ -417,3 +417,25 @@ include `listen`, `once`, `emit`, and `emitTo` from `@tauri-apps/api/event`.
 Both Library and Launch panel include a **Folders** view and an **+ Folder** button. Choose one or more folders with the native picker to add shortcuts; open a shortcut to show that folder in Finder. Search, recent items, pins, keyboard navigation, and dragging to the bar work for apps and folders. **Edit pins** can pin folders or remove manually added folder shortcuts without deleting files. Folders already pinned to the active bar set also appear automatically; manage those shortcuts in the bar's settings. Drawer does not recursively scan or display folder contents.
 
 Folder choices are saved locally in the existing `bb-apps-drawer-settings` preferences. This published source contains no installed preferences or personal paths. It uses the existing `pick_dock_items`, `get_path_icon`, and `launch_app` native commands, so no new native permissions are needed. An unavailable folder stays in the drawer and shows an error when opened, so it can be removed or added again from its new location.
+
+## Files
+
+`extensions/files/main.tsx` adds **Files**, a file manager in its own resizable window. It requires the matching BetterBar build with the `files_*` commands. Install its reviewed source at `~/.betterbar/extensions/files/main.tsx`, reload extensions, enable Files, and approve its Files and folders, Clipboard, and Apps and windows access.
+
+Files provides:
+
+- Home, common folders, iCloud Drive when available, Trash, mounted volumes, and local favorite shortcuts.
+- Tabs, navigation history, Go to Folder (including `~`), list/icon views, natural sorting, hidden files, and an information pane.
+- Local filename filtering and explicit Spotlight searches within the current folder and its descendants.
+- Multiple selection, keyboard navigation, default-app opening, Quick Look, and Show in Finder.
+- New folders, rename, copy/cut/paste, copy or move to a destination, duplicate, single-item ZIP compression, and Finder tag editing. Archives open with their default application.
+- Native file-reference clipboard interoperability with Finder, native copy-only drags out, and confirmed copies of files dropped from Finder.
+- Confirmed Move to Trash and one-level undo of moves, renames, and Trash operations, including partially completed batches. Undo state stays in memory for the current window session.
+
+Use **More actions**, right-click a selected item, or open **Info** for additional actions. The `?` button lists keyboard shortcuts. Return renames, ⌘↓ opens, Space previews, ⌘↑ opens the parent, ⇧⌘G opens Go to Folder, and ⌘T creates a tab. User preferences and favorite paths remain local under `bb-files-preferences`; file listings, search results, clipboard contents, and file contents are never stored in extension preferences or sent to a service.
+
+File operations run off the UI thread and use macOS `NSFileManager`, file URLs, `open`, Quick Look, Spotlight, and `ditto`, without shell interpolation or arbitrary command execution. Existing destination items are never replaced or merged. Batches stop at the first failure, report partial completion, refresh the folder, and keep undo records for successful moves. Trash uses macOS Trash; no permanent-delete or Empty Trash action is exposed. Full Disk Access is not requested automatically. macOS privacy restrictions, locked files, and read-only volumes still apply.
+
+**Scope and limits:** Files is a companion to Finder, not a complete reimplementation of macOS Finder. **Show in Finder** hands off sharing, AirDrop, Open With, aliases, detailed permissions, device synchronization, server connections, and Finder's other advanced services. The desktop, column/gallery views, Quick Actions, previews embedded in the window, folder-size calculation, batch rename, folder merging/replacement, persistent undo, and filesystem watching are not implemented. Use Refresh after external changes. Listing is bounded to 10,000 entries, Spotlight to 500 results / 2 MB / 10 seconds, clipboard batches to 500 references, and native drags to the host's 64-item limit. Spotlight only returns indexed items. Package detection covers common bundle extensions; unfamiliar packages can be managed in Finder. Symbolic links are identified and native copy/move/Trash operates on the link itself; folder browsing follows directory links.
+
+Before publishing just this extension, run `npm run audit:extensions -- extensions/files` and explicitly stage only `extensions/files/main.tsx`. The app does not bundle the developer's installed extensions. The Files source is intentionally published for this request; other installed/local-only extension source remains private.

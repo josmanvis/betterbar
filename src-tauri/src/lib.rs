@@ -1,4 +1,5 @@
 mod extensions;
+mod files;
 mod macos_settings;
 mod bkrd;
 mod gitlab;
@@ -2408,6 +2409,12 @@ pub fn run() {
             signature::repair_app_signature,
             extensions::fetch_extension_files_from_disk,
             extensions::read_standup_file,
+            files::files_list,
+            files::files_places,
+            files::files_search,
+            files::files_action,
+            files::files_tags,
+            files::files_clipboard,
             extensions::open_timesheets,
             extensions::open_floatnote,
             applications::get_installed_apps,
