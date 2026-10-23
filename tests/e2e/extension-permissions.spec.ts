@@ -25,6 +25,7 @@ test("unapproved code is blocked everywhere; cancellation and approval persist a
   await expect(dialog).toContainText("they do not restrict code");
   await expect(dialog.getByRole("button", { name: "Not now" })).toBeFocused();
   await settings.keyboard.press("Shift+Tab"); await expect(dialog.getByRole("button", { name: "Allow extension" })).toBeFocused();
+  await expect(dialog.getByText("Extensions run inside BetterBar", { exact: false })).toBeInViewport();
   await expect(dialog.getByRole("heading", { name: "Allow Permission Sample?" })).toBeInViewport();
   await expect(dialog.getByRole("button", { name: "Allow extension" })).toBeInViewport();
   await testInfo.attach("permission-review.png", { body: await settings.screenshot({ path: testInfo.outputPath("permission-review.png") }), contentType: "image/png" });

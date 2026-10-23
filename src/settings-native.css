@@ -186,5 +186,7 @@
 .bb-settings .bb-permission-dialog [role=alert] { color:var(--bb-bad); }
 
 .bb-settings .bb-permission-dialog[open], .bb-settings .bb-extension-install-dialog { display:flex; flex-direction:column; overflow:hidden; }
-.bb-settings .bb-permission-dialog header, .bb-settings .bb-extension-install-dialog h2, .bb-settings .bb-install-actions { flex-shrink:0; }
+.bb-settings .bb-permission-dialog>.bb-extension-trust-note, .bb-settings .bb-extension-install-dialog>.bb-extension-trust-note, .bb-settings .bb-permission-dialog header, .bb-settings .bb-extension-install-dialog h2, .bb-settings .bb-install-actions { flex-shrink:0; }
 .bb-settings .bb-permission-body, .bb-settings .bb-install-review-body { overflow:auto; min-height:0; }
+
+.bb-settings .bb-permission-dialog>.bb-extension-trust-note, .bb-settings .bb-extension-install-dialog>.bb-extension-trust-note { font-size:12px; border-top:1px solid var(--bb-line); padding-top:14px; }

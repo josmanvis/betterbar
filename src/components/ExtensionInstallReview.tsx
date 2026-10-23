@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { INSTALL_REVIEW_EVENT, INSTALL_REVIEW_KEY, readInstallReviews, saveInstallReviews } from "../extension-install";
 import { approveExtension } from "../extension-permissions";
-import { ExtensionPermissionDetails } from "./ExtensionPermissionReview";
+import { ExtensionPermissionDetails, ExtensionTrustNotice } from "./ExtensionPermissionReview";
 import { reloadExtensions } from "../extensions-runtime";
 
 const strings = {
@@ -82,10 +82,10 @@ export function ExtensionInstallReview({ onInstalled }: { onInstalled?: (name: s
       {change === "downgrade" && <p className="bb-install-version-hint">{strings.downgradeHint}</p>}
       {change === "same" && <p className="bb-install-version-hint">{strings.sameHint}</p>}
       {change === "replace" && <p className="bb-install-version-hint">{strings.legacyHint}</p>}
-      {item.review ? <ExtensionPermissionDetails review={item.review}/> : <p>{strings.missingReview}</p>}
+      {item.review ? <ExtensionPermissionDetails review={item.review} showTrust={false}/> : <p>{strings.missingReview}</p>}
       <p>{strings.approvalHint}</p>
       {error && <p role="alert">{strings.error}</p>}
-      </div><div className="bb-install-actions"><button ref={cancelButton} disabled={busy} onClick={cancel}>{strings.cancel}</button><button disabled={busy} onClick={confirm}>{busy ? strings.working : `${strings[change]}${item.review ? strings.allowSuffix : ""}`}</button></div>
+      </div><ExtensionTrustNotice/><div className="bb-install-actions"><button ref={cancelButton} disabled={busy} onClick={cancel}>{strings.cancel}</button><button disabled={busy} onClick={confirm}>{busy ? strings.working : `${strings[change]}${item.review ? strings.allowSuffix : ""}`}</button></div>
     </div>
   </div>;
 }
