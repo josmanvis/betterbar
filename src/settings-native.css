@@ -170,3 +170,23 @@
 .bb-settings .bb-install-actions button { border:1px solid var(--bb-line-2); padding:7px 14px; border-radius:7px; background:var(--bb-pane-2); }
 .bb-settings .bb-install-actions button:last-child { background:var(--bb-accent); color:var(--bb-on-accent); border-color:transparent; }
 .bb-settings .bb-install-actions button:disabled { opacity:.5; }
+
+.bb-settings .bb-extension-pending { display:flex; align-items:center; gap:16px; justify-content:space-between; padding:12px 18px; background:var(--bb-pane-2); font-size:12px; }
+.bb-settings .bb-extension-pending button { color:var(--bb-accent); font-weight:600; white-space:nowrap; }
+.bb-settings .bb-extension-permission-details ul { list-style:none; padding:0; margin:14px 0; display:grid; gap:12px; }
+.bb-settings .bb-extension-permission-details li { display:grid; gap:3px; overflow-wrap:anywhere; }
+.bb-settings .bb-extension-permission-details li strong { font-size:13px; color:var(--bb-text); }
+.bb-settings .bb-extension-permission-details li span { color:var(--bb-dim); font-size:12px; }
+.bb-settings .bb-extension-permission-details .bb-extension-trust-note { font-size:12px; border-top:1px solid var(--bb-line); padding-top:14px; }
+.bb-settings .bb-settings .bb-extension-revoke-hint { color:var(--bb-dim); font-size:12px; margin:8px 0 18px; }
+.bb-settings .bb-permission-dialog { margin:auto; width:min(480px,calc(100vw - 40px)); max-height:calc(100vh - 40px); overflow:auto; padding:26px; border-radius:16px; border:1px solid var(--bb-line-2); background:var(--bb-pane); color:var(--bb-text); font:13px/1.6 var(--mac-font); box-shadow:0 20px 60px #0004; }
+.bb-settings .bb-permission-dialog::backdrop { background:#0006; }
+.bb-settings .bb-permission-dialog h2 { font-size:18px; font-weight:600; margin-bottom:12px; overflow-wrap:anywhere; }
+.bb-settings .bb-permission-dialog p { margin:12px 0; color:var(--bb-dim); }
+.bb-settings .bb-permission-dialog [role=alert] { color:var(--bb-bad); }
+
+.bb-settings .bb-permission-dialog[open], .bb-settings .bb-extension-install-dialog { display:flex; flex-direction:column; overflow:hidden; }
+.bb-settings .bb-permission-dialog>.bb-extension-trust-note, .bb-settings .bb-extension-install-dialog>.bb-extension-trust-note, .bb-settings .bb-permission-dialog header, .bb-settings .bb-extension-install-dialog h2, .bb-settings .bb-install-actions { flex-shrink:0; }
+.bb-settings .bb-permission-body, .bb-settings .bb-install-review-body { overflow:auto; min-height:0; }
+
+.bb-settings .bb-permission-dialog>.bb-extension-trust-note, .bb-settings .bb-extension-install-dialog>.bb-extension-trust-note { font-size:12px; border-top:1px solid var(--bb-line); padding-top:14px; }

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { DockTarget } from "./dock-targets";
-import { reloadExtensions } from "./extensions-runtime";
+import { inspectExtension, type ExtensionReview } from "./extension-permissions";
 import { openSettingsWindow } from "./tauri-bridge";
 
 export interface ExtensionInstallPlan {
@@ -9,7 +9,7 @@ export interface ExtensionInstallPlan {
   existing: boolean; change: "install" | "upgrade" | "downgrade" | "same" | "replace";
   content: string;
 }
-export type InstallReview = Omit<ExtensionInstallPlan, "content">;
+export type InstallReview = Omit<ExtensionInstallPlan, "content"> & { review?: ExtensionReview };
 export const INSTALL_REVIEW_KEY = "betterbar-extension-install-review";
 export const INSTALL_REVIEW_EVENT = "betterbar-extension-install-review-changed";
 
@@ -35,20 +35,13 @@ export async function handleBarDrop(paths: string[]): Promise<{items: DockTarget
   try {
     for (const plan of drop.extensions) validateExtensionSource(plan.content);
     for (const plan of drop.extensions) {
-      if (plan.existing) {
-        const { content: _privateSource, ...review } = plan;
-        reviews.push(review);
-      } else {
-        installed.push(await invoke<string>("install_dropped_extension", { token: plan.token, confirm: false }));
-      }
+      const { content: _privateSource, ...review } = plan;
+      reviews.push({ ...review, review: await inspectExtension(plan.name, plan.content, plan.displayName) });
     }
   } catch (error) {
     await Promise.allSettled(drop.extensions.map(plan => invoke("discard_dropped_extension", { token: plan.token })));
-    // Already successful installs still become discoverable if a later file fails.
-    if (installed.length) { await reloadExtensions(); return { items: drop.items, installed, warning: "Some extensions could not be installed. Drop those files again to retry." }; }
     throw error;
   }
-  if (installed.length) await reloadExtensions();
   let warning: string | undefined;
   if (reviews.length) {
     saveInstallReviews([...readInstallReviews(), ...reviews]);

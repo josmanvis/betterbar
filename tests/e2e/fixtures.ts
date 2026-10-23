@@ -34,6 +34,7 @@ export const seed: BetterBarConfig = {
 };
 
 export async function installRuntime(page: Page, options: {
+  requireApproval?: boolean;
   dragOutcome?: string; dragFailure?: boolean; dragDelayMs?: number;
   installedApps?: { name: string; path: string; bundle_id: string }[];
   label?: "main" | "settings" | `ext_${string}`; config?: BetterBarConfig; emptyApps?: boolean;
@@ -52,6 +53,10 @@ export async function installRuntime(page: Page, options: {
 } = {}) {
   const initialize = ({ initial, options }: { initial: BetterBarConfig; options: any }) => {
     const win = window as any;
+    if (!options.requireApproval && !options.config && options.label?.startsWith("ext_")) {
+      const name = new URLSearchParams(location.search).get("ext");
+      if (name) initial = { ...initial, enabledExtensions: [...new Set([...initial.enabledExtensions, name])] };
+    }
     win.__ipcCalls = [];
     win.__unexpectedIPC = [];
     const extension = {
@@ -60,6 +65,16 @@ export async function installRuntime(page: Page, options: {
     };
     const registryKey = "__betterbar_test_registry";
     if (options.dropPlans && !localStorage.getItem(registryKey)) localStorage.setItem(registryKey, JSON.stringify(options.registryExtensions || []));
+    // Other UI suites use previously reviewed fixtures. Consent suites explicitly
+    // start without approvals and exercise the production flow.
+    const initialApprovals = options.requireApproval ? Promise.resolve() : Promise.all((options.registryExtensions || [extension]).map(async (ext: any) => {
+      const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ext.content));
+      const fingerprint = Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, "0")).join("");
+      const version = /export const version = ["']([^"']+)["']/.exec(ext.content)?.[1] || null;
+      const key = "betterbar-extension-approvals-v1";
+      const approvals = JSON.parse(localStorage.getItem(key) || "{}");
+      if (!(ext.name in approvals)) { approvals[ext.name] = JSON.stringify([version, fingerprint, ["full-access"], true]); localStorage.setItem(key, JSON.stringify(approvals)); }
+    }));
     let standupRead = 0;
     win.mockWindows(options.label || "settings");
     win.mockIPC((cmd: string, args: any) => {
@@ -82,7 +97,7 @@ export async function installRuntime(page: Page, options: {
         }
         case "open_wifi_status_app": return null;
         case "get_macos_preferences": return { accent: options.nativeAccent || "#007aff", reduce_transparency: !!options.reduceTransparency, increase_contrast: !!options.increaseContrast, reduce_motion: true };
-        case "fetch_extension_files_from_disk": return options.dropPlans ? JSON.parse(localStorage.getItem(registryKey) || "[]") : options.registryExtensions || [extension];
+        case "fetch_extension_files_from_disk": return initialApprovals.then(() => options.dropPlans ? JSON.parse(localStorage.getItem(registryKey) || "[]") : options.registryExtensions || [extension]);
         case "read_standup_file": {
           const responses = options.standupResponses || [{ text: "# Standup" }];
           const response = responses[Math.min(standupRead++, responses.length - 1)];

@@ -44,7 +44,7 @@ for (const layout of ["library", "panel"]) {
 }
 
 test("Drawer includes active bar folders and mixed recents without changing bar settings", async ({ page }) => {
-  const config = { ...seed, activeSetId: "test", sets: [{ ...seed.sets[0], items: [...seed.sets[0].items, { ...folder, id: "folder", order: 1 }] }] };
+  const config = { ...seed, enabledExtensions: ["apps-drawer"], activeSetId: "test", sets: [{ ...seed.sets[0], items: [...seed.sets[0].items, { ...folder, id: "folder", order: 1 }] }] };
   await installRuntime(page, { config, label: "ext_apps_drawer", registryExtensions: [extension], installedApps: [app] });
   await page.addInitScript(folder => {
     localStorage.setItem("bb-apps-drawer-settings", JSON.stringify({ layout: "library", closeOnLaunch: false, folders: [folder] }));

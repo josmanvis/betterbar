@@ -134,6 +134,7 @@ test('extensions filter by purpose and status, disclose settings, and report rel
   const hooks = { ...React, useState: initial => { const i = cursor++; if (!(i in states)) states[i] = initial; return [states[i], value => { states[i] = typeof value === 'function' ? value(states[i]) : value; }]; }, useEffect: () => {} };
   const { ExtensionManager, filterExtensions } = evaluate('src/components/ExtensionManager.tsx', {
     react: hooks, '@phosphor-icons/react': { CaretDown: () => null, MagnifyingGlass: () => null, PuzzlePiece: () => null },
+    '../extension-permissions': { permissionStrings: {}, useExtensionApprovals: () => 0, isExtensionApproved: () => true }, './ExtensionPermissionReview': { ExtensionPermissionDetails: () => null, ExtensionPermissionReview: () => null },
     '../extensions-runtime': { reloadExtensions: async () => { if (reloadFails) throw Error('private detail'); } }, './AppearanceEditor': { ExtensionAppearanceEditor: () => null },
   });
   const extensions = [{ name: 'time', displayName: 'Time' }, { name: 'system-monitor', displayName: 'System Monitor' }];

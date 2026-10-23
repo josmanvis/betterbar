@@ -3,6 +3,8 @@ import { CaretDown, MagnifyingGlass, PuzzlePiece } from "@phosphor-icons/react";
 import type { BetterBarConfig } from "../types";
 import type { LoadedExtension } from "../extensions-runtime";
 import { reloadExtensions } from "../extensions-runtime";
+import { permissionStrings, approveExtension, isExtensionApproved, revokeExtension, useExtensionApprovals, type ExtensionReview } from "../extension-permissions";
+import { ExtensionPermissionDetails, ExtensionPermissionReview } from "./ExtensionPermissionReview";
 import { ExtensionAppearanceEditor } from "./AppearanceEditor";
 
 const strings = {
@@ -32,7 +34,7 @@ const descriptions: Record<string, string> = {
   power: "Battery level and charging status.", floatnote: "Open Floatnote from your bar.",
   timesheets: "Open Timesheets from your bar.", "Standup Update": "Read your latest standup update.",
 };
-type Extension = { name: string; displayName: string; version?: string | null };
+type Extension = { name: string; displayName: string; version?: string | null; review: ExtensionReview };
 type Props = { config: BetterBarConfig; extensions: Extension[]; loaded: LoadedExtension[]; ready: boolean;
   update: (patch: Partial<BetterBarConfig>) => void; toggle: (name: string) => void; revealName?: string };
 
@@ -44,6 +46,8 @@ export function filterExtensions(extensions: Extension[], enabled: string[], que
 }
 
 export function ExtensionManager({ config, extensions, loaded, ready, update, toggle, revealName }: Props) {
+  useExtensionApprovals();
+  const [reviewing, setReviewing] = useState<ExtensionReview | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -59,6 +63,12 @@ export function ExtensionManager({ config, extensions, loaded, ready, update, to
     catch { setReloadState("error"); }
   }
   return <div className="bb-extension-manager">
+    {reviewing && <ExtensionPermissionReview key={reviewing.fingerprint} review={reviewing} onCancel={() => setReviewing(null)} onAllow={() => {
+      if (!extensions.some(ext => ext.name === reviewing.name && ext.review.fingerprint === reviewing.fingerprint)) { setReviewing(null); return; }
+      approveExtension(reviewing);
+      if (!config.enabledExtensions.includes(reviewing.name)) toggle(reviewing.name);
+      setExpanded(reviewing.name); setReviewing(null);
+    }}/>}
     <div className="bb-extension-tools">
       <label className="bb-extension-filter"><MagnifyingGlass size={16} aria-hidden="true"/>
         <input type="search" aria-label={strings.search} placeholder={strings.search} value={query} onChange={event => setQuery(event.target.value)}/>
@@ -76,12 +86,13 @@ export function ExtensionManager({ config, extensions, loaded, ready, update, to
       <div className="bb-extension-empty"><p>{strings.noMatch}</p><button onClick={() => { setQuery(""); setFilter("all"); }}>{strings.clear}</button></div> :
       <div className="bb-extension-list">{visible.map(ext => {
         const enabled = config.enabledExtensions.includes(ext.name);
+        const approved = isExtensionApproved(ext.review);
         const extension = loaded.find(item => item.name === ext.name);
         const Settings = extension?.Settings;
         const displayName = extension?.displayName || ext.displayName.replace(/\b\w/g, letter => letter.toUpperCase());
         const open = expanded === ext.name;
         const version = extension?.version || ext.version;
-        const status = enabled ? config.showExtensions ? strings.enabled : strings.hidden : strings.disabled;
+        const status = enabled && !approved ? permissionStrings.needsApproval : enabled ? config.showExtensions ? strings.enabled : strings.hidden : strings.disabled;
         const panelId = `extension-options-${encodeURIComponent(ext.name)}`;
         return <div className="bb-extension-card" key={ext.name}>
           <div className="bb-extension-header">
@@ -91,13 +102,14 @@ export function ExtensionManager({ config, extensions, loaded, ready, update, to
             </div>
             <button className="bb-extension-switch" role="switch" aria-checked={enabled}
               aria-label={(enabled ? strings.disable : strings.enable).replace("{name}", displayName)}
-              onClick={() => { toggle(ext.name); if (!enabled) setExpanded(ext.name); }}><span/></button>
+              onClick={() => { if (!enabled && !approved) setReviewing(ext.review); else toggle(ext.name); if (!enabled) setExpanded(ext.name); }}><span/></button>
           </div>
-          {enabled && <>
+          {enabled && !approved && <div className="bb-extension-pending"><span>{permissionStrings.paused}</span><button onClick={() => setReviewing(ext.review)}>{permissionStrings.review}</button></div>}
+          {enabled && approved && <>
             <button className="bb-extension-configure" aria-label={strings.configure.replace("{name}", displayName)} aria-expanded={open} aria-controls={panelId}
               onClick={() => setExpanded(open ? null : ext.name)}>{open ? strings.hideSettings : strings.settings}<CaretDown size={14} aria-hidden="true"/></button>
             <div className="bb-extension-options" id={panelId} hidden={!open}>
-              {open && <><ExtensionAppearanceEditor config={config} name={ext.name} label={displayName} update={update}/>
+              {open && <><ExtensionPermissionDetails review={ext.review}/><button className="bb-appearance-reset" onClick={() => { revokeExtension(ext.name); }}>{permissionStrings.revoke}</button><p className="bb-extension-revoke-hint">{permissionStrings.revokeHint}</p><ExtensionAppearanceEditor config={config} name={ext.name} label={displayName} update={update}/>
                 {Settings ? <Settings config={config} updateConfig={update}/> : !extension && <p role="status">{strings.unavailable}</p>}</>}
             </div>
           </>}
