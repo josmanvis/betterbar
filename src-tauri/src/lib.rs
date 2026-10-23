@@ -7,6 +7,7 @@ mod bkr_pipelines;
 mod drawer_shortcut;
 mod applications;
 mod dock_targets;
+mod request_attachments;
 mod extension_installer;
 mod extension_drag;
 mod integrations;
@@ -2437,6 +2438,9 @@ pub fn run() {
             extension_installer::discard_dropped_extension,
             dock_targets::inspect_dock_paths,
             dock_targets::pick_dock_items,
+            request_attachments::inspect_request_attachments,
+            request_attachments::snapshot_request_attachments,
+            request_attachments::discard_request_attachments,
             dock_targets::get_path_icon,
             focus_app,
             get_screen_info,

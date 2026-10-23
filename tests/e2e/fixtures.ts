@@ -34,6 +34,7 @@ export const seed: BetterBarConfig = {
 };
 
 export async function installRuntime(page: Page, options: {
+  appRequests?: Record<string, unknown>[]; appRequestStartFailure?: boolean;
   requireApproval?: boolean;
   files?: boolean;
   dragOutcome?: string; dragFailure?: boolean; dragDelayMs?: number;
@@ -90,6 +91,40 @@ export async function installRuntime(page: Page, options: {
       win.__ipcCalls.push({ cmd, args });
       if (options.nativeFailure && ["get_macos_preferences", "get_system_symbols"].includes(cmd)) return Promise.reject(new Error("Native appearance unavailable"));
       switch (cmd) {
+        case "list_app_requests": {
+          if (win.__appRequestsFailure) return Promise.reject("Request service unavailable");
+          const tasks = JSON.parse(localStorage.getItem("__test_app_requests") || JSON.stringify(options.appRequests || []));
+          return { tasks, default_repository: "/tmp/example-app" };
+        }
+        case "get_app_request": {
+          const tasks = JSON.parse(localStorage.getItem("__test_app_requests") || JSON.stringify(options.appRequests || []));
+          return tasks.find((task: any) => task.id === args.id);
+        }
+        case "start_app_request": {
+          if (options.appRequestStartFailure) return Promise.reject("Choose an existing working folder.");
+          const tasks = JSON.parse(localStorage.getItem("__test_app_requests") || JSON.stringify(options.appRequests || []));
+          const task = { ...args, id: `request-${tasks.length + 1}`, created_at: new Date().toISOString(), status: "running", started_at: new Date().toISOString(), log: "[2026-10-22T15:00:00Z] Request started\n[2026-10-22T15:00:01Z] Running checks…" };
+          localStorage.setItem("__test_app_requests", JSON.stringify([task, ...tasks]));
+          return new Promise(resolve => setTimeout(() => resolve(task), 100));
+        }
+        case "cancel_app_request": {
+          if (win.__appRequestCancelFailure) return Promise.reject("Cancel unavailable");
+          const tasks = JSON.parse(localStorage.getItem("__test_app_requests") || JSON.stringify(options.appRequests || []));
+          localStorage.setItem("__test_app_requests", JSON.stringify(tasks.map((task: any) => task.id === args.id ? { ...task, status: "cancelled", finished_at: new Date().toISOString() } : task)));
+          return null;
+        }
+        case "open_app_request_terminal": return null;
+        case "inspect_request_attachments": {
+          if (win.__attachmentFailure) return Promise.reject("An attachment is no longer available.");
+          if (args.paths.length > 10) return Promise.reject("Attach up to 10 files.");
+          if (args.paths.some((path: string) => path.endsWith("/folder"))) return Promise.reject("Attach individual files. Folders and applications are not supported.");
+          return new Promise(resolve => setTimeout(() => resolve([...new Set<string>(args.paths)].map(path => ({ path, name: path.split("/").pop(), size: 512 }))), win.__attachmentDelay || 0));
+        }
+        case "snapshot_request_attachments": {
+          if (win.__attachmentFailure) return Promise.reject("An attachment is no longer available.");
+          return { id: "20261022-123-1", files: args.paths.map((path: string, index: number) => ({ path: `/private/snapshots/${index + 1}-${path.split("/").pop()}`, name: path.split("/").pop(), size: 512 })) };
+        }
+        case "discard_request_attachments": return null;
         case "files_places": return [{ name: "Home", path: "/Files Test" }, { name: "Documents", path: "/Files Test/Documents" }];
         case "files_list":
         case "files_search": {
