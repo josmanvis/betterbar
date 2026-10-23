@@ -8,13 +8,41 @@ Create `~/.betterbar/extensions/my-extension/main.tsx`:
 
 ```tsx
 export const name = "My Extension";
+export const version = "1.0.0";
+export const permissions = [];
 
 export default function MyExtension() {
   return <span>Hello</span>;
 }
 ```
 
-Enable it in Settings → Extensions, then toggle the extension on.
+Enable it in Settings → Extensions and review its permissions. Choose **Allow extension** once for each version before it can run.
+
+## Permission approval
+
+BetterBar pauses extensions until the user approves their access. Review happens before any extension code is evaluated, including top-level code, settings components, and separate extension windows. Existing enabled extensions keep their preferences and show **Review permissions** in Settings → Extensions; a bar notice opens that page. **Not now** leaves the extension paused. Turning on an unapproved extension opens the same small review.
+
+Declare intended access using a static array of string literals:
+
+```tsx
+export const version = "1.2.3";
+export const permissions = ["network", "files"];
+```
+
+| Permission | Intended access |
+| --- | --- |
+| `network` | Connect to online services; send and receive data |
+| `files` | Read or change local files through native integrations |
+| `clipboard` | Read or replace clipboard text |
+| `apps` | Discover, open, focus, or control apps and windows |
+| `shell` | Run commands through native integrations |
+| `calendar` | Read calendars and events, subject to macOS consent |
+| `system` | Device status and supported system controls |
+| `full-access` | All available BetterBar native integrations and browser access |
+
+Use `[]` for no additional declared access. Missing, dynamic, or unreadable declarations get a conservative **Full BetterBar access** review. Unknown permission names are displayed explicitly. Metadata is parsed without executing the extension. Approval is stored locally by extension directory, literal version, permission summary, and SHA-256 of the exact source. Restarts and ordinary toggles retain approval; any source change (including same-version edits and unversioned updates) requires another review. Configuration imports do not grant approval.
+
+Permission lists describe intended use, **not a sandbox**: approved code runs in BetterBar’s shared JavaScript context with its available native access. Only allow trusted code. macOS permission prompts remain separate. **Revoke approval** in an extension’s expanded settings pauses its UI across windows; restart BetterBar to stop background work or top-level side effects it already started. Approvals store metadata and hashes, never source or credentials.
 
 ## Privacy of extension source
 
@@ -51,6 +79,8 @@ export default function MyWidget() {
 | Export   | Type     | Default | Description                              |
 |----------|----------|---------|------------------------------------------|
 | `name`   | `string` | dir name | Display name shown in Settings & tooltip |
+| `version` | `string` | — | Literal version used in approval and upgrade review |
+| `permissions` | `string[]` | full access | Static intended-access list, reviewed before execution |
 | `Settings` | React component | — | Optional settings UI; receives `config` and `updateConfig` |
 
 ```tsx
@@ -350,8 +380,9 @@ export default function Weather() {
 }
 ```
 
-New extension drops install, enable, and render on the bar immediately. This runs
-extension code with the same native API access as other local extensions. An
+New extension drops open a compact install and permission review in Settings.
+**Install extension & allow** installs, enables, and renders the reviewed source.
+Cancel leaves it uninstalled. An
 explicit ID identifies an installed extension even when the download is renamed.
 Without an ID, BetterBar matches the filename or an unambiguous installed display
 name, then derives an ID for a new extension. Metadata uses static string exports;
@@ -359,8 +390,9 @@ reading a name or version does not evaluate extension code. Comments, quoted
 examples, and template literals do not supply metadata.
 
 Replacing an installed extension opens a review in Settings. It displays both
-versions and requires confirmation for upgrades, downgrades, and same-version
-replacements. Semantic version precedence includes prereleases; build metadata
+versions and the incoming permission list, and requires confirmation for upgrades,
+downgrades, and same-version replacements. The same confirmation grants approval
+for the exact incoming source, so no second prompt is needed. Semantic version precedence includes prereleases; build metadata
 does not turn an otherwise identical version into an upgrade. Unversioned legacy
 extensions require an explicit replacement confirmation. Cancel leaves the
 installed source and enabled state untouched. Incoming code is not evaluated

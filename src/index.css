@@ -286,3 +286,5 @@ input[type="range"].bb-range:focus::-webkit-slider-thumb { background: var(--bb-
 .bb-order-arrows button:hover:not(:disabled) { border-color:var(--bb-accent); color:var(--bb-accent); }
 .bb-order-arrows button:disabled { opacity:.25; }
 .bb-bar-order :is(button,select):focus-visible { outline:2px solid var(--bb-accent); outline-offset:2px; }
+
+.bb-extension-approval-notice { flex-shrink:0; color:var(--bb-warn); border:1px solid var(--bb-line-2); border-radius:6px; padding:6px 10px; font-size:11px; max-width:160px; line-height:1.4; }

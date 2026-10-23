@@ -52,6 +52,7 @@ import {
   focusWindow,
   launchSimulator,
 } from "../tauri-bridge";
+import { permissionStrings, isExtensionApproved, requestExtensionReview, useExtensionApprovals } from "../extension-permissions";
 import { useExtensions, useExtensionRegistry, type LoadedExtension } from "../extensions-runtime";
 import { installedReplacements } from "../extension-replacements";
 import { appItemId, appMatchesDockItem, barItems, barItemStyle, extensionItemId, moveBarItem, resolveBarOrder } from "../bar-layout";
@@ -166,6 +167,8 @@ export function DockBar({
   const isVertical = config.position === "left" || config.position === "right";
 
   const registry = useExtensionRegistry();
+  useExtensionApprovals();
+  const awaitingApproval = registry.extensions.filter(ext => config.enabledExtensions.includes(ext.name) && !isExtensionApproved(ext.review));
   const replacements = installedReplacements(registry.extensions.map(extension => extension.name));
   const replacedSections = new Set<SectionId>(replacements.map(replacement => replacement.section));
   const battery = useBattery(config.showBattery && !replacedSections.has("battery"));
@@ -899,6 +902,7 @@ export function DockBar({
           />
         )}
 
+        {awaitingApproval.length > 0 && <button className="bb-extension-approval-notice" title={permissionStrings.notice.replace("{count}", String(awaitingApproval.length))} aria-label={permissionStrings.reviewLabel} onClick={() => { void requestExtensionReview().catch(() => setDropError(permissionStrings.openError)); }}>{permissionStrings.reviewCount.replace("{count}", String(awaitingApproval.length))}</button>}
         {orderedItems.map(item => {
           const customStyle = barItemStyle(config, item.id);
           const pad = customStyle?.padding;

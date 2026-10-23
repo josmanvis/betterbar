@@ -9,16 +9,22 @@ async function drop(page: Page) {
   await page.evaluate(() => (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", { event: "tauri://drag-drop", payload: { paths: ["/synthetic/drop-sample.betterbar.tsx"], position: { x: 20, y: 20 } } }));
 }
 
-test("a new dropped extension installs, enables, appears immediately, and survives reload", async ({ page }) => {
+test("a new dropped extension waits for permission approval, then installs and survives reload", async ({ page, context }) => {
   await installRuntime(page, { label: "main", config: { ...seed, showExtensions: false, enabledExtensions: [] }, registryExtensions: [], dropPlans: [plan("install")] });
-  await page.goto("/"); await drop(page);
+  const settings = await context.newPage();
+  await installRuntime(settings, { config: { ...seed, enabledExtensions: [] }, registryExtensions: [], dropPlans: [plan("install")] });
+  await page.goto("/"); await settings.goto("/"); await drop(page);
+  await expect(page.getByRole("button", { name: "Drop Sample 1.1.0", exact: true })).toHaveCount(0);
+  await expect(settings.getByRole("dialog")).toContainText("Full BetterBar access");
+  await settings.getByRole("button", { name: "Install extension & allow", exact: true }).click();
   await expect(page.getByRole("button", { name: "Drop Sample 1.1.0", exact: true })).toBeVisible();
   const config = await savedConfig(page);
   expect(config.showExtensions).toBe(true); expect(config.enabledExtensions).toContain("drop-sample");
   expect(config.sets).toEqual(seed.sets);
-  expect(await page.evaluate(() => (window as any).__ipcCalls.filter((call: any) => call.cmd === "open_settings_window"))).toHaveLength(0);
+  expect(await page.evaluate(() => (window as any).__ipcCalls.filter((call: any) => call.cmd === "open_settings_window"))).toHaveLength(1);
   await page.reload();
   await expect(page.getByRole("button", { name: "Drop Sample 1.1.0", exact: true })).toBeVisible();
+  await settings.close();
 });
 
 test("dropping a regular file reveals Docked Apps even when sections were hidden", async ({ page }) => {
@@ -52,9 +58,9 @@ for (const [change, incoming, action] of [["upgrade", "1.1.0", "Upgrade extensio
     await expect(page.getByRole("button", { name: "Drop Sample 1.0.0", exact: true })).toBeVisible();
     await expect(settings.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
     await settings.keyboard.press("Shift+Tab");
-    await expect(dialog.getByRole("button", { name: action, exact: true })).toBeFocused();
+    await expect(dialog.getByRole("button", { name: `${action} & allow`, exact: true })).toBeFocused();
     await testInfo.attach(`${change}-confirmation.png`, { body: await settings.screenshot(), contentType: "image/png" });
-    await dialog.getByRole("button", { name: action, exact: true }).click();
+    await dialog.getByRole("button", { name: `${action} & allow`, exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByRole("button", { name: `Drop Sample ${incoming}`, exact: true })).toBeVisible();
     expect(await page.evaluate(() => (window as any).__pendingExtensionExecuted)).toBe(true);
@@ -97,7 +103,7 @@ test("an update conflict remains reviewable and never removes the old extension"
   const settings = await context.newPage();
   await installRuntime(settings, { config, registryExtensions: registry, dropPlans, installFailure: true });
   await page.goto("/"); await settings.goto("/"); await drop(page);
-  await settings.getByRole("button", { name: "Upgrade extension", exact: true }).click();
+  await settings.getByRole("button", { name: "Upgrade extension & allow", exact: true }).click();
   await expect(settings.getByRole("alert")).toContainText("may have changed");
   await expect(page.getByRole("button", { name: "Drop Sample 1.0.0", exact: true })).toBeVisible();
   await settings.getByRole("button", { name: "Cancel", exact: true }).click();

@@ -1,22 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { INSTALL_REVIEW_EVENT, INSTALL_REVIEW_KEY, readInstallReviews, saveInstallReviews } from "../extension-install";
+import { approveExtension } from "../extension-permissions";
+import { ExtensionPermissionDetails } from "./ExtensionPermissionReview";
 import { reloadExtensions } from "../extensions-runtime";
 
 const strings = {
+  missingReview: "This saved review has no permission list. Review permissions in Extensions after installation.",
+  approvalHint: "Approval applies to this version and source only. Updates need your approval again.", allowSuffix: " & allow",
   upgrade: "Upgrade extension", downgrade: "Downgrade extension", same: "Replace same version", replace: "Replace extension", install: "Install extension",
   installed: "Installed version", incoming: "Incoming version", unversioned: "Unversioned", cancel: "Cancel", working: "Updating…",
-  description: "The installed source will be backed up before replacement. Enabled extensions reload immediately after you confirm.",
+  description: "The installed source will be backed up before replacement. Review access below before allowing this version to run.",
   downgradeHint: "You are replacing this extension with an older version.", sameHint: "Both copies declare the same version. Confirm before replacing the installed copy.",
   legacyHint: "One or both copies lack a comparable version. BetterBar cannot determine whether this is an upgrade or downgrade.",
   error: "Could not update this extension. It may have changed or this request may have expired. Cancel and drop the file again to review the latest version.",
 };
-export function ExtensionInstallReview() {
+export function ExtensionInstallReview({ onInstalled }: { onInstalled?: (name: string) => void } = {}) {
   const [reviews, setReviews] = useState(readInstallReviews);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const dialog = useRef<HTMLDivElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
+  const installedToken = useRef<string | null>(null);
   const item = reviews[0];
   useEffect(() => {
     const sync = () => setReviews(readInstallReviews());
@@ -47,13 +52,20 @@ export function ExtensionInstallReview() {
     if (busy) return;
     setBusy(true); setError(false);
     try {
-      await invoke("install_dropped_extension", { token: item.token, confirm: true });
-      await reloadExtensions(); done();
+      if (installedToken.current !== item.token) {
+        await invoke("install_dropped_extension", { token: item.token, confirm: true });
+        installedToken.current = item.token;
+      }
+      // Old queued reviews may lack a permission summary. Keep those versions paused.
+      if (item.review) approveExtension(item.review);
+      if (!item.existing) onInstalled?.(item.name);
+      await reloadExtensions();
+      done();
     } catch { setError(true); }
     finally { setBusy(false); }
   }
   if (!item) return null;
-  const change = ["upgrade", "downgrade", "same", "replace"].includes(item.change) ? item.change : "replace";
+  const change = ["install", "upgrade", "downgrade", "same", "replace"].includes(item.change) ? item.change : "replace";
   return <div className="bb-extension-install-scrim" onKeyDown={event => {
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); void cancel(); }
     if (event.key === "Tab") {
@@ -70,8 +82,10 @@ export function ExtensionInstallReview() {
       {change === "downgrade" && <p className="bb-install-version-hint">{strings.downgradeHint}</p>}
       {change === "same" && <p className="bb-install-version-hint">{strings.sameHint}</p>}
       {change === "replace" && <p className="bb-install-version-hint">{strings.legacyHint}</p>}
+      {item.review ? <ExtensionPermissionDetails review={item.review}/> : <p>{strings.missingReview}</p>}
+      <p>{strings.approvalHint}</p>
       {error && <p role="alert">{strings.error}</p>}
-      <div className="bb-install-actions"><button ref={cancelButton} disabled={busy} onClick={cancel}>{strings.cancel}</button><button disabled={busy} onClick={confirm}>{busy ? strings.working : strings[change]}</button></div>
+      <div className="bb-install-actions"><button ref={cancelButton} disabled={busy} onClick={cancel}>{strings.cancel}</button><button disabled={busy} onClick={confirm}>{busy ? strings.working : `${strings[change]}${item.review ? strings.allowSuffix : ""}`}</button></div>
     </div>
   </div>;
 }

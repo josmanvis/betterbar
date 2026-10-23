@@ -1,11 +1,13 @@
 import { useState, useEffect, type ComponentType } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { inspectExtension, isExtensionApproved, useExtensionApprovals, type ExtensionReview } from "./extension-permissions";
 
 export interface ExtensionFile {
   name: string;
   display_name: string;
   content: string;
   version?: string | null;
+  review: ExtensionReview;
 }
 
 export interface LoadedExtension {
@@ -14,6 +16,7 @@ export interface LoadedExtension {
   Component: ComponentType<any>;
   Settings?: ComponentType<any>;
   version?: string;
+  review: ExtensionReview;
 }
 
 // We will fetch the registry dynamically from Rust
@@ -28,7 +31,8 @@ let watchingReloads = false;
 export async function fetchExtensionRegistry(): Promise<ExtensionFile[]> {
   if (registryLoaded) return cachedRegistry;
   if (!registryPromise) {
-    registryPromise = invoke<ExtensionFile[]>("fetch_extension_files_from_disk").then((exts) => {
+    registryPromise = invoke<ExtensionFile[]>("fetch_extension_files_from_disk").then(async (files) => {
+      const exts = await Promise.all(files.map(async ext => ({ ...ext, review: await inspectExtension(ext.name, ext.content, ext.display_name) })));
       cachedRegistry = exts;
       registryLoaded = true;
       registryListeners.forEach(listener => listener());
@@ -40,8 +44,8 @@ export async function fetchExtensionRegistry(): Promise<ExtensionFile[]> {
 
 // Synchronous getter for the UI (SettingsApp uses this on mount)
 // SettingsApp might mount before fetchExtensionRegistry completes, so we return empty if not ready.
-export function getExtensionRegistry(): { name: string; displayName: string; version?: string | null }[] {
-  return cachedRegistry.map((ext) => ({ name: ext.name, displayName: ext.display_name, version: ext.version }));
+export function getExtensionRegistry() {
+  return cachedRegistry.map((ext) => ({ name: ext.name, displayName: ext.review.displayName, version: ext.review.version, review: ext.review }));
 }
 
 export function useExtensionRegistry() {
@@ -64,6 +68,7 @@ export function useExtensionRegistry() {
 }
 
 export function useExtensions(enabled: string[]): LoadedExtension[] {
+  const approvalRevision = useExtensionApprovals();
   const [loaded, setLoaded] = useState<LoadedExtension[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -83,7 +88,7 @@ export function useExtensions(enabled: string[]): LoadedExtension[] {
       const { evaluateExtension } = await import("./extension-evaluator");
       if (cancelled) return;
       for (const ext of exts) {
-        if (!enabled.includes(ext.name)) continue;
+        if (!enabled.includes(ext.name) || !isExtensionApproved(ext.review)) continue;
         try {
           let cached = evaluated.get(ext.name);
           if (!cached || cached.content !== ext.content) {
@@ -94,6 +99,7 @@ export function useExtensions(enabled: string[]): LoadedExtension[] {
           if (mod && mod.default) {
             results.push({
               name: ext.name,
+              review: ext.review,
               displayName: mod.name || ext.display_name,
               Component: mod.default,
               Settings: mod.Settings,
@@ -109,9 +115,9 @@ export function useExtensions(enabled: string[]): LoadedExtension[] {
 
     loadAll().catch(() => { if (!cancelled) console.error("[extensions] Could not load extensions."); });
     return () => { cancelled = true; };
-  }, [enabled.join(","), reloadKey]);
+  }, [enabled.join(","), reloadKey, approvalRevision]);
 
-  return loaded;
+  return loaded.filter(ext => enabled.includes(ext.name) && isExtensionApproved(ext.review) && cachedRegistry.some(file => file.name === ext.name && file.review.fingerprint === ext.review.fingerprint));
 }
 
 export async function reloadExtensions() {

@@ -181,6 +181,11 @@ function SettingsContent() {
     const timer = window.setTimeout(() => { observer.disconnect(); highlight?.classList.remove("bb-search-hit"); setSearchTarget(null); }, 2400);
     return () => { observer.disconnect(); window.clearTimeout(timer); highlight?.classList.remove("bb-search-hit"); };
   }, [activeTab, searchTarget]);
+  useEffect(() => {
+    const navigate = (event: StorageEvent) => { if (event.key === "betterbar-extension-review-request") setActiveTab("extensions"); };
+    window.addEventListener("storage", navigate);
+    return () => window.removeEventListener("storage", navigate);
+  }, []);
   const [terminals, setTerminals] = useState<TerminalApp[]>([]);
   const [runningApps, setRunningApps] = useState<RunningApp[]>([]);
   const [runningAppsLoading, setRunningAppsLoading] = useState(false);
@@ -301,7 +306,7 @@ function SettingsContent() {
       style={settingsThemeStyle(config)}
       className="bb-settings bb-native-surface h-screen bg-[var(--bb-bg)] text-[var(--bb-text)] flex flex-col"
     >
-      <ExtensionInstallReview/>
+      <ExtensionInstallReview onInstalled={name => setConfig(previous => ({ ...previous, showExtensions: true, enabledExtensions: [...new Set([...previous.enabledExtensions, name])] }))}/>
       <WindowAppearance config={config}/>
       <div className="bb-settings-titlebar" data-tauri-drag-region/>
       <div className="bb-settings-shell flex-1 min-h-0 flex" inert={!!confirmDialog}>
