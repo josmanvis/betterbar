@@ -77,7 +77,7 @@ export function ExtensionInstallReview({ onInstalled }: { onInstalled?: (name: s
   }}>
     <div ref={dialog} className="bb-extension-install-dialog" role="dialog" aria-modal="true" aria-labelledby="extension-install-title" aria-describedby="extension-install-description" aria-busy={busy}>
       <h2 id="extension-install-title">{strings[change]}: {item.displayName}</h2>
-      <dl><dt>{strings.installed}</dt><dd>{item.installedVersion || strings.unversioned}</dd><dt>{strings.incoming}</dt><dd>{item.incomingVersion || strings.unversioned}</dd></dl>
+      <div className="bb-install-review-body"><dl><dt>{strings.installed}</dt><dd>{item.installedVersion || strings.unversioned}</dd><dt>{strings.incoming}</dt><dd>{item.incomingVersion || strings.unversioned}</dd></dl>
       <p id="extension-install-description">{strings.description}</p>
       {change === "downgrade" && <p className="bb-install-version-hint">{strings.downgradeHint}</p>}
       {change === "same" && <p className="bb-install-version-hint">{strings.sameHint}</p>}
@@ -85,7 +85,7 @@ export function ExtensionInstallReview({ onInstalled }: { onInstalled?: (name: s
       {item.review ? <ExtensionPermissionDetails review={item.review}/> : <p>{strings.missingReview}</p>}
       <p>{strings.approvalHint}</p>
       {error && <p role="alert">{strings.error}</p>}
-      <div className="bb-install-actions"><button ref={cancelButton} disabled={busy} onClick={cancel}>{strings.cancel}</button><button disabled={busy} onClick={confirm}>{busy ? strings.working : `${strings[change]}${item.review ? strings.allowSuffix : ""}`}</button></div>
+      </div><div className="bb-install-actions"><button ref={cancelButton} disabled={busy} onClick={cancel}>{strings.cancel}</button><button disabled={busy} onClick={confirm}>{busy ? strings.working : `${strings[change]}${item.review ? strings.allowSuffix : ""}`}</button></div>
     </div>
   </div>;
 }

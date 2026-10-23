@@ -24,9 +24,9 @@ export function ExtensionPermissionReview({ review, onAllow, onCancel }: {
     if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls[controls.length - 1]?.focus(); }
     else if (!event.shiftKey && document.activeElement === controls[controls.length - 1]) { event.preventDefault(); controls[0]?.focus(); }
   }}>
-    <h2 id="extension-permission-title">{strings.allowTitle.replace("{name}", review.displayName)}</h2>
-    <p id="extension-permission-description">{review.version ? strings.version.replace("{version}", review.version) : strings.unversioned} · {strings.once}</p>
-    <ExtensionPermissionDetails review={review}/>
+    <header><h2 id="extension-permission-title">{strings.allowTitle.replace("{name}", review.displayName)}</h2>
+    <p id="extension-permission-description">{review.version ? strings.version.replace("{version}", review.version) : strings.unversioned} · {strings.once}</p></header>
+    <div className="bb-permission-body"><ExtensionPermissionDetails review={review}/></div>
     {error && <p role="alert">{strings.saveError}</p>}
     <div className="bb-install-actions"><button autoFocus onClick={onCancel}>{strings.notNow}</button><button onClick={() => { try { onAllow(); } catch { setError(true); } }}>{strings.allow}</button></div>
   </dialog>;
