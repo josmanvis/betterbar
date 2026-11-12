@@ -137,6 +137,7 @@ function SettingsContent() {
     toggleShowExtensions,
     toggleSpaces,
     toggleSettingsCog,
+    toggleIndicatorToggle,
     toggleCaffeine,
     toggleExtension,
     setBarOrder,
@@ -727,6 +728,12 @@ function SettingsContent() {
                       enabled={config.showSpaces}
                       onToggle={toggleSpaces}
                     />}
+                    <Toggle
+                      label="INDICATOR TOGGLE"
+                      description="Show a caret button in the bar that folds clocks, music, battery and the other indicators away"
+                      enabled={config.showIndicatorToggle}
+                      onToggle={toggleIndicatorToggle}
+                    />
                     {!extensionNames.includes("settings") && <Toggle
                       label="SETTINGS COG"
                       description="Show the settings cog button in the bar"

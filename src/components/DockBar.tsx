@@ -15,7 +15,7 @@ import {
   horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import {
-  GearSix,
+  CaretDown, CaretLeft, CaretRight, CaretUp, GearSix,
 } from "@phosphor-icons/react";
 import {
   Menu, MenuItem, CheckMenuItem, PredefinedMenuItem,
@@ -55,7 +55,7 @@ import {
 import { permissionStrings, isExtensionApproved, requestExtensionReview, useExtensionApprovals } from "../extension-permissions";
 import { useExtensions, useExtensionRegistry, type LoadedExtension } from "../extensions-runtime";
 import { installedReplacements } from "../extension-replacements";
-import { appItemId, appMatchesDockItem, barItems, barItemStyle, extensionItemId, moveBarItem, resolveBarOrder } from "../bar-layout";
+import { appItemId, appMatchesDockItem, barItems, barItemStyle, extensionItemId, indicatorsHidden, moveBarItem, resolveBarOrder } from "../bar-layout";
 import { SortableBarItem } from "./SortableBarItem";
 import { appearanceFor, barSurface, themeStyle, extensionBorderVisible } from "../appearance";
 import { useSpaces, SpacesIndicator } from "./SpacesIndicator";
@@ -144,6 +144,7 @@ interface DockBarProps {
   onSetItemForceNative?: (id: string, forceNative: boolean | undefined) => void;
 
   onSetItemDisplayType?: (id: string, displayType: "icon" | "icon_label" | "label" | undefined) => void;
+  onToggleIndicators?: () => void;
 }
 
 export function DockBar({
@@ -154,6 +155,7 @@ export function DockBar({
   onRenameItem, onSetItemHidden,
   onAddItem, onEnableExtensions, onToggleGrouping,
   onSetItemIcon, onSetItemDeviceIcon, onSetItemForceGlyph, onSetItemForceNative, onSetItemDisplayType,
+  onToggleIndicators,
 }: DockBarProps) {
 
   const [swipeLabel, setSwipeLabel] = useState<string | null>(null);
@@ -171,8 +173,9 @@ export function DockBar({
   const awaitingApproval = registry.extensions.filter(ext => config.enabledExtensions.includes(ext.name) && !isExtensionApproved(ext.review));
   const replacements = installedReplacements(registry.extensions.map(extension => extension.name));
   const replacedSections = new Set<SectionId>(replacements.map(replacement => replacement.section));
-  const battery = useBattery(config.showBattery && !replacedSections.has("battery"));
-  const music = useMusic(config.showMusic && !replacedSections.has("music"));
+  const collapsed = indicatorsHidden(config);
+  const battery = useBattery(config.showBattery && !collapsed && !replacedSections.has("battery"));
+  const music = useMusic(config.showMusic && !collapsed && !replacedSections.has("music"));
   const runningApps = useRunningApps();
   const runningWindows = useRunningWindows();
   const extensions = useExtensions(config.showExtensions ? config.enabledExtensions : []);
@@ -184,7 +187,7 @@ export function DockBar({
   }
   const showDocked = visible("pin", config.showDockArea);
   const showOpened = visible("run", config.showDockArea && config.showRunningApps);
-  const spaces = useSpaces(visible("spaces", config.showSpaces));
+  const spaces = useSpaces(!collapsed && visible("spaces", config.showSpaces));
   const [dropError, setDropError] = useState<string | null>(null);
   const [dropActive, setDropActive] = useState(false);
   const dockPaths = useCallback(async (paths: string[]) => {
@@ -829,6 +832,26 @@ export function DockBar({
       </>
     );
   }
+
+  // One click folds every indicator away; the caret points the way the bar collapses.
+  sectionNodes.collapse = (
+    <>
+      <Divider isVertical={isVertical} />
+      <div className={`flex ${isVertical ? "flex-col" : "flex-row"} items-center justify-center`}>
+        <RailButton
+          label={collapsed ? "Show indicators" : "Hide indicators"}
+          active={collapsed}
+          onClick={() => onToggleIndicators?.()}
+          isVertical={isVertical}
+          barSize={config.barSize}
+        >
+          {isVertical
+            ? (collapsed ? <CaretUp size={13} weight="bold" /> : <CaretDown size={13} weight="bold" />)
+            : (collapsed ? <CaretLeft size={13} weight="bold" /> : <CaretRight size={13} weight="bold" />)}
+        </RailButton>
+      </div>
+    </>
+  );
 
   if (visible("cog", config.showSettingsCog)) {
     sectionNodes.cog = (

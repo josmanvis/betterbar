@@ -35,6 +35,7 @@ export default function App() {
     setFloatPosition,
     setFreeFloat,
     toggleWindowGrouping,
+    toggleIndicators,
   } = useConfig();
 
   return (
@@ -53,6 +54,7 @@ export default function App() {
       onFloatPositionChange={setFloatPosition}
       onSetFreeFloat={setFreeFloat}
       onToggleGrouping={toggleWindowGrouping}
+      onToggleIndicators={toggleIndicators}
       onSetItemIcon={setItemIcon}
       onSetItemDeviceIcon={setItemDeviceIcon}
       onSetItemForceGlyph={setItemForceGlyph}

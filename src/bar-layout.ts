@@ -1,4 +1,4 @@
-import { DEFAULT_SECTION_ORDER, type BarItemId, type BetterBarConfig, type DockItem, type SectionId } from "./types";
+import { DEFAULT_SECTION_ORDER, INDICATOR_SECTIONS, type BarItemId, type BetterBarConfig, type DockItem, type SectionId } from "./types";
 import { EXTENSION_REPLACEMENTS, installedReplacements } from "./extension-replacements";
 
 export function appMatchesDockItem(item: Pick<DockItem, "name" | "bundleId" | "kind">, app: { name: string; bundle_id: string }) {
@@ -57,7 +57,7 @@ export function resolveBarOrder(config: BetterBarConfig, installed: string[]): B
   }
   for (const id of apps) insert(id, "pin");
   for (const name of installed) insert(extensionItemId(name), "extensions");
-  for (const id of seed) insert(id);
+  seed.forEach((id, index) => insert(id, seed.slice(index + 1).find(next => result.includes(next))));
   return result;
 }
 export function migrateBarOrder(config: BetterBarConfig, installed: string[]): BetterBarConfig {
@@ -83,20 +83,37 @@ export function applyBarOrder(config: BetterBarConfig, value: BarItemId[]): Bett
   return { ...config, barOrder, sets };
 }
 
+/** Widgets the indicator toggle folds away: the native indicators and the extensions standing in for them.
+ *  Apps, the terminal, the cog and third-party extensions keep their place. */
+export function isIndicatorItem(id: BarItemId): boolean {
+  const name = extensionName(id);
+  if (name) {
+    const replacement = EXTENSION_REPLACEMENTS.find(item => item.name === name);
+    return !!replacement && INDICATOR_SECTIONS.includes(replacement.section);
+  }
+  if (id.startsWith("app:")) return false;
+  return INDICATOR_SECTIONS.includes(id as SectionId);
+}
+export function indicatorsHidden(config: BetterBarConfig): boolean {
+  return !!config.indicatorsCollapsed;
+}
+
 export interface BarItem {
   id: BarItemId; label: string; kind: "extension" | "app" | "native"; enabled: boolean;
   section?: SectionId; extension?: string; app?: DockItem;
 }
 const labels: Partial<Record<SectionId, string>> = {
   terminal: "Terminal", run: "Running apps", spacer: "Flexible space", time: "Clocks", music: "Music", caffeine: "Caffeine",
-  battery: "Battery", sets: "Set switcher", sims: "Simulators", cog: "Settings", spaces: "Spaces",
+  battery: "Battery", sets: "Set switcher", sims: "Simulators", cog: "Settings", spaces: "Spaces", collapse: "Indicator toggle",
 };
 const flags: Partial<Record<SectionId, keyof BetterBarConfig>> = {
   terminal: "showTerminalIcon", run: "showRunningApps", time: "showClocks", music: "showMusic", caffeine: "showCaffeine",
   battery: "showBattery", sets: "showSetSwitcher", sims: "showSimIcons", cog: "showSettingsCog", spaces: "showSpaces",
+  collapse: "showIndicatorToggle",
 };
 export function barItems(config: BetterBarConfig, extensions: { name: string; displayName: string }[]): BarItem[] {
   const activeSet = config.sets.find(set => set.id === config.activeSetId) || config.sets[0];
+  const collapsed = indicatorsHidden(config);
   return resolveBarOrder(config, extensions.map(extension => extension.name)).flatMap((id): BarItem[] => {
     const name = extensionName(id);
     if (name) {
@@ -114,7 +131,7 @@ export function barItems(config: BetterBarConfig, extensions: { name: string; di
     const flag = flags[section];
     return [{ id, section, kind: "native", label: labels[section] || section, enabled: (!flag || !!config[flag])
       && (section !== "run" || config.showDockArea) && (section !== "spacer" || !config.freeFloat || config.barLengthMode !== "auto") }];
-  });
+  }).map(item => collapsed && isIndicatorItem(item.id) ? { ...item, enabled: false } : item);
 }
 export function barItemStyle(config: BetterBarConfig, id: BarItemId) {
   const name = extensionName(id);

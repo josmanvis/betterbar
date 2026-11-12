@@ -19,6 +19,7 @@ Replace your macOS Dock with a minimal, monospace bar that shows pinned apps, ru
 - **Bar length**: edge-span, auto shrink-wrap, or custom pixel length
 - **Section order**: drag-reorder any bar section (pinned, running, music, clock, etc.)
 - **Per-section toggles**: show/hide each section independently
+- **Indicator toggle**: a caret button on the bar folds every indicator (clocks, music, battery, caffeine, set switcher, simulators, spaces) away in one click — hide the button itself in **Sections → Visible sections → Indicator toggle**
 - **Transparent background** with backdrop blur
 - **Content scale**: 0.5–2.0x for all UI text and indicators
 

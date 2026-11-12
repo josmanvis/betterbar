@@ -136,3 +136,20 @@ rowsById.get(app('one', 'first')).props.onDrop({ dataTransfer, preventDefault() 
 assert.ok(prevented);
 assert.ok(editedOrder.indexOf(ext('floatnote')) < editedOrder.indexOf(app('one', 'first')));
 console.log('PASS: settings arrows, position picker, and row drag persist independent item order.');
+
+// The indicator toggle folds the indicator sections — and the extensions standing in for them —
+// away in one click, while apps, terminal, third-party extensions, the cog and the button stay put.
+const foldable = ['spaces', 'time', 'music', 'caffeine', 'battery', 'sets', 'sims'];
+const expandedRows = layout.barItems(changed, registry);
+assert.equal(expandedRows.find(row => row.id === 'collapse').enabled, true);
+assert.ok(expandedRows.filter(row => row.enabled).some(row => foldable.includes(row.id) || row.id === ext('time')));
+const foldedRows = layout.barItems({ ...changed, indicatorsCollapsed: true }, registry);
+const onBar = new Set(foldedRows.filter(row => row.enabled).map(row => row.id));
+assert.deepEqual(foldedRows.map(row => row.id), expandedRows.map(row => row.id));
+for (const section of foldable) assert.ok(!onBar.has(section), section);
+for (const name of ['time', 'media', 'power']) assert.ok(!onBar.has(ext(name)), name);
+for (const kept of ['collapse', 'cog', 'terminal', app('one', 'first'), ext('floatnote'), ext('apps-drawer')]) assert.ok(onBar.has(kept), kept);
+assert.equal(layout.barItems({ ...changed, indicatorsCollapsed: true, showIndicatorToggle: false }, registry)
+  .find(row => row.id === 'collapse').enabled, false);
+assert.ok(resolve({ ...changed, barOrder: changed.barOrder.filter(id => id !== 'collapse') }, names).includes('collapse'));
+console.log('PASS: the indicator toggle folds indicators away, keeps apps and extras, and seeds itself into saved orders.');
