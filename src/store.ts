@@ -68,6 +68,8 @@ export function sanitize(cfg: BetterBarConfig): BetterBarConfig {
     extensionReplacements: Array.isArray(cfg.extensionReplacements) ? cfg.extensionReplacements.filter((name): name is string => typeof name === "string") : [],
     showSpaces: cfg.showSpaces === undefined ? DEFAULT_CONFIG.showSpaces : !!cfg.showSpaces,
     showSettingsCog: cfg.showSettingsCog === undefined ? DEFAULT_CONFIG.showSettingsCog : !!cfg.showSettingsCog,
+    showIndicatorToggle: cfg.showIndicatorToggle === undefined ? DEFAULT_CONFIG.showIndicatorToggle : !!cfg.showIndicatorToggle,
+    indicatorsCollapsed: cfg.indicatorsCollapsed === undefined ? DEFAULT_CONFIG.indicatorsCollapsed : !!cfg.indicatorsCollapsed,
     showCaffeine: cfg.showCaffeine === undefined ? DEFAULT_CONFIG.showCaffeine : !!cfg.showCaffeine,
     openOnLogin: cfg.openOnLogin === undefined ? DEFAULT_CONFIG.openOnLogin : !!cfg.openOnLogin,
     sectionOrder: normalizeSectionOrder(cfg.sectionOrder),
@@ -553,6 +555,19 @@ export function useConfig() {
     [setConfig]
   );
 
+  /** The bar button itself: folds the indicator sections away and back. */
+  const toggleIndicators = useCallback(
+    () => setConfig((p) => ({ ...p, indicatorsCollapsed: !p.indicatorsCollapsed })),
+    [setConfig]
+  );
+  /** Hiding the button restores the indicators, so they can never be stranded. */
+  const toggleIndicatorToggle = useCallback(
+    () => setConfig((p) => p.showIndicatorToggle
+      ? { ...p, showIndicatorToggle: false, indicatorsCollapsed: false }
+      : { ...p, showIndicatorToggle: true }),
+    [setConfig]
+  );
+
   const toggleExtension = useCallback(
     (name: string) => {
       setConfig((prev) => {
@@ -621,6 +636,8 @@ export function useConfig() {
     toggleShowExtensions,
     toggleSpaces,
     toggleSettingsCog,
+    toggleIndicators,
+    toggleIndicatorToggle,
     toggleCaffeine: useCallback(() => setConfig((p) => ({ ...p, showCaffeine: !p.showCaffeine })), [setConfig]),
     toggleExtension,
     enableExtensions: useCallback((names: string[]) => {

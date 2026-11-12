@@ -23,6 +23,7 @@ const groups: [SettingsTab, string, string, string][] = [
   ["sets", "TIMEZONES", "Clocks and timezones", "clock time date timezone seconds 12 24 hour format labels"],
   ["sections", "BAR ORDER", "Bar order", "move arrange sort resort reorder drag position extension pinned independent anywhere"],
   ["sections", "VISIBLE SECTIONS", "Visible bar items", "show hide visibility features sections dock terminal music clock power battery caffeine awake settings cog simulator spaces"],
+  ["sections", "VISIBLE SECTIONS", "Indicator toggle", "collapse fold hide show indicators extras caret chevron button clutter clean minimal clock music battery"],
   ["extensions", "ON YOUR BAR", "Show extensions", "enable disable extensions widgets plugins"],
   ["extensions", "ON YOUR BAR", "Show extension labels", "extension names labels text hide caption icons"],
   ["extensions", "ON YOUR BAR", "Show extension borders", "hide remove disable border frame outline widget cpu monitor"],

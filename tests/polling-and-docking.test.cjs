@@ -59,7 +59,8 @@ test('section extensions migrate visibility once, preserve pins, and restore nat
   assert.ok(!migrated.enabledExtensions.includes('spaces')); assert.ok(!migrated.enabledExtensions.includes('settings'));
   let rows = layout.barItems(migrated, registry);
   assert.equal(rows.filter(item => item.kind === 'app').length, 0);
-  assert.equal(rows.filter(item => item.kind === 'native').length, 1); // Flexible space is layout, not a feature.
+  // Flexible space and the indicator toggle are bar furniture, not features an extension can replace.
+  assert.deepEqual(rows.filter(item => item.kind === 'native').map(item => item.id), ['spacer', 'collapse']);
   const disabled = { ...migrated, enabledExtensions: migrated.enabledExtensions.filter(name => name !== 'docked-apps') };
   rows = layout.barItems(disabled, registry);
   assert.equal(rows.find(item => item.extension === 'docked-apps').enabled, false);

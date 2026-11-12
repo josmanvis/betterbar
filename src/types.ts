@@ -167,6 +167,10 @@ export interface BetterBarConfig {
   extensionReplacements?: string[];
   showSpaces: boolean;
   showSettingsCog: boolean;
+  /** Show the one-click button that folds the indicators away. */
+  showIndicatorToggle: boolean;
+  /** Current state of that button: indicators hidden until it is pressed again. */
+  indicatorsCollapsed: boolean;
   /** Keep macOS awake (caffeine / sleep inhibitor) */
   showCaffeine: boolean;
   /** Automatically launch BetterBar on macOS login. */
@@ -217,13 +221,17 @@ export type SectionId =
   | "sims"
   | "cog"
   | "extensions"
-  | "spaces";
+  | "spaces"
+  | "collapse";
 
 export type BarItemId = SectionId | `extension:${string}` | `app:${string}:${string}`;
 
 export const DEFAULT_SECTION_ORDER: SectionId[] = [
-  "terminal", "pin", "run", "extensions", "spacer", "spaces", "time", "music", "caffeine", "battery", "sets", "sims", "cog",
+  "terminal", "pin", "run", "extensions", "spacer", "collapse", "spaces", "time", "music", "caffeine", "battery", "sets", "sims", "cog",
 ];
+
+/** Sections the indicator toggle folds away; apps, terminal and the cog stay put. */
+export const INDICATOR_SECTIONS: SectionId[] = ["spaces", "time", "music", "caffeine", "battery", "sets", "sims"];
 
 export const BAR_SIZE_MIN = 24;
 export const BAR_SIZE_MAX = 200;
@@ -316,6 +324,8 @@ export const DEFAULT_CONFIG: BetterBarConfig = {
   enabledExtensions: [],
   showSpaces: true,
   showSettingsCog: true,
+  showIndicatorToggle: true,
+  indicatorsCollapsed: false,
   showCaffeine: true,
   openOnLogin: false,
   sectionOrder: DEFAULT_SECTION_ORDER,
