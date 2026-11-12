@@ -119,7 +119,9 @@ pub async fn pick_dock_items(app: tauri::AppHandle, kind: String) -> Result<Vec<
 pub async fn get_path_icon(path: String) -> Option<String> {
     #[cfg(target_os = "macos")]
     { tauri::async_runtime::spawn_blocking(move || objc::rc::autoreleasepool(|| crate::macos::get_path_icon_base64(&path))).await.ok().flatten() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { tauri::async_runtime::spawn_blocking(move || crate::linux::get_path_icon_base64(&path)).await.ok().flatten() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = path; None }
 }
 

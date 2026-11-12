@@ -16,6 +16,16 @@ export function WindowAppearance({ config }: { config: BetterBarConfig }) {
         const prefs = await getMacosPreferences();
         if (cancelled) return;
         const root = document.documentElement;
+        // Lets the stylesheet pick the sidebar material: macOS reveals a
+        // native NSVisualEffectView, other platforms draw it in CSS.
+        root.dataset.nativePlatform = prefs.platform ?? "other";
+        // Outside macOS the webview does not inherit the desktop's light/dark
+        // preference, so honour it here when the user has left this on system.
+        if (mode !== "light" && mode !== "dark" && (prefs.color_scheme === "dark" || prefs.color_scheme === "light")) {
+          root.dataset.macosAppearance = prefs.color_scheme;
+          root.style.colorScheme = prefs.color_scheme;
+          void getCurrentWindow().setTheme(prefs.color_scheme).catch(() => {});
+        }
         root.dataset.nativeReduceTransparency = String(prefs.reduce_transparency);
         root.dataset.nativeIncreaseContrast = String(prefs.increase_contrast);
         root.dataset.nativeReduceMotion = String(prefs.reduce_motion);

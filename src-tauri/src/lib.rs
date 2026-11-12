@@ -12,10 +12,13 @@ mod extension_installer;
 mod extension_drag;
 mod integrations;
 mod wifi_status;
-#[cfg(target_os = "macos")]
 mod signature;
+#[cfg(target_os = "linux")]
+mod linux;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime, WindowEvent};
+use tauri::{AppHandle, Manager, Runtime};
+#[cfg(target_os = "macos")]
+use tauri::WindowEvent;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunningApp {
@@ -109,7 +112,9 @@ pub struct CaffeineStatus {
 async fn get_running_apps() -> Vec<RunningApp> {
     #[cfg(target_os = "macos")]
     { macos::get_running_apps() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_running_apps() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { vec![] }
 }
 
@@ -117,7 +122,9 @@ async fn get_running_apps() -> Vec<RunningApp> {
 async fn get_installed_terminals() -> Vec<TerminalApp> {
     #[cfg(target_os = "macos")]
     { macos::get_installed_terminals() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_installed_terminals() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { vec![] }
 }
 
@@ -125,7 +132,9 @@ async fn get_installed_terminals() -> Vec<TerminalApp> {
 async fn execute_terminal_command(bundle_id: String, command: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::execute_terminal_command(&bundle_id, &command) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::execute_terminal_command(&bundle_id, &command) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = (bundle_id, command); Err("Not supported".to_string()) }
 }
 
@@ -133,7 +142,9 @@ async fn execute_terminal_command(bundle_id: String, command: String) -> Result<
 async fn focus_app(bundle_id: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::focus_app(&bundle_id) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::focus_app(&bundle_id) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = bundle_id; Ok(()) }
 }
 
@@ -141,7 +152,9 @@ async fn focus_app(bundle_id: String) -> Result<(), String> {
 async fn launch_app(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::launch_app(&path) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::launch_app(&path) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = path; Err("Not supported".to_string()) }
 }
 
@@ -149,7 +162,9 @@ async fn launch_app(path: String) -> Result<(), String> {
 async fn hide_app(bundle_id: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::hide_app(&bundle_id) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::hide_app(&bundle_id) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = bundle_id; Err("Not supported".to_string()) }
 }
 
@@ -157,7 +172,9 @@ async fn hide_app(bundle_id: String) -> Result<(), String> {
 async fn quit_app(bundle_id: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::quit_app(&bundle_id) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::quit_app(&bundle_id) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = bundle_id; Err("Not supported".to_string()) }
 }
 
@@ -165,7 +182,9 @@ async fn quit_app(bundle_id: String) -> Result<(), String> {
 async fn zoom_app_window(bundle_id: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::zoom_app_window(&bundle_id) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::zoom_app_window(&bundle_id) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = bundle_id; Err("Not supported".to_string()) }
 }
 
@@ -173,7 +192,9 @@ async fn zoom_app_window(bundle_id: String) -> Result<(), String> {
 async fn launch_simulator(simulator_type: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::launch_simulator(&simulator_type) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::launch_simulator(&simulator_type) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = simulator_type; Err("Not supported".to_string()) }
 }
 
@@ -192,7 +213,18 @@ async fn get_screen_info<R: Runtime>(app: AppHandle<R>) -> ScreenInfo {
         };
         macos::get_screen_info(scale)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        let monitor = app
+            .get_webview_window("main")
+            .and_then(|w| w.primary_monitor().ok().flatten());
+        let scale = monitor.as_ref().map(|m| m.scale_factor()).unwrap_or(1.0);
+        let physical = monitor
+            .as_ref()
+            .map(|m| (m.size().width as f64, m.size().height as f64));
+        linux::get_screen_info(scale, physical)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = app;
         ScreenInfo { width: 1920.0, height: 1080.0, scale_factor: 1.0, menu_bar_height: 0.0, dock_height: 0.0 }
@@ -236,6 +268,12 @@ async fn set_window_level<R: Runtime>(app: AppHandle<R>, level: String) -> Resul
             return rx.recv().map_err(|e| e.to_string())?;
         }
     }
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(window) = app.get_webview_window("main") {
+            return linux::set_window_level(&window, &level);
+        }
+    }
     let _ = (app, level);
     Ok(())
 }
@@ -244,7 +282,9 @@ async fn set_window_level<R: Runtime>(app: AppHandle<R>, level: String) -> Resul
 async fn get_app_icon(bundle_id: String) -> Option<String> {
     #[cfg(target_os = "macos")]
     { macos::get_app_icon_base64(&bundle_id) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_app_icon_base64(&bundle_id) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = bundle_id; None }
 }
 
@@ -252,7 +292,9 @@ async fn get_app_icon(bundle_id: String) -> Option<String> {
 async fn get_battery_info() -> BatteryInfo {
     #[cfg(target_os = "macos")]
     { macos::get_battery_info() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_battery_info() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { BatteryInfo { percentage: 0.0, is_charging: false, is_plugged: false, available: false } }
 }
 
@@ -260,7 +302,9 @@ async fn get_battery_info() -> BatteryInfo {
 async fn check_accessibility_permissions() -> bool {
     #[cfg(target_os = "macos")]
     { macos::check_accessibility() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::check_accessibility() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { true }
 }
 
@@ -268,13 +312,17 @@ async fn check_accessibility_permissions() -> bool {
 async fn request_accessibility_permissions() {
     #[cfg(target_os = "macos")]
     { macos::request_accessibility(); }
+    #[cfg(target_os = "linux")]
+    { linux::request_accessibility(); }
 }
 
 #[tauri::command]
 async fn check_screen_recording_permission() -> bool {
     #[cfg(target_os = "macos")]
     { macos::check_screen_recording() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::check_screen_recording() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { true }
 }
 
@@ -282,13 +330,17 @@ async fn check_screen_recording_permission() -> bool {
 async fn request_screen_recording_permission() {
     #[cfg(target_os = "macos")]
     { macos::request_screen_recording(); }
+    #[cfg(target_os = "linux")]
+    { linux::request_screen_recording(); }
 }
 
 #[tauri::command]
 async fn get_window_thumbnail(pid: i32) -> Option<WindowThumbnail> {
     #[cfg(target_os = "macos")]
     { macos::get_window_thumbnail(pid) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_window_thumbnail(pid) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = pid; None }
 }
 
@@ -296,7 +348,9 @@ async fn get_window_thumbnail(pid: i32) -> Option<WindowThumbnail> {
 async fn get_on_screen_windows() -> Vec<WindowDetails> {
     #[cfg(target_os = "macos")]
     { macos::get_on_screen_windows() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_on_screen_windows() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { vec![] }
 }
 
@@ -304,7 +358,9 @@ async fn get_on_screen_windows() -> Vec<WindowDetails> {
 async fn focus_window(pid: i32, title: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::focus_window(pid, &title) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::focus_window(pid, &title) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = (pid, title); Ok(()) }
 }
 
@@ -312,7 +368,9 @@ async fn focus_window(pid: i32, title: String) -> Result<(), String> {
 async fn get_window_id_thumbnail(window_id: u32) -> Option<WindowThumbnail> {
     #[cfg(target_os = "macos")]
     { macos::get_window_id_thumbnail(window_id) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_window_id_thumbnail(window_id) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = window_id; None }
 }
 
@@ -334,6 +392,17 @@ async fn set_screen_inset<R: Runtime>(
             }).map_err(|e| e.to_string())?;
             let _ = rx.recv();
         }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // The caller works in logical pixels, but an X11 strut is expressed in
+        // device pixels, so a HiDPI screen would otherwise reserve half the
+        // space the bar actually occupies.
+        let scale = app
+            .get_webview_window("main")
+            .and_then(|w| w.scale_factor().ok())
+            .unwrap_or(1.0);
+        linux::set_screen_inset(&position, bar_size * scale, menu_bar_height * scale);
     }
     let _ = (app, position, bar_size, menu_bar_height);
     Ok(())
@@ -370,7 +439,9 @@ async fn update_bar_geometry(strict_overlap: bool, position: String, bar_size: f
 async fn get_music_info() -> MusicInfo {
     #[cfg(target_os = "macos")]
     { macos::get_music_info() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_music_info() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { MusicInfo { title: String::new(), artist: String::new(), album: String::new(), is_playing: false, app_name: String::new(), available: false } }
 }
 
@@ -378,7 +449,9 @@ async fn get_music_info() -> MusicInfo {
 async fn focus_music_app(app_name: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::focus_music_app(&app_name) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::focus_music_app(&app_name) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = app_name; Err("Not supported".to_string()) }
 }
 
@@ -386,7 +459,9 @@ async fn focus_music_app(app_name: String) -> Result<(), String> {
 async fn music_play_pause() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::music_play_pause() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::music_play_pause() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { Err("Not supported".to_string()) }
 }
 
@@ -394,7 +469,9 @@ async fn music_play_pause() -> Result<(), String> {
 async fn music_next() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::music_next() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::music_next() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { Err("Not supported".to_string()) }
 }
 
@@ -402,7 +479,9 @@ async fn music_next() -> Result<(), String> {
 async fn music_previous() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::music_previous() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::music_previous() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { Err("Not supported".to_string()) }
 }
 
@@ -410,7 +489,9 @@ async fn music_previous() -> Result<(), String> {
 async fn get_spaces() -> Vec<SpaceInfo> {
     #[cfg(target_os = "macos")]
     { macos::get_spaces() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_spaces() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { vec![] }
 }
 
@@ -418,7 +499,9 @@ async fn get_spaces() -> Vec<SpaceInfo> {
 async fn switch_to_space(space_id: u32) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::switch_to_space(space_id) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::switch_to_space(space_id) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = space_id; Err("Not supported".to_string()) }
 }
 
@@ -426,7 +509,9 @@ async fn switch_to_space(space_id: u32) -> Result<(), String> {
 async fn get_open_on_login() -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     { macos::get_open_on_login() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_open_on_login() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { Ok(false) }
 }
 
@@ -434,7 +519,9 @@ async fn get_open_on_login() -> Result<bool, String> {
 async fn set_open_on_login(enabled: bool) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::set_open_on_login(enabled) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::set_open_on_login(enabled) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = enabled; Ok(()) }
 }
 
@@ -442,7 +529,9 @@ async fn set_open_on_login(enabled: bool) -> Result<(), String> {
 async fn check_for_updates() -> Result<ReleaseInfo, String> {
     #[cfg(target_os = "macos")]
     { macos::check_for_updates() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::check_for_updates() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { Err("Not supported".to_string()) }
 }
 
@@ -450,7 +539,9 @@ async fn check_for_updates() -> Result<ReleaseInfo, String> {
 async fn get_release_history() -> Result<Vec<ReleaseInfo>, String> {
     #[cfg(target_os = "macos")]
     { macos::get_release_history() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_release_history() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { Ok(vec![]) }
 }
 
@@ -458,7 +549,9 @@ async fn get_release_history() -> Result<Vec<ReleaseInfo>, String> {
 async fn install_update(download_url: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { macos::install_update(&download_url) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::install_update(&download_url) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = download_url; Err("Not supported".to_string()) }
 }
 
@@ -466,7 +559,9 @@ async fn install_update(download_url: String) -> Result<(), String> {
 async fn get_caffeine_status() -> CaffeineStatus {
     #[cfg(target_os = "macos")]
     { macos::get_caffeine_status() }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::get_caffeine_status() }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { CaffeineStatus { active: false, minutes_remaining: None } }
 }
 
@@ -474,7 +569,9 @@ async fn get_caffeine_status() -> CaffeineStatus {
 async fn set_caffeine(enabled: bool, duration_mins: Option<u32>) -> Result<CaffeineStatus, String> {
     #[cfg(target_os = "macos")]
     { macos::set_caffeine(enabled, duration_mins) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::set_caffeine(enabled, duration_mins) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = (enabled, duration_mins); Ok(CaffeineStatus { active: false, minutes_remaining: None }) }
 }
 
@@ -482,7 +579,9 @@ async fn set_caffeine(enabled: bool, duration_mins: Option<u32>) -> Result<Caffe
 async fn toggle_caffeine(duration_mins: Option<u32>) -> Result<CaffeineStatus, String> {
     #[cfg(target_os = "macos")]
     { macos::toggle_caffeine(duration_mins) }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    { linux::toggle_caffeine(duration_mins) }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = duration_mins; Ok(CaffeineStatus { active: false, minutes_remaining: None }) }
 }
 
@@ -491,6 +590,32 @@ async fn toggle_caffeine(duration_mins: Option<u32>) -> Result<CaffeineStatus, S
 #[tauri::command]
 async fn open_settings_window<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     println!("[BetterBar] open_settings_window command invoked!");
+
+    // The window declared in tauri.conf.json is transparent, which on Linux
+    // means GTK draws no decorations and it cannot be closed. setup() drops it
+    // at startup, but a destroy is processed by the event loop, so it can still
+    // be found for a moment afterwards. Make sure it is gone before using it,
+    // so what opens is always the opaque, decorated window built below.
+    #[cfg(target_os = "linux")]
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static REPLACED: AtomicBool = AtomicBool::new(false);
+        if !REPLACED.swap(true, Ordering::SeqCst) {
+            if let Some(existing) = app.get_webview_window("settings") {
+                let _ = existing.destroy();
+            }
+            // Wait for the label to become free again, briefly.
+            for _ in 0..40 {
+                if app.get_webview_window("settings").is_none() {
+                    break;
+                }
+                let _ = tauri::async_runtime::spawn_blocking(|| {
+                    std::thread::sleep(std::time::Duration::from_millis(25))
+                })
+                .await;
+            }
+        }
+    }
     if let Some(window) = app.get_webview_window("settings") {
         println!("[BetterBar] settings window found, calling show()...");
         window.show().map_err(|e| {
@@ -563,6 +688,10 @@ async fn clear_screen_insets<R: Runtime>(app: AppHandle<R>) -> Result<(), String
                 macos::clear_screen_insets();
             }).map_err(|e| e.to_string())?;
         }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linux::clear_screen_insets();
     }
     let _ = app;
     Ok(())
@@ -2428,6 +2557,10 @@ pub fn run() {
             wifi_status::test_wifi_speed,
             wifi_status::open_wifi_status_app,
             get_running_apps,
+            hide_app,
+            quit_app,
+            zoom_app_window,
+            launch_simulator,
             get_installed_terminals,
             execute_terminal_command,
             launch_app,
@@ -2478,6 +2611,33 @@ pub fn run() {
             toggle_caffeine,
         ])
         .setup(|app| {
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+            let _ = &app;
+
+            #[cfg(target_os = "linux")]
+            {
+                // The settings window in tauri.conf.json is transparent so macOS
+                // can apply its vibrancy material. On Linux a transparent GTK
+                // window is given no decorations at all (_MOTIF_WM_HINTS reports
+                // decorations = 0 and there are no frame extents), which leaves
+                // the window with no titlebar and therefore no way to close it.
+                // Drop that window here; open_settings_window then builds an
+                // opaque, decorated one on demand, with a close handler that
+                // hides it the way macOS does.
+                if let Some(settings_win) = app.get_webview_window("settings") {
+                    let _ = settings_win.destroy();
+                }
+
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_visible_on_all_workspaces(true);
+                    let _ = linux::set_window_level(&window, "floating");
+                    window.on_window_event(move |event| {
+                        if let tauri::WindowEvent::Destroyed = event {
+                            linux::clear_screen_insets();
+                        }
+                    });
+                }
+            }
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);

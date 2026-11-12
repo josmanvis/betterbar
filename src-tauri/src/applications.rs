@@ -1,6 +1,8 @@
 //! Installed application discovery for launcher extensions.
 use serde::Serialize;
+#[cfg(target_os = "macos")]
 use std::collections::HashSet;
+#[cfg(target_os = "macos")]
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize)]
@@ -10,7 +12,23 @@ pub struct InstalledApp {
     pub bundle_id: String,
 }
 
+/// Installed apps on Linux are XDG desktop entries, the direct analogue of a
+/// macOS .app bundle: the entry's ID stands in for the bundle identifier.
+#[cfg(target_os = "linux")]
+fn discover() -> Vec<InstalledApp> {
+    crate::linux::desktop_entries()
+        .into_iter()
+        .filter(|entry| !entry.no_display)
+        .map(|entry| InstalledApp {
+            name: entry.name,
+            path: entry.path.display().to_string(),
+            bundle_id: entry.id,
+        })
+        .collect()
+}
+
 // Stop at app bundles so helpers inside Xcode, browsers, etc. never become entries.
+#[cfg(target_os = "macos")]
 fn collect_bundles(root: &Path, depth: usize, paths: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(root) else {
         return;
@@ -111,19 +129,19 @@ fn discover() -> Vec<InstalledApp> {
 
 #[tauri::command]
 pub async fn get_installed_apps() -> Result<Vec<InstalledApp>, String> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         tauri::async_runtime::spawn_blocking(discover)
             .await
             .map_err(|err| err.to_string())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         Ok(Vec::new())
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
 

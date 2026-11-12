@@ -1,4 +1,7 @@
 //! Observe a bare Command double tap without consuming normal key events.
+// Pure keycode state machine: only the macOS event tap drives it, but the
+// tests below exercise it on every platform.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[derive(Default)]
 struct Gesture {
     down: bool,
@@ -6,6 +9,7 @@ struct Gesture {
     last_tap: Option<u64>,
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 impl Gesture {
     fn cancel(&mut self) {
         self.pressed_at = None;
