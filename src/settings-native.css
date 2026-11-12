@@ -190,3 +190,42 @@
 .bb-settings .bb-permission-body, .bb-settings .bb-install-review-body { overflow:auto; min-height:0; }
 
 .bb-settings .bb-permission-dialog>.bb-extension-trust-note, .bb-settings .bb-extension-install-dialog>.bb-extension-trust-note { font-size:12px; border-top:1px solid var(--bb-line); padding-top:14px; }
+
+/* ---------------------------------------------------------------------------
+   Linux sidebar material.
+
+   On macOS the sidebar is deliberately translucent so an NSVisualEffectView
+   installed behind the window shows through it. No such view exists on other
+   platforms, and no Wayland or X11 compositor lets a client blur what is
+   behind its own window, so the material is drawn inside the page instead:
+   a soft wash on the window gives the sidebar's backdrop-filter something
+   real to blur, and a layered tint plus edge highlight reads as frosted
+   glass. Scoped to Linux so macOS keeps its native material untouched.
+   --------------------------------------------------------------------------- */
+:root[data-native-platform="linux"] .bb-settings {
+  background-image:
+    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--bb-accent) 13%, transparent), transparent 62%),
+    radial-gradient(90% 70% at 0% 100%, color-mix(in srgb, var(--bb-accent) 8%, transparent), transparent 58%);
+  background-repeat: no-repeat;
+}
+
+:root[data-native-platform="linux"]:not([data-native-reduce-transparency="true"]) .bb-settings .bb-settings-sidebar {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bb-bg) 58%, transparent),
+      color-mix(in srgb, var(--bb-bg) 76%, transparent)
+    );
+  backdrop-filter: blur(26px) saturate(165%);
+  -webkit-backdrop-filter: blur(26px) saturate(165%);
+  /* Hairline highlight down the inner edge, as a real sidebar material has. */
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--bb-line) 45%, transparent);
+}
+
+/* Without backdrop-filter the gradient alone would look washed out, so lift
+   the tint until it is opaque enough to read on its own. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root[data-native-platform="linux"] .bb-settings .bb-settings-sidebar {
+    background: color-mix(in srgb, var(--bb-bg) 92%, var(--bb-accent) 8%);
+  }
+}

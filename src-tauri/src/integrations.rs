@@ -27,27 +27,98 @@ pub async fn request_apple_calendar_access(app: tauri::AppHandle) -> Result<Stri
             .map_err(|_| "Calendar access request did not complete. Try again.".to_string())?)
             .await.map_err(|_| "Could not request calendar access.".to_string())?
     }
-    #[cfg(not(target_os = "macos"))] { let _ = app; Err("Calendar access is available on macOS.".into()) }
+    #[cfg(not(target_os = "macos"))] { let _ = app; Err("Calendar access is only available on macOS.".into()) }
 }
 
 #[tauri::command]
 pub async fn get_apple_calendar_agenda(days: u32, show_titles: bool) -> Result<CalendarAgenda, String> {
     #[cfg(target_os = "macos")]
     { tauri::async_runtime::spawn_blocking(move || macos::agenda(days.clamp(1, 31), show_titles)).await.map_err(|_| "Could not load the calendar agenda.".to_string())? }
-    #[cfg(not(target_os = "macos"))] { let _ = (days, show_titles); Err("Calendar access is available on macOS.".into()) }
+    #[cfg(not(target_os = "macos"))] { let _ = (days, show_titles); Err("Calendar access is only available on macOS.".into()) }
 }
 
 #[tauri::command]
 pub fn open_apple_calendar() -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        return std::process::Command::new("gio")
+            .args(["launch", "/usr/share/applications/org.gnome.Calendar.desktop"])
+            .status()
+            .map_err(|_| "Could not open Calendar.".to_string())
+            .and_then(|status| if status.success() { Ok(()) } else { Err("GNOME Calendar is not installed.".into()) });
+    }
+    #[allow(unreachable_code)]
     std::process::Command::new("/usr/bin/open").args(["-b", "com.apple.iCal"]).status()
         .map_err(|_| "Could not open Calendar.".to_string()).and_then(|status| if status.success() { Ok(()) } else { Err("Could not open Calendar.".into()) })
+}
+
+
+/// System metrics from procfs: CPU from two /proc/stat samples, memory from
+/// /proc/meminfo (MemAvailable, which is what "used" means to a user).
+#[cfg(target_os = "linux")]
+mod linux_stats {
+    use super::SystemStats;
+
+    fn cpu_busy_total() -> Option<(u64, u64)> {
+        let stat = std::fs::read_to_string("/proc/stat").ok()?;
+        let line = stat.lines().next()?;
+        let values: Vec<u64> = line
+            .split_whitespace()
+            .skip(1)
+            .filter_map(|v| v.parse::<u64>().ok())
+            .collect();
+        if values.len() < 4 {
+            return None;
+        }
+        let total: u64 = values.iter().sum();
+        let idle = values[3] + values.get(4).copied().unwrap_or(0);
+        Some((total.saturating_sub(idle), total))
+    }
+
+    fn meminfo_kb(key: &str) -> Option<u64> {
+        let text = std::fs::read_to_string("/proc/meminfo").ok()?;
+        text.lines()
+            .find(|l| l.starts_with(key))?
+            .split_whitespace()
+            .nth(1)?
+            .parse()
+            .ok()
+    }
+
+    pub fn read() -> Result<SystemStats, String> {
+        let first = cpu_busy_total();
+        std::thread::sleep(std::time::Duration::from_millis(120));
+        let cpu_percent = match (first, cpu_busy_total()) {
+            (Some((b1, t1)), Some((b2, t2))) if t2 > t1 => {
+                Some(((b2 - b1) as f64 / (t2 - t1) as f64 * 100.0).clamp(0.0, 100.0))
+            }
+            _ => None,
+        };
+
+        let total_kb = meminfo_kb("MemTotal:").ok_or_else(|| "Could not read /proc/meminfo.".to_string())?;
+        let available_kb = meminfo_kb("MemAvailable:").unwrap_or(0);
+        let used_kb = total_kb.saturating_sub(available_kb);
+
+        Ok(SystemStats {
+            cpu_percent,
+            memory_percent: if total_kb > 0 {
+                used_kb as f64 / total_kb as f64 * 100.0
+            } else {
+                0.0
+            },
+            memory_used: used_kb * 1024,
+            memory_total: total_kb * 1024,
+        })
+    }
 }
 
 #[tauri::command]
 pub async fn get_system_stats() -> Result<SystemStats, String> {
     #[cfg(target_os = "macos")]
     { tauri::async_runtime::spawn_blocking(macos::system_stats).await.map_err(|_| "Could not read system metrics.".to_string())? }
-    #[cfg(not(target_os = "macos"))] { Err("System metrics are available on macOS.".into()) }
+    #[cfg(target_os = "linux")]
+    { tauri::async_runtime::spawn_blocking(linux_stats::read).await.map_err(|_| "Could not read system metrics.".to_string())? }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))] { Err("System metrics are not available on this platform.".into()) }
 }
 
 #[cfg(target_os = "macos")]

@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 64 64">
+  <defs>
+    <!-- Main macOS squircle background gradient -->
+    <linearGradient id="bg-grad" x1="32" y1="4" x2="32" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#252b3b"/>
+      <stop offset="0.55" stop-color="#151924"/>
+      <stop offset="1" stop-color="#0c0e14"/>
+    </linearGradient>
+
+    <!-- Subtle top-left ambient glow inside squircle -->
+    <radialGradient id="ambient-glow" cx="22" cy="14" r="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c5f500" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#38bdf8" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Squircle rim highlight -->
+    <linearGradient id="rim-grad" x1="32" y1="4" x2="32" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="0.25" stop-color="#ffffff" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.03"/>
+    </linearGradient>
+
+    <!-- Floating macOS dock glass bar gradient -->
+    <linearGradient id="dock-glass" x1="32" y1="38" x2="32" y2="53" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.09"/>
+    </linearGradient>
+
+    <linearGradient id="dock-border" x1="32" y1="38" x2="32" y2="53" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.10"/>
+    </linearGradient>
+
+    <!-- App icon 1: BetterBar signature chartreuse -->
+    <linearGradient id="icon-bb" x1="17" y1="40.5" x2="17" y2="49.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#dcff38"/>
+      <stop offset="1" stop-color="#a8d900"/>
+    </linearGradient>
+
+    <!-- App icon 2: macOS Sky Blue -->
+    <linearGradient id="icon-blue" x1="27" y1="40.5" x2="27" y2="49.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60d5ff"/>
+      <stop offset="1" stop-color="#1d7dfa"/>
+    </linearGradient>
+
+    <!-- App icon 3: macOS Sunset Coral -->
+    <linearGradient id="icon-orange" x1="37" y1="40.5" x2="37" y2="49.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffaa5c"/>
+      <stop offset="1" stop-color="#f4582c"/>
+    </linearGradient>
+
+    <!-- App icon 4: macOS Purple -->
+    <linearGradient id="icon-purple" x1="47" y1="40.5" x2="47" y2="49.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d28aff"/>
+      <stop offset="1" stop-color="#8b3dff"/>
+    </linearGradient>
+
+    <!-- Upper preview window card gradient -->
+    <linearGradient id="card-grad" x1="32" y1="12" x2="32" y2="33" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1e2433" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#11151f" stop-opacity="0.95"/>
+    </linearGradient>
+  </defs>
+
+  <!-- WhiteSur / macOS Big Sur multi-layer soft drop shadow -->
+  <g color="#000">
+    <path d="M16.517 2.003C8.519 2.003 2.003 8.738 2.003 16.993v32.005c0 8.254 6.52 14.997 14.514 14.997H47.49c7.99 0 14.513-6.739 14.513-14.997V16.997c0-8.255-6.523-14.997-14.513-14.997z" opacity=".02"/>
+    <path d="M16.475 3.001C9.04 3.001 3.005 9.249 3.005 16.932v32.126c0 7.691 6.036 13.939 13.47 13.939h31.053c7.434 0 13.47-6.248 13.47-13.939V16.932c0-7.688-6.036-13.935-13.47-13.935z" opacity=".04"/>
+    <path d="M16.29 3.999c-7.053 0-12.756 5.817-12.756 13.002v32.001c0 7.181 5.934 12.998 12.983 12.998h30.992c7.053 0 12.952-5.813 12.952-13.002V17.001c0-7.181-5.707-12.998-12.756-12.998z" opacity=".07"/>
+    <path d="M4 46.969V49c0 6.648 5.896 12 12.544 12h30.961C54.153 61 60 55.648 60 49v-1.992a12.97 12.97 0 0 1-13 12.963H17.002A12.973 12.973 0 0 1 4 46.969" opacity=".12"/>
+  </g>
+
+  <!-- Main macOS squircle body (56x56 at x=4, y=4, rx=13) -->
+  <rect x="4" y="4" width="56" height="56" rx="13" ry="13" fill="url(#bg-grad)"/>
+  <rect x="4" y="4" width="56" height="56" rx="13" ry="13" fill="url(#ambient-glow)"/>
+  <rect x="4.5" y="4.5" width="55" height="55" rx="12.5" ry="12.5" fill="none" stroke="url(#rim-grad)" stroke-width="1"/>
+
+  <!-- Top BetterBar terminal / workspace HUD card -->
+  <rect x="10" y="11.5" width="44" height="21" rx="5.5" ry="5.5" fill="#000000" opacity="0.32" transform="translate(0 1.2)"/>
+  <rect x="10" y="11.5" width="44" height="21" rx="5.5" ry="5.5" fill="url(#card-grad)" stroke="#ffffff" stroke-opacity="0.12" stroke-width="0.8"/>
+
+  <!-- Window / HUD header dots & workspace pills -->
+  <circle cx="14.5" cy="15.8" r="1.35" fill="#ff5f57"/>
+  <circle cx="18.7" cy="15.8" r="1.35" fill="#febc2e"/>
+  <circle cx="22.9" cy="15.8" r="1.35" fill="#28c840"/>
+
+  <!-- Workspace / Spaces indicator pills on top-right of card -->
+  <rect x="38.5" y="14.6" width="5.2" height="2.4" rx="1.2" fill="#c5f500"/>
+  <rect x="45.0" y="14.6" width="4.2" height="2.4" rx="1.2" fill="#ffffff" opacity="0.22"/>
+
+  <!-- Terminal prompt "> BB" inside HUD card -->
+  <path d="M14.2 21.3l3.6 2.3-3.6 2.3" fill="none" stroke="#c5f500" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Stylized monospace 'B' 'B' badge / status bars -->
+  <rect x="20.2" y="22.7" width="11" height="2.2" rx="1.1" fill="#e7e5dc" opacity="0.92"/>
+  <rect x="33.2" y="22.7" width="7" height="2.2" rx="1.1" fill="#38bdf8" opacity="0.85"/>
+  <rect x="20.2" y="26.5" width="16" height="1.8" rx="0.9" fill="#ffffff" opacity="0.24"/>
+
+  <!-- Floating macOS / BetterBar Dock at bottom -->
+  <rect x="8.5" y="38.5" width="47" height="14.5" rx="5.2" ry="5.2" fill="#000000" opacity="0.35" transform="translate(0 1.4)"/>
+  <rect x="8.5" y="38.5" width="47" height="14.5" rx="5.2" ry="5.2" fill="url(#dock-glass)" stroke="url(#dock-border)" stroke-width="0.85"/>
+
+  <!-- Dock Icon Shadows -->
+  <g fill="#000000" opacity="0.28" transform="translate(0 0.9)">
+    <rect x="12.5" y="40.5" width="8.6" height="8.6" rx="2.4" ry="2.4"/>
+    <rect x="23.1" y="40.5" width="8.6" height="8.6" rx="2.4" ry="2.4"/>
+    <rect x="32.3" y="40.5" width="8.6" height="8.6" rx="2.4" ry="2.4"/>
+    <rect x="42.9" y="40.5" width="8.6" height="8.6" rx="2.4" ry="2.4"/>
+  </g>
+
+  <!-- Dock Icon 1: Active BetterBar chartreuse tile -->
+  <rect x="12.5" y="40.5" width="8.6" height="8.6" rx="2.4" ry="2.4" fill="url(#icon-bb)"/>
+  <path d="M15.1 43.3l2.0 1.5-2.0 1.5" fill="none" stroke="#101408" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="17.6" y="45.6" width="1.6" height="1.1" rx="0.4" fill="#101408"/>
+
+  <!-- Active app indicator dot under Icon 1 -->
+  <circle cx="16.8" cy="51.1" r="1.05" fill="#c5f500"/>
+
+  <!-- Subtle dock divider line (pinned | running) -->
+  <rect x="21.8" y="41.6" width="0.7" height="6.4" rx="0.35" fill="#ffffff" opacity="0.28"/>
+
+  <!-- Dock Icon 2: Sky Blue tile -->
+  <rect x="23.5" y="40.5" width="8.6" height="8.6" rx="2.4" ry="2.4" fill="url(#icon-blue)"/>
+  <circle cx="27.8" cy="44.8" r="2.2" fill="#ffffff" opacity="0.9"/>
+
+  <!-- Dock Icon 3: Sunset Coral tile -->
+  <rect x="33.2" y="40.5" width="8.6" height="8.6" rx="2.4" ry="2.4" fill="url(#icon-orange)"/>
+  <rect x="35.5" y="42.8" width="4.0" height="4.0" rx="1.0" fill="#ffffff" opacity="0.9"/>
+
+  <!-- Dock Icon 4: Purple tile -->
+  <rect x="42.9" y="40.5" width="8.6" height="8.6" rx="2.4" ry="2.4" fill="url(#icon-purple)"/>
+  <path d="M47.2 42.5l2.1 4.2h-4.2z" fill="#ffffff" opacity="0.9"/>
+</svg>

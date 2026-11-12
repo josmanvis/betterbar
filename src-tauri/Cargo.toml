@@ -1,7 +1,7 @@
 [package]
 name = "betterbar"
 version = "0.11.1"
-description = "A customizable macOS dock alternative"
+description = "A customizable dock alternative for macOS and Linux"
 authors = ["BetterBar"]
 edition = "2021"
 

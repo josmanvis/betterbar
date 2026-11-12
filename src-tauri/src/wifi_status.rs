@@ -81,7 +81,7 @@ pub async fn test_wifi_speed() -> Result<SpeedTest, String> {
 
 fn transfer(upload: bool) -> Option<f64> {
     use std::{io::Write, process::{Command, Stdio}};
-    let mut command = Command::new("/usr/bin/curl");
+    let mut command = Command::new("curl");
     command.args(["--disable", "--silent", "--show-error", "--fail", "--connect-timeout", "5", "--max-time", "20", "--output", "/dev/null"])
         .stdout(Stdio::piped()).stderr(Stdio::null());
     if upload {
@@ -104,6 +104,21 @@ fn transfer(upload: bool) -> Option<f64> {
 
 #[tauri::command]
 pub fn open_wifi_status_app() -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        return std::process::Command::new("gnome-control-center")
+            .arg("wifi")
+            .spawn()
+            .map(|_| ())
+            .or_else(|_| {
+                std::process::Command::new("xdg-open")
+                    .arg("gnome-control-center://network")
+                    .spawn()
+                    .map(|_| ())
+            })
+            .map_err(|_| "Could not open network settings.".to_string());
+    }
+    #[allow(unreachable_code)]
     std::process::Command::new("/usr/bin/open").args(["-b", "com.joseviscasillas.WifiStatusApp"]).status()
         .map_err(|_| "Could not open WiFiStatusApp.".to_string())
         .and_then(|status| if status.success() { Ok(()) } else { Err("WiFiStatusApp is not installed.".into()) })
@@ -178,10 +193,163 @@ mod platform {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod platform {
     use super::*;
-    pub fn read() -> Result<(WifiStatus, u64, u64), String> { Err("Wi-Fi status is available on macOS.".into()) }
+    pub fn read() -> Result<(WifiStatus, u64, u64), String> { Err("Wi-Fi status is not available on this platform.".into()) }
+}
+
+/// Wi-Fi state from NetworkManager plus the kernel's own signal figures.
+/// nmcli reports signal as a 0-100 quality percentage, so the dBm and noise
+/// values come from /proc/net/wireless, which is where they originate.
+#[cfg(target_os = "linux")]
+mod platform {
+    use super::*;
+    use std::process::Command;
+
+    fn nmcli(args: &[&str]) -> Option<String> {
+        let out = Command::new("nmcli").args(args).env("LC_ALL", "C").output().ok()?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).to_string())
+    }
+
+    /// nmcli -t escapes literal colons inside values as "\:".
+    fn split_terse(line: &str) -> Vec<String> {
+        let mut fields = Vec::new();
+        let mut current = String::new();
+        let mut chars = line.chars().peekable();
+        while let Some(c) = chars.next() {
+            match c {
+                '\\' => {
+                    if let Some(next) = chars.next() {
+                        current.push(next);
+                    }
+                }
+                ':' => fields.push(std::mem::take(&mut current)),
+                _ => current.push(c),
+            }
+        }
+        fields.push(current);
+        fields
+    }
+
+    fn wifi_device() -> Option<(String, bool)> {
+        let out = nmcli(&["-t", "-f", "DEVICE,TYPE,STATE", "device"])?;
+        let mut first_wifi = None;
+        for line in out.lines() {
+            let f = split_terse(line);
+            if f.len() >= 3 && f[1] == "wifi" {
+                if f[2] == "connected" {
+                    return Some((f[0].clone(), true));
+                }
+                if first_wifi.is_none() {
+                    first_wifi = Some((f[0].clone(), false));
+                }
+            }
+        }
+        first_wifi
+    }
+
+    /// level and noise in dBm for an interface, from /proc/net/wireless.
+    fn radio(interface: &str) -> (Option<i64>, Option<i64>) {
+        let Ok(text) = std::fs::read_to_string("/proc/net/wireless") else {
+            return (None, None);
+        };
+        for line in text.lines() {
+            let Some((iface, rest)) = line.split_once(':') else { continue };
+            if iface.trim() != interface {
+                continue;
+            }
+            let values: Vec<&str> = rest.split_whitespace().collect();
+            let parse = |raw: Option<&&str>| -> Option<i64> {
+                let cleaned = raw?.trim_end_matches('.');
+                cleaned.parse::<f64>().ok().map(|v| v as i64)
+            };
+            let level = parse(values.get(2));
+            let noise = parse(values.get(3)).filter(|n| *n > -200);
+            return (level, noise);
+        }
+        (None, None)
+    }
+
+    fn active_network(interface: &str) -> (Option<String>, Option<f64>) {
+        let Some(out) = nmcli(&["-t", "-f", "ACTIVE,SSID,RATE", "device", "wifi", "list", "ifname", interface]) else {
+            return (None, None);
+        };
+        for line in out.lines() {
+            let f = split_terse(line);
+            if f.first().map(|a| a == "yes").unwrap_or(false) && f.len() >= 3 {
+                let ssid = Some(f[1].clone()).filter(|s| !s.is_empty());
+                let rate = f[2]
+                    .split_whitespace()
+                    .next()
+                    .and_then(|n| n.parse::<f64>().ok());
+                return (ssid, rate);
+            }
+        }
+        (None, None)
+    }
+
+    fn addresses(interface: &str) -> (Option<String>, Option<String>) {
+        let Some(out) = nmcli(&["-t", "-f", "IP4.ADDRESS,IP6.ADDRESS", "device", "show", interface]) else {
+            return (None, None);
+        };
+        let mut v4 = None;
+        let mut v6 = None;
+        for line in out.lines() {
+            let Some((key, value)) = line.split_once(':') else { continue };
+            let address = value.split('/').next().unwrap_or("").trim().to_string();
+            if address.is_empty() {
+                continue;
+            }
+            if key.starts_with("IP4.ADDRESS") && v4.is_none() {
+                v4 = Some(address);
+            } else if key.starts_with("IP6.ADDRESS") && v6.is_none() {
+                v6 = Some(address);
+            }
+        }
+        (v4, v6)
+    }
+
+    fn counter(interface: &str, name: &str) -> u64 {
+        std::fs::read_to_string(format!("/sys/class/net/{interface}/statistics/{name}"))
+            .ok()
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0)
+    }
+
+    pub fn read() -> Result<(WifiStatus, u64, u64), String> {
+        let (interface, connected) =
+            wifi_device().ok_or_else(|| "No Wi-Fi interface found.".to_string())?;
+        let (ssid, link_mbps) = if connected {
+            active_network(&interface)
+        } else {
+            (None, None)
+        };
+        let (signal_dbm, noise_dbm) = radio(&interface);
+        let (ipv4, ipv6) = if connected {
+            addresses(&interface)
+        } else {
+            (None, None)
+        };
+
+        let status = WifiStatus {
+            interface: Some(interface.clone()),
+            ssid,
+            ipv4,
+            ipv6,
+            connected,
+            signal_dbm,
+            noise_dbm,
+            link_mbps,
+            download_bps: None,
+            upload_bps: None,
+            speed_test: None,
+            testing: false,
+        };
+        Ok((status, counter(&interface, "rx_bytes"), counter(&interface, "tx_bytes")))
+    }
 }
 
 #[cfg(test)]

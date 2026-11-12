@@ -2,6 +2,7 @@
 use serde::Serialize;
 use std::collections::BTreeMap;
 
+#[cfg(target_os = "macos")]
 const SYMBOLS: &[(&str, &str)] = &[
     ("layout", "rectangle.bottomthird.inset.filled"), ("appearance", "paintpalette"),
     ("icons", "square.grid.3x3"), ("sets", "app.badge"), ("order", "line.3.horizontal"),
@@ -14,6 +15,8 @@ const SYMBOLS: &[(&str, &str)] = &[
 /// Render the symbols supplied by this Mac; no symbol font or artwork is bundled.
 #[tauri::command]
 pub fn get_system_symbols() -> BTreeMap<String, String> {
+    // Only the macOS branch fills this in.
+    #[allow(unused_mut)]
     let mut result = BTreeMap::new();
     #[cfg(target_os = "macos")]
     unsafe {
@@ -51,6 +54,13 @@ pub struct MacosPreferences {
     reduce_transparency: bool,
     increase_contrast: bool,
     reduce_motion: bool,
+    /// Which platform supplied these values, so the UI can pick the material
+    /// it renders: macOS reveals a native NSVisualEffectView behind the
+    /// window, while other platforms draw the material in CSS.
+    platform: String,
+    /// The desktop's light/dark preference, or "default" to let the webview's
+    /// own `prefers-color-scheme` decide (which is what macOS does).
+    color_scheme: String,
 }
 
 #[tauri::command]
@@ -75,10 +85,31 @@ pub fn get_macos_preferences() -> MacosPreferences {
             reduce_transparency: msg_send![workspace, accessibilityDisplayShouldReduceTransparency],
             increase_contrast: msg_send![workspace, accessibilityDisplayShouldIncreaseContrast],
             reduce_motion: msg_send![workspace, accessibilityDisplayShouldReduceMotion],
+            platform: "macos".into(),
+            color_scheme: "default".into(),
         }
     }
-    #[cfg(not(target_os = "macos"))]
-    MacosPreferences { accent: "#007aff".into(), reduce_transparency: false, increase_contrast: false, reduce_motion: false }
+    #[cfg(target_os = "linux")]
+    {
+        let prefs = crate::linux::desktop_preferences();
+        MacosPreferences {
+            accent: prefs.accent,
+            reduce_transparency: prefs.reduce_transparency,
+            increase_contrast: prefs.increase_contrast,
+            reduce_motion: prefs.reduce_motion,
+            platform: "linux".into(),
+            color_scheme: prefs.color_scheme,
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    MacosPreferences {
+        accent: "#007aff".into(),
+        reduce_transparency: false,
+        increase_contrast: false,
+        reduce_motion: false,
+        platform: "other".into(),
+        color_scheme: "default".into(),
+    }
 }
 
 /// Called on AppKit's main thread during setup. The webview's opaque content

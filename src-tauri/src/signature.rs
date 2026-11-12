@@ -1,5 +1,6 @@
 //! Local bundle repair. Never changes TCC grants or replaces a certificate signature.
 use serde::Serialize;
+#[cfg(target_os = "macos")]
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -8,6 +9,7 @@ use std::{
 use tauri::{AppHandle, Manager, Runtime};
 
 const IDENTIFIER: &str = "com.betterbar.app";
+#[cfg(target_os = "macos")]
 static REPAIRING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Serialize)]
@@ -22,6 +24,7 @@ pub struct SignatureStatus {
     log_path: String,
 }
 
+#[cfg(target_os = "macos")]
 fn run(program: &str, args: &[&std::ffi::OsStr]) -> Result<std::process::Output, String> {
     Command::new(program)
         .args(args)
@@ -30,6 +33,7 @@ fn run(program: &str, args: &[&std::ffi::OsStr]) -> Result<std::process::Output,
         .map_err(|e| e.to_string())
 }
 
+#[cfg(target_os = "macos")]
 fn checked(program: &str, args: &[&std::ffi::OsStr]) -> Result<(), String> {
     let output = run(program, args)?;
     if output.status.success() {
@@ -39,6 +43,7 @@ fn checked(program: &str, args: &[&std::ffi::OsStr]) -> Result<(), String> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn bundle_for_executable(executable: &Path) -> Result<PathBuf, String> {
     let macos = executable
         .parent()
@@ -73,6 +78,7 @@ fn bundle_for_executable(executable: &Path) -> Result<PathBuf, String> {
     Ok(bundle.to_path_buf())
 }
 
+#[cfg(target_os = "macos")]
 fn own_bundle() -> Result<PathBuf, String> {
     bundle_for_executable(
         &std::env::current_exe()
@@ -82,6 +88,7 @@ fn own_bundle() -> Result<PathBuf, String> {
     )
 }
 
+#[cfg(target_os = "macos")]
 fn signing_details(bundle: &Path) -> Result<(String, Option<String>), String> {
     let output = run(
         "/usr/bin/codesign",
@@ -111,6 +118,7 @@ fn signing_details(bundle: &Path) -> Result<(String, Option<String>), String> {
     Ok((kind.into(), identifier))
 }
 
+#[cfg(target_os = "macos")]
 fn verify(bundle: &Path) -> Result<(), String> {
     checked(
         "/usr/bin/codesign",
@@ -123,8 +131,8 @@ fn verify(bundle: &Path) -> Result<(), String> {
     )
 }
 
-#[tauri::command]
-pub async fn get_app_signature_status<R: Runtime>(
+#[cfg(target_os = "macos")]
+async fn get_app_signature_status_macos<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<SignatureStatus, String> {
     let cache = app.path().app_cache_dir().map_err(|e| e.to_string())?;
@@ -147,8 +155,10 @@ pub async fn get_app_signature_status<R: Runtime>(
 
 // Constant shell source; all paths are separate positional arguments, never interpolated.
 // The staged copy is already signed and verified before BetterBar exits.
+#[cfg(target_os = "macos")]
 const RESTART_HELPER: &str = include_str!("signature-restart.sh");
 
+#[cfg(target_os = "macos")]
 fn prepare_repair(bundle: &Path, cache: &Path) -> Result<(), String> {
     use std::os::unix::{fs::DirBuilderExt, process::CommandExt};
     if signing_details(bundle)?.0 == "certificate" {
@@ -217,12 +227,13 @@ fn prepare_repair(bundle: &Path, cache: &Path) -> Result<(), String> {
     prepared
 }
 
+#[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn setsid() -> i32;
 }
 
-#[tauri::command]
-pub async fn repair_app_signature<R: Runtime>(
+#[cfg(target_os = "macos")]
+async fn repair_app_signature_macos<R: Runtime>(
     app: AppHandle<R>,
     window: tauri::WebviewWindow<R>,
 ) -> Result<(), String> {
@@ -252,7 +263,65 @@ pub async fn repair_app_signature<R: Runtime>(
     result
 }
 
+// --- Cross-platform command entry points ---
+
+/// Code signing and bundle repair are macOS concepts. On other platforms the
+/// commands stay registered so the Settings UI keeps working, and report that
+/// there is nothing to verify or repair.
+#[tauri::command]
+pub async fn get_app_signature_status<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<SignatureStatus, String> {
+    #[cfg(target_os = "macos")]
+    {
+        get_app_signature_status_macos(app).await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let log_path = app
+            .path()
+            .app_cache_dir()
+            .map(|c| c.join("signature-repair.log").display().to_string())
+            .unwrap_or_default();
+        Ok(SignatureStatus {
+            valid: true,
+            identifier: Some(IDENTIFIER.to_string()),
+            kind: "unsigned".into(),
+            repair_available: false,
+            reason: Some(
+                "Linux builds are not code signed, so there is no signature to verify or repair."
+                    .into(),
+            ),
+            last_result: None,
+            log_path,
+        })
+    }
+}
+
+#[tauri::command]
+pub async fn repair_app_signature<R: Runtime>(
+    app: AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        repair_app_signature_macos(app, window).await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, window);
+        Err("Signature repair is only needed on macOS.".into())
+    }
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn reopen_after_repair<R: Runtime>(app: &AppHandle<R>) {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        return;
+    }
+    #[cfg(target_os = "macos")]
     if let Ok(cache) = app.path().app_cache_dir() {
         let marker = cache.join("signature-repair-reopen");
         if marker.exists() {
@@ -265,7 +334,7 @@ pub fn reopen_after_repair<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
     #[test]

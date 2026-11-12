@@ -1,8 +1,10 @@
 # BetterBar
 
-A customizable macOS dock alternative. Brutalist terminal aesthetic, native performance.
+A customizable dock alternative for macOS and Linux. Brutalist terminal aesthetic, native performance.
 
-Replace your macOS Dock with a minimal, monospace bar that shows pinned apps, running apps, music controls, world clocks, battery status, simulator launchers, macOS Spaces, and third-party extensions — all in a frameless window that respects your screen real estate via the same private CoreGraphics API the system Dock uses.
+Replace your Dock with a minimal, monospace bar that shows pinned apps, running apps, music controls, world clocks, battery status, simulator launchers, workspaces, and third-party extensions — all in a frameless window that reserves its own screen real estate.
+
+On macOS it uses the same private CoreGraphics API the system Dock uses. On Linux it uses the freedesktop.org equivalents: XDG desktop entries, the icon theme spec, MPRIS over D-Bus, sysfs and NetworkManager. See [Linux support](#linux-support) for what differs.
 
 ## Features
 
@@ -58,12 +60,13 @@ Replace your macOS Dock with a minimal, monospace bar that shows pinned apps, ru
 - Hide app frames in **Icons → Icon Box → Show icon borders**; hide widget frames in **Extensions → Show extension borders**
 
 **Screen Space Reservation**
-- Uses `CGSSetScreenInsets` (the same private API the Dock uses) so maximized windows don't overlap the bar
+- macOS: uses `CGSSetScreenInsets` (the same private API the Dock uses) so maximized windows don't overlap the bar
+- Linux/X11: uses `_NET_WM_STRUT_PARTIAL`, the EWMH property every Linux panel uses
 - Automatic cleanup on quit
 
 ## Installation
 
-### Via Homebrew (Recommended)
+### macOS: Via Homebrew (Recommended)
 
 ```bash
 brew install josmanvis/betterbar/betterbar
@@ -76,17 +79,50 @@ brew tap josmanvis/betterbar
 brew install --cask betterbar
 ```
 
+### Linux
+
+Install the package for your distribution from the [GitHub Releases](https://github.com/josmanvis/betterbar/releases) page:
+
+```bash
+# Fedora / RHEL / openSUSE
+sudo dnf install ./BetterBar-*.rpm
+
+# Debian / Ubuntu
+sudo apt install ./BetterBar_*.deb
+```
+
+Both packages recommend `wmctrl`, `xdotool` and `xorg-x11-utils`/`x11-utils`, which the
+window-management features use on X11. They are optional on Wayland, where those
+features are unavailable regardless (see [Linux support](#linux-support)).
+
 ### From Release
 
-Download the latest `.dmg` or `.tar.gz` from the [GitHub Releases](https://github.com/josmanvis/betterbar/releases) page.
+Download the latest `.dmg` or `.tar.gz` (macOS), or `.rpm`/`.deb` (Linux), from the [GitHub Releases](https://github.com/josmanvis/betterbar/releases) page.
 
 ### From Source
 
 #### Prerequisites
 
+**macOS**
+
 - macOS 13.0+
 - [Node.js](https://nodejs.org/) 18+
 - [Rust](https://rustup.rs/) with the macOS target (`rustup target add aarch64-apple-darwin` or `rustup target add x86_64-apple-darwin`)
+
+**Linux**
+
+- [Node.js](https://nodejs.org/) 18+ and [Rust](https://rustup.rs/)
+- GTK 3 and WebKitGTK 4.1 development packages, plus the usual Tauri prerequisites:
+
+```bash
+# Fedora
+sudo dnf install webkit2gtk4.1-devel gtk3-devel openssl-devel \
+    librsvg2-devel libappindicator-gtk3-devel patchelf
+
+# Debian / Ubuntu
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libssl-dev \
+    librsvg2-dev libayatana-appindicator3-dev patchelf
+```
 
 ```bash
 git clone https://github.com/josmanvis/betterbar.git
@@ -185,7 +221,7 @@ BetterBar will prompt for these automatically when needed.
 ### Tech Stack
 
 - **Frontend**: React 19, TypeScript, Tailwind CSS v4, Framer Motion
-- **Backend**: Rust, Tauri v2, objc/cocoa/core-foundation for macOS APIs
+- **Backend**: Rust, Tauri v2; objc/cocoa/core-foundation on macOS, freedesktop.org interfaces on Linux (see `src-tauri/src/linux.rs`)
 - **State**: `localStorage` + React hooks (no external state library)
 - **Build**: Vite 7, esbuild (for extension transpilation)
 
@@ -199,6 +235,97 @@ BetterBar uses `dlsym(RTLD_DEFAULT, ...)` to resolve private CGS functions at ru
 | `CGSSetScreenInsets` | Reserve screen space (same API as the Dock) |
 | `CGSCopyManagedDisplaySpaces` | Enumerate Spaces with their actual workspace IDs |
 | `CGSGoToSpace` / `CGSSetWorkspace` | Switch to a specific Space |
+
+## Linux support
+
+Linux is supported as a first-class target. The platform backend lives in
+`src-tauri/src/linux.rs` and mirrors the `macos` module's API, so the Tauri
+command layer dispatches to whichever platform it was built for. Where macOS
+uses a bundle identifier, Linux uses the XDG desktop-entry ID
+(`org.gnome.Nautilus`), which is also what matches a window's `StartupWMClass`.
+
+### What maps to what
+
+| Feature | macOS | Linux |
+|---------|-------|-------|
+| Installed / running apps | `NSWorkspace`, `/Applications` scan | XDG desktop entries + `/proc` |
+| App icons | `NSWorkspace` icon API | freedesktop icon theme spec |
+| Launching apps | `NSWorkspace` / `open -a` | `gio launch` on the desktop entry |
+| Quit app | AppleScript | `SIGTERM` to the app's processes |
+| Music controls | AppleScript to Spotify / Music.app | MPRIS over D-Bus (any player) |
+| Battery | IOKit | `/sys/class/power_supply` |
+| System metrics | `host_statistics` | `/proc/stat`, `/proc/meminfo` |
+| Wi-Fi status | CoreWLAN | NetworkManager + `/proc/net/wireless` |
+| Keep awake | `caffeinate` | `systemd-inhibit` |
+| Open at login | Login Items | `~/.config/autostart` entry |
+| Screen space | `CGSSetScreenInsets` | `_NET_WM_STRUT_PARTIAL` (X11 only) |
+| Workspaces | `CGSCopyManagedDisplaySpaces` | EWMH desktop list (X11 only) |
+| Window list / focus / minimize | Accessibility API | `wmctrl` / `xdotool` (X11 only) |
+| Permission prompts | TCC (Accessibility, Screen Recording) | not applicable; no prompts |
+| Updates | `.dmg` / `.tar.gz` asset | `.rpm` / `.deb` / AppImage asset |
+
+### X11 vs Wayland
+
+**On Linux the bar runs on the X11 backend by default**, through XWayland when the
+session is Wayland. This is deliberate: a dock has to place its own window at a
+screen edge and reserve that edge, and Wayland offers a client neither. There is
+no way to set a surface's position, and the only space-reservation protocol,
+`wlr-layer-shell`, is not implemented by GNOME's Mutter. `main()` therefore sets
+`GDK_BACKEND=x11` when `DISPLAY` is available.
+
+Set `BETTERBAR_WAYLAND=1` (or `GDK_BACKEND=wayland`) to run as a native Wayland
+window instead. The bar then cannot be positioned or dock to an edge — it is
+placed wherever the compositor puts it — so this is only useful for debugging.
+
+The settings window is also created at runtime on Linux rather than taken from
+`tauri.conf.json`, because that window is declared transparent for macOS's
+vibrancy material and a transparent GTK window is given no decorations at all,
+leaving no titlebar and no way to close it. The runtime window is opaque and
+decorated, and closing it hides it, matching macOS.
+
+### Appearance
+
+The settings window's sidebar is translucent so that macOS can show an
+`NSVisualEffectView` through it. Linux has no such view, and no compositor lets
+a client blur what is behind its own window, so the material is drawn inside the
+page: the window carries a soft accent wash and the sidebar blurs it with
+`backdrop-filter`, giving a real frosted panel rather than a flat fill.
+
+Desktop preferences are read from GNOME and applied to that window:
+`accent-color` (mapped to the hex GNOME ships for each named colour),
+`color-scheme` for light/dark, `enable-animations` for reduced motion, and
+`high-contrast`, which stands in for macOS's "reduce transparency" and turns the
+material off. Dark mode has to be applied explicitly because WebKitGTK does not
+inherit the desktop's preference on its own.
+
+Everything above works on X11. On Wayland the following are unavailable, and the
+app reports that rather than failing silently:
+
+- **Screen space reservation.** Only `wlr-layer-shell` can reserve edge space,
+  and GNOME's Mutter does not implement it. The bar floats above windows
+  instead of shrinking the maximized area.
+- **Window enumeration, focusing and minimizing.** Wayland deliberately gives
+  clients no way to see or control other apps' windows. GNOME's
+  `org.gnome.Shell.Introspect.GetWindows` exists but denies unprivileged
+  callers (`AccessDenied`), so it needs a GNOME Shell extension to bridge it.
+- **Workspace switching.** Same reason: no client-visible workspace protocol.
+
+Quitting an app still works on Wayland, because it is done by signalling the
+process rather than by asking the compositor. Music controls also work, because
+MPRIS `Raise()` lets the *player* ask to be activated.
+
+### Not ported
+
+- **iOS/iPadOS/watchOS simulators** need Xcode. The Android emulator is
+  supported on Linux; other simulator types return a clear error.
+- **Apple Calendar agenda.** The macOS build talks to EventKit; `open_apple_calendar`
+  opens GNOME Calendar on Linux, but the agenda itself is not wired to
+  Evolution Data Server.
+- **Window hover previews.** Screen capture on Wayland requires per-session
+  xdg-desktop-portal consent, which is unusable for hover thumbnails, so
+  `check_screen_recording` reports `false` and previews stay off.
+- **Code signature repair.** Linux builds are not code signed; the Settings
+  panel reports there is nothing to verify.
 
 ## Extensions
 

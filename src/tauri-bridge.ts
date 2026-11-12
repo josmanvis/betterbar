@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { BatteryInfo, MusicInfo, RunningApp, ScreenInfo, WindowThumbnail, WindowDetails, SpaceInfo, ReleaseInfo, CaffeineStatus } from "./types";
 
-export type MacosPreferences = { accent: string; reduce_transparency: boolean; increase_contrast: boolean; reduce_motion: boolean };
+export type MacosPreferences = { accent: string; reduce_transparency: boolean; increase_contrast: boolean; reduce_motion: boolean; platform: "macos" | "linux" | "other"; color_scheme: "dark" | "light" | "default" };
 export const getMacosPreferences = () => invoke<MacosPreferences>("get_macos_preferences");
 export const getSystemSymbols = () => invoke<Record<string, string>>("get_system_symbols");
 
